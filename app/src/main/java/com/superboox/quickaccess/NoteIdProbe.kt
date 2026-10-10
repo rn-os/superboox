@@ -39,12 +39,8 @@ object NoteIdProbe {
             .onFailure { out += "providers: ${it.javaClass.simpleName} ${it.message}" }
         // dexKeys() (id-like names across the whole Notes app) already did its job in
         // build 14's report; activityStrings() (build 16) is superseded by deep() below.
-        // Build 17 showed OpenNoteByDocIdActivity reads the id through
-        // OpenNoteIntentsKt.noteDocIdFromIntent: look inside that helper.
-        runCatching { out += openHelpers(context, notesPackage) }
-            .onFailure { out += "open helpers: ${it.javaClass.simpleName} ${it.message}" }
-        runCatching { out += readers(context, deadline + 15_000) }
-            .onFailure { out += "readers: ${it.javaClass.simpleName} ${it.message}" }
+        // openHelpers() (build 18) found the id extra and readers() found NeoReader's
+        // library; both are done, so they no longer run.
         return out
     }
 

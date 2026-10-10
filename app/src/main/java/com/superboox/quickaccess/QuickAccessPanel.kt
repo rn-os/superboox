@@ -223,8 +223,7 @@ class QuickAccessPanel(
         val app = doc?.let { Launcher.appLabel(service, it.pkg) }
         val sub = doc?.let { if (it.title == app) app else "${it.title} · $app" }
         return lastRow("Last Opened Document", sub, enabled = doc != null) {
-            // Returning to the reading app's task shows the document where it was left.
-            doc?.let { if (Launcher.launchApp(service, it.pkg)) service.hidePanel() }
+            doc?.let { openRecentDocument(it) }
         }
     }
 
@@ -302,6 +301,7 @@ class QuickAccessPanel(
                 show(Mode.MAIN)
             }
             PinType.FILE -> launchAndClose { Launcher.openFile(service, Uri.parse(pin.value)) }
+            PinType.DOCUMENT -> launchAndClose { ReaderLibrary.open(service, pin.value) }
             PinType.APP -> launchAndClose { Launcher.launchApp(service, pin.value) }
             PinType.INTENT -> launchAndClose { Launcher.openIntentUri(service, pin.value) }
         }
@@ -335,6 +335,7 @@ class QuickAccessPanel(
             else -> Unit
         }
         val pkg = foregroundPackage
+        if (pkg == ReaderLibrary.NEOREADER) return addOpenDocument()
         if (pkg == null || pkg == service.packageName || service.packageManager.getLaunchIntentForPackage(pkg) == null) {
             return toast("Open a note, or the Notes library, then tap Add")
         }
@@ -345,6 +346,29 @@ class QuickAccessPanel(
         prefs.addPin(Pin(PinType.APP, label, pkg))
         toast("Added $label")
         show(Mode.MAIN)
+    }
+
+    /** In NeoReader: pin the document that's open (the newest in its library). */
+    private fun addOpenDocument() {
+        io.execute {
+            val doc = ReaderLibrary.lastOpened(service)
+            main.post {
+                if (doc == null) return@post toast("Couldn't tell which document is open")
+                if (prefs.pins.any { it.type == PinType.DOCUMENT && it.value == doc.path }) {
+                    return@post toast("\"${doc.title}\" is already in Quick Access")
+                }
+                prefs.addPin(Pin(PinType.DOCUMENT, doc.title, doc.path))
+                DebugLog.i("pin", "added open document \"${doc.title}\"")
+                toast("Added \"${doc.title}\"")
+                if (root.isAttachedToWindow) show(Mode.MAIN)
+            }
+        }
+    }
+
+    /** A remembered document: straight into it when its file is known, else back to its app. */
+    private fun openRecentDocument(item: RecentItem) {
+        val ok = if (item.path.isNotEmpty()) ReaderLibrary.open(service, item.path) else Launcher.launchApp(service, item.pkg)
+        if (ok) service.hidePanel()
     }
 
     private fun isNotePinned(title: String) =
@@ -377,7 +401,7 @@ class QuickAccessPanel(
                 RecentItem.Kind.DOCUMENT -> {
                     val app = Launcher.appLabel(service, item.pkg)
                     RecentRow(R.drawable.ic_book, item.title, if (item.title == app) "Document · $ago" else "$app · $ago", item.time) {
-                        if (Launcher.launchApp(service, item.pkg)) service.hidePanel()
+                        openRecentDocument(item)
                     }
                 }
             }

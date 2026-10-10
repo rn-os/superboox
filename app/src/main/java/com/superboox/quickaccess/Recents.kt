@@ -11,16 +11,19 @@ data class RecentItem(
     /** Package that showed it: the Notes editor or the reading app. */
     val pkg: String,
     val time: Long,
+    /** DOCUMENT in NeoReader: the file's path, so it can be reopened directly ("" if unknown). */
+    val path: String = "",
 ) {
     enum class Kind { NOTE, DOCUMENT }
 
     val key: String get() = "$kind|$pkg|${title.trim().lowercase()}"
 
     fun toJson(): JSONObject = JSONObject().put("kind", kind.name).put("title", title).put("pkg", pkg).put("time", time)
+        .apply { if (path.isNotEmpty()) put("path", path) }
 
     companion object {
         fun fromJson(o: JSONObject): RecentItem? = runCatching {
-            RecentItem(Kind.valueOf(o.getString("kind")), o.getString("title"), o.getString("pkg"), o.getLong("time"))
+            RecentItem(Kind.valueOf(o.getString("kind")), o.getString("title"), o.getString("pkg"), o.getLong("time"), o.optString("path"))
         }.getOrNull()
     }
 }

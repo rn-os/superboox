@@ -10,6 +10,9 @@ enum class PinType {
     /** A single document opened through the Storage Access Framework. */
     FILE,
 
+    /** A document in NeoReader, value is its file path. Pinned with Add while it's open. */
+    DOCUMENT,
+
     /** A SAF folder; expands inline in the panel to show its newest files. */
     FOLDER,
 

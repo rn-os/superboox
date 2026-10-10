@@ -131,12 +131,26 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             // The editor's views settle after the window appears; read the title a moment later.
             handler.removeCallbacks(recordOpenNote)
             handler.postDelayed(recordOpenNote, 1_200)
+        } else if (pkg == ReaderLibrary.NEOREADER) {
+            // NeoReader records the open document in its library; read it once it has.
+            handler.removeCallbacks(recordOpenDocument)
+            handler.postDelayed(recordOpenDocument, 1_500)
         } else if (Recents.isReader(pkg, prefs.notesPackage)) {
             val app = Launcher.appLabel(this, pkg)
             // The window event's text is often the document title; fall back to the app name.
             val text = event.text.joinToString(" ").trim()
             val title = text.takeIf { it.isNotEmpty() && !it.equals(app, ignoreCase = true) && it.length <= 120 } ?: app
             Recents.record(prefs, RecentItem(RecentItem.Kind.DOCUMENT, title, pkg, System.currentTimeMillis()))
+        }
+    }
+
+    private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    private val recordOpenDocument = Runnable {
+        if (foregroundPackage != ReaderLibrary.NEOREADER) return@Runnable
+        io.execute {
+            val doc = ReaderLibrary.lastOpened(this) ?: return@execute
+            Recents.record(prefs, RecentItem(RecentItem.Kind.DOCUMENT, doc.title, ReaderLibrary.NEOREADER, System.currentTimeMillis(), doc.path))
         }
     }
 

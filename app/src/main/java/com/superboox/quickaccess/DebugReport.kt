@@ -51,6 +51,7 @@ object DebugReport {
         line("note-id access (for instant opening):")
         BooxNotes.describeNoteIdAccess(context, notesPkg).forEach { line("  $it") }
         NoteIdProbe.run(context, notesPkg).forEach { line("  $it") }
+        line("NeoReader last opened: " + (ReaderLibrary.lastOpened(context)?.let { "\"${it.title}\" (.${it.path.substringAfterLast('.', "?")})" } ?: "unknown"))
         val recents = Recents.list(prefs)
         line("remembered recent items: ${recents.size}${recents.take(5).joinToString(prefix = " (", postfix = ")") { "${it.kind}:${it.title}" }}")
         line("note activities:")

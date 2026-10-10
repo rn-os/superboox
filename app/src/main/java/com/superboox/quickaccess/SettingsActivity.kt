@@ -384,6 +384,7 @@ class SettingsActivity : Activity() {
     private fun describe(pin: Pin): String = when (pin.type) {
         PinType.BOOX_NOTE -> "BOOX note · ${pin.value}"
         PinType.FILE -> "Document"
+        PinType.DOCUMENT -> "Document · ${pin.value.substringAfterLast('/')}"
         PinType.FOLDER -> "Folder"
         PinType.APP -> "App · ${pin.value.substringBefore('/')}"
         PinType.INTENT -> "Intent · ${pin.value}"

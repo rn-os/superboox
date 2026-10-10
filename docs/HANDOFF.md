@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 31)
+# SuperBoox: handoff / status (as of build 32)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -121,6 +121,14 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 ## Build 31
 - Full Refresh is `momentary`: never shown filled; a tap spins the icon (500 ms) and keeps the panel up.
 - Alerts: on BOOX, `GLOBAL_ACTION_NOTIFICATIONS` opened the Control Center. `QuickControls.openNotifications()` detects that (3 or more known tiles), taps a "notif…" switch if there is one, else closes the shade and swipes down from the top-left. It logs the shade tree (`[alerts] shade:`). **Read that in the next report** to see how BOOX splits notifications from the Control Center.
+
+- Build 31 log: Full Refresh works, and Alerts reached notifications through the top-left pull-down. BOOX keeps notifications on the left (`#onyx_notification_manager_view`, `#notification_stack_scroller`) and the Control Center on the right (`#control_center_ll`, `#tablet_control_title`).
+- But after Alerts, `GLOBAL_ACTION_QUICK_SETTINGS` opened the notification list, and the probe read its buttons as "tiles".
+
+## Build 32
+- `QuickControls.open()` now waits for `controlCenterShowing()`: 3 or more known tiles, or the Control Center ids above. If it hasn't shown within 1 s, it logs the shade, closes it and swipes down from the top-right (`pullDown(…, 0.8f)`), then waits again.
+- `ControlCenterProbe` opens through `QuickControls.open`, so the debug report shows "not confirmed" instead of reading notifications.
+- To test: tap Alerts, close it, then tap a Quick Control. Look for `pulling down from the top-right` in the log.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

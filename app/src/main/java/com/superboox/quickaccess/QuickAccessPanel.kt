@@ -60,6 +60,17 @@ class QuickAccessPanel(
     private fun isCurrentNote(item: RecentItem) =
         item.kind == RecentItem.Kind.NOTE && currentNote != null && NotesScreen.matches(item.title, currentNote)
 
+    /**
+     * The document open right now: the newest one remembered from the reading
+     * app in front (recorded when it was opened). Skipped like the open note.
+     */
+    private val currentDocument: RecentItem? = foregroundPackage?.let { pkg ->
+        Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.DOCUMENT && it.pkg == pkg }
+    }
+
+    private fun isCurrent(item: RecentItem) =
+        isCurrentNote(item) || (currentDocument != null && item.key == currentDocument.key)
+
     /** Library cards offered by the Add picker, and which are ticked. */
     private var pickChoices: List<NotesScreen.Card> = emptyList()
     private val picked = LinkedHashSet<String>()
@@ -219,7 +230,7 @@ class QuickAccessPanel(
     }
 
     private fun lastDocumentRow(): View {
-        val doc = Recents.lastDocument(prefs)
+        val doc = Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.DOCUMENT && !isCurrent(it) }
         val app = doc?.let { Launcher.appLabel(service, it.pkg) }
         val sub = doc?.let { if (it.title == app) app else "${it.title} · $app" }
         return lastRow("Last Opened Document", sub, enabled = doc != null) {
@@ -394,7 +405,7 @@ class QuickAccessPanel(
         val list = vbox()
         box.addView(list)
 
-        val remembered = Recents.list(prefs).filterNot(::isCurrentNote).map { item ->
+        val remembered = Recents.list(prefs).filterNot(::isCurrent).map { item ->
             val ago = ago(item.time)
             when (item.kind) {
                 RecentItem.Kind.NOTE -> RecentRow(R.drawable.ic_note, item.title, "Note · $ago", item.time) { service.openBooxNote(item.title) }

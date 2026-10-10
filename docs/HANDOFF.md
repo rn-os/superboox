@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 33)
+# SuperBoox: handoff / status (as of build 34)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -136,10 +136,14 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - Alerts pulls down from the top-left straight away (closing the Control Center first if it's up), so the Control Center no longer flashes. If notifications still aren't visible after about 1.2 s, it falls back to `GLOBAL_ACTION_NOTIFICATIONS` and logs the shade.
 - The cover log line now says "screen held" (it's used for Quick Controls too, not only notes).
 
+## Build 34
+- Quick Controls and apps start on page 1 each time the panel opens (`showPanel(fresh = true)`); a rebuild (pinning, rotation) keeps the page. Both pages now live on the service (`quickControlsPage`, `dockPage`).
+- `Prefs.rememberPages` (default off) keeps the last page instead. It has no Settings UI yet: it's in the proposed Settings menus mockup (`docs/mockups/settings-menus.html`, `23-settings-menus.png`), awaiting approval.
+
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.
 
 ## Open ideas / backlog
 - Store the note id in pins when pinning, so lookup by title isn't needed.
 - Last Opened Document only returns to the last reading app; titles depend on that app.
-- Mockups `docs/mockups/10–14` show the approved Supernote design, `15–16` the approved bordered Settings (`settings-borders.html`), `17` the approved icons (`panel-icons.html`), `18/20/21` Quick Controls (`quick-controls.html`), `22` Previous app (`previous-app.html`); `01–09` show the older design.
+- Mockups `docs/mockups/10–14` show the approved Supernote design, `15–16` the approved bordered Settings (`settings-borders.html`), `17` the approved icons (`panel-icons.html`), `18/20/21` Quick Controls (`quick-controls.html`), `22` Previous app (`previous-app.html`), `23` proposed Settings menus (`settings-menus.html`, not yet approved); `01–09` show the older design.

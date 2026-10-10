@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 18)
+# SuperBoox: handoff / status (as of build 19)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -68,11 +68,22 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - OpenNoteBean fields: `documentId`, `title`, `parentUniqueId`, `pageIndex`, `jumpBackToNote`, …
   - OpenNoteByDocIdActivity reads the id via `OpenNoteIntentsKt.noteDocIdFromIntent`. Build 18's report dumps that helper's strings, under `code strings …OpenNoteIntentsKt`.
 
+## Build 19 (latest)
+- **Direct open is on.** The build 18 report showed `OpenNoteIntentsKt` strings `note_document_id | position | type | note`. `NotesDb.openIntent()` sends `ACTION_VIEW` + `note_document_id=<uniqueId>` to `OpenNoteByDocIdActivity`.
+  - That activity's `OpenNoteByDocIdAction` loads the NoteModel, builds an OpenNoteBean and calls `RouterUtils.startScribbleActivity`. An unknown id gives a "note not found" toast; it never creates a note.
+  - If a note is already open, `NoteOpener` presses Back first (BOOX saves it). `pendingDirect` fires once the editor is gone.
+  - Confirmed or not within 3.5 s, then it falls back to the library route.
+- `NotesScreen.read`: when the `note_name` view is present but blank (still loading), the screen is Unknown, not Library.
+- Build 18's report confirmed the cover works (`[cover] screen held …`) and that pin ids are saved.
+- The reader DB is readable: `content://com.onyx.content.database.ContentProvider/Metadata` (package com.onyx.kreader, NeoReader) has 192 rows, with columns including `title`, `name`, `nativeAbsolutePath`, `lastAccess`, `progress`, `uuid`, `type`. `ReaderHomeActivity` handles VIEW for PDF and EPUB.
+
 ## Next step
-1. From the build 18 report:
-   - get the extra key from the `OpenNoteIntentsKt` lines, set it in `NotesDb.openIntent()` and flip `NoteOpener.DIRECT_OPEN = true` (`knownId` is already passed from pins);
-   - read the `readers` lines (NeoReader package, its exported DB tables and columns) to plan document pins by file path (step 3: open with ACTION_VIEW).
-2. Confirm the cover works: look for `[cover] screen held` in the log, and check for `screenshot not available`.
+1. Check the build 19 report for `opening by id` → `opened by id`. If it's `open by id didn't show`, look at what the screen showed.
+2. Document pins (step 3, approved in principle; no UI change):
+   - while NeoReader is in front, look up the title in Metadata (`lastAccess` newest) to get `nativeAbsolutePath`;
+   - pin it as a document;
+   - open it with `ACTION_VIEW` on a `content://` or `file://` path aimed at `com.onyx.kreader`. A file URI needs a FileProvider or NeoReader's own handling; test it.
+   - Last Opened Document can use the same lookup.
 
 ## Open ideas / backlog
 - Store the note id in pins when pinning, so lookup by title isn't needed.

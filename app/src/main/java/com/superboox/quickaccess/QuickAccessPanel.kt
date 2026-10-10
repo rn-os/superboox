@@ -14,6 +14,7 @@ import android.text.format.DateUtils
 import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.ViewGroup
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -239,7 +240,7 @@ class QuickAccessPanel(
 
     /** Round tile like the BOOX Control Center: black when on, outlined when off. */
     private fun controlTile(control: QuickControls.Control, on: Boolean): View = with(ctx) {
-        val lit = on && control.kind == QuickControls.Kind.TOGGLE
+        val lit = on && control.kind == QuickControls.Kind.TOGGLE && !control.momentary
         vbox().apply {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, 0, 0, s(6))
@@ -261,7 +262,11 @@ class QuickAccessPanel(
                 setPadding(s(2), s(5), s(2), 0)
             }, lp(MATCH, WRAP))
             pressable()
-            setOnClickListener { service.quickControl(control, hold = false) }
+            setOnClickListener {
+                // One-shot controls (Full Refresh) give a quick spin of the icon instead of filling.
+                if (control.momentary) (getChildAt(0) as? ViewGroup)?.getChildAt(0)?.animate()?.rotationBy(360f)?.setDuration(500)?.start()
+                service.quickControl(control, hold = false)
+            }
             setOnLongClickListener {
                 service.quickControl(control, hold = true)
                 true

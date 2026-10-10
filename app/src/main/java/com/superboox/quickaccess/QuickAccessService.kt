@@ -235,6 +235,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     fun systemAction(action: Int) {
         hidePanel()
+        if (action == GLOBAL_ACTION_NOTIFICATIONS) return run { handler.postDelayed({ QuickControls.openNotifications(this) }, 50L) }
         // Let the e-ink screen redraw without the panel before screenshots etc.
         handler.postDelayed({
             val ok = performGlobalAction(action)
@@ -312,7 +313,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             }
             return
         }
-        if (control.kind == QuickControls.Kind.TOGGLE && !hold) {
+        if (control.kind == QuickControls.Kind.TOGGLE && !hold && !control.momentary) {
             val now = quickControlStates()[control.id] ?: false
             optimistic[control.id] = !now to SystemClock.uptimeMillis() + OPTIMISTIC_MS
             panel?.refresh()
@@ -360,8 +361,10 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         }
         handler.postDelayed({
             if (control.kind == QuickControls.Kind.TOGGLE && !hold) {
-                QuickControls.settle(this, prefs, control, press.before)?.let {
-                    optimistic[control.id] = it to SystemClock.uptimeMillis() + OPTIMISTIC_MS
+                if (!control.momentary) {
+                    QuickControls.settle(this, prefs, control, press.before)?.let {
+                        optimistic[control.id] = it to SystemClock.uptimeMillis() + OPTIMISTIC_MS
+                    }
                 }
                 panel?.refresh()
                 nextControl()

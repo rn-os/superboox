@@ -51,6 +51,8 @@ object QuickControls {
         val group: String,
         /** Hold taps the tile instead of long-pressing it (its tap opens the menu wanted on hold). */
         val holdTaps: Boolean = false,
+        /** Does something once (Full Refresh) rather than staying on: never shown filled. */
+        val momentary: Boolean = false,
     ) {
         fun matches(normalized: String): Boolean =
             keys.any { normalized.startsWith(it) } && not.none { normalized.startsWith(it) }
@@ -71,7 +73,7 @@ object QuickControls {
         Control("mute", "Mute", R.drawable.ic_qc_mute, Kind.TOGGLE, listOf("mute"), group = SWITCHES),
         Control("location", "Location", R.drawable.ic_qc_location, Kind.TOGGLE, listOf("location"), group = SWITCHES),
         Control("einkwise", "EinkWise", R.drawable.ic_settings, Kind.TOGGLE, listOf("einkwise", "eink wise"), group = BOOX),
-        Control("refresh", "Full Refresh", R.drawable.ic_qc_refresh, Kind.TOGGLE, listOf("full refresh"), group = BOOX),
+        Control("refresh", "Full Refresh", R.drawable.ic_qc_refresh, Kind.TOGGLE, listOf("full refresh"), group = BOOX, momentary = true),
         Control("handtouch", "Hand Touch", R.drawable.ic_qc_touch, Kind.TOGGLE, listOf("hand touch"), group = BOOX),
         Control("naviball", "NaviBall", R.drawable.ic_qc_naviball, Kind.TILE, listOf("naviball", "navi ball"), group = BOOX),
         Control("recorder", "Screen Recorder", R.drawable.ic_qc_record, Kind.TILE, listOf("screen recorder"), group = BOOX),
@@ -212,6 +214,51 @@ object QuickControls {
     }
 
     fun close(service: AccessibilityService) = closeShade(service)
+
+    /**
+     * The notification shade. On BOOX, Android's "open notifications" can bring
+     * up the Control Center instead (seen after Quick Controls used it). If it
+     * does: look for a way across to notifications; failing that, close it and
+     * pull down from the top-left, where BOOX keeps notifications. What the
+     * shade showed is logged, for the debug report.
+     */
+    fun openNotifications(service: AccessibilityService) {
+        val handler = Handler(Looper.getMainLooper())
+        service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS)
+        handler.postDelayed({
+            val tiles = runCatching { readTiles(service) }.getOrDefault(emptyList())
+            val controlCenter = tiles.count { t -> ALL.any { it.kind != Kind.ACTION && it.matches(t.normalized) } } >= 3
+            if (!controlCenter) return@postDelayed DebugLog.i("alerts", "notifications opened")
+            val toNotifications = tiles.firstOrNull { "notif" in it.normalized && !it.normalized.startsWith("mute") }
+            DebugLog.w("alerts", "the Control Center opened instead; ${if (toNotifications != null) "tapping \"${toNotifications.label}\"" else "no notifications switch in it"}")
+            logShade(service)
+            if (toNotifications != null && pressable(toNotifications.node, false)?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return@postDelayed
+            closeShade(service)
+            handler.postDelayed({ pullDownTopLeft(service) }, 500)
+            handler.postDelayed({ logShade(service) }, 1_400)
+        }, 700)
+    }
+
+    private fun pullDownTopLeft(service: AccessibilityService) {
+        val dm = service.resources.displayMetrics
+        val x = dm.widthPixels * 0.2f
+        val path = android.graphics.Path().apply {
+            moveTo(x, 2f)
+            lineTo(x, dm.heightPixels * 0.45f)
+        }
+        val gesture = android.accessibilityservice.GestureDescription.Builder()
+            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 300))
+            .build()
+        DebugLog.i("alerts", "pulling down from the top-left")
+        service.dispatchGesture(gesture, null, null)
+    }
+
+    private fun logShade(service: AccessibilityService) {
+        runCatching {
+            service.windows.filter { it.root?.packageName?.toString()?.contains("systemui") == true }
+                .forEach { DebugLog.i("alerts", "shade:\n" + DebugReport.describeTree(it.root, 120)) }
+        }
+    }
 
     /**
      * Auto-rotate without BOOX's rotation menu: flips Android's own setting.

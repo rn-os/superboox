@@ -52,7 +52,12 @@ class NoteOpener(private val service: AccessibilityService) {
         var signatureBeforeTurn: String? = null
 
         // A tap waiting to be confirmed.
+        /** After Back: wait (polling) until the screen differs from this, instead of a fixed delay. */
+        var awaitChangeFrom: String? = null
+        var awaitUntil = 0L
+
         var tapSignature: String? = null
+        var tapAt = 0L
         var tapBounds: Rect? = null
         var tapAttempts = 0
 
@@ -127,23 +132,14 @@ class NoteOpener(private val service: AccessibilityService) {
         }
         j.missingSince = 0L
 
-        // Opened via the BOOX launcher: switch it to its Notes tab first.
-        if (j.needsNotesTab && root.packageName == BooxNotes.BOOX_HOME_PACKAGE) {
-            j.needsNotesTab = false
-            val tab = findFirst(root) { n ->
-                val t = NotesScreen.textOf(n).lowercase()
-                (t == "notes" || t == "note") && n.isVisibleToUser
-            }
-            if (tab != null) {
-                DebugLog.i("note", "tapping the launcher's Notes tab")
-                click(tab, null)
-                return wait(j, now, AFTER_TAP_MS)
-            }
-            DebugLog.w("note", "no Notes tab found in the BOOX launcher")
-        }
-
         val state = NotesScreen.read(root)
         val signature = NotesScreen.signature(state)
+        // Still showing the screen we just pressed Back on: keep polling (e-ink is slow).
+        j.awaitChangeFrom?.let { from ->
+            if (signature == from && now < j.awaitUntil) return later(POLL_MS)
+            j.awaitChangeFrom = null
+            j.notBefore = now // the load grace below counts from when the new screen appeared
+        }
         logState(j, state)
 
         // 1. Confirm the last tap did something before moving on.
@@ -151,10 +147,13 @@ class NoteOpener(private val service: AccessibilityService) {
             if (signature != before) {
                 DebugLog.i("note", "tap on \"${j.steps[j.index]}\" worked")
                 j.tapSignature = null
+                j.notBefore = now
                 j.index++
                 j.resetFolder()
                 if (j.index >= j.steps.size) return succeed(j)
                 // fall through and handle the new screen
+            } else if (now - j.tapAt < AFTER_TAP_MS) {
+                return later(POLL_MS) // give the tap time to land before retrying
             } else if (j.tapAttempts < MAX_TAP_ATTEMPTS) {
                 val bounds = (state as? NotesScreen.State.Library)?.cards
                     ?.firstOrNull { NotesScreen.matches(it.label, j.steps[j.index]) }?.bounds ?: j.tapBounds
@@ -162,7 +161,8 @@ class NoteOpener(private val service: AccessibilityService) {
                 j.tapAttempts++
                 DebugLog.i("note", "tap didn't change the screen; touching ${bounds.toShortString()} (attempt ${j.tapAttempts})")
                 touch(bounds)
-                return wait(j, now, AFTER_TAP_MS)
+                j.tapAt = now
+                return later(POLL_MS)
             } else {
                 return fail(j, "tapping \"${j.steps[j.index]}\" didn't open it")
             }
@@ -172,7 +172,7 @@ class NoteOpener(private val service: AccessibilityService) {
         when (state) {
             is NotesScreen.State.Editor -> {
                 if (NotesScreen.matches(state.title, j.steps.last())) return succeed(j)
-                back(j, now, "another note is open (\"${state.title}\")")
+                back(j, now, signature, "another note is open (\"${state.title}\")")
             }
 
             is NotesScreen.State.Library -> {
@@ -198,20 +198,25 @@ class NoteOpener(private val service: AccessibilityService) {
                     j.tapSignature = signature
                     j.tapBounds = card?.bounds ?: Rect().also(node::getBoundsInScreen)
                     j.tapAttempts = 0
+                    j.tapAt = now
                     click(node, card?.bounds)
-                    return wait(j, now, AFTER_TAP_MS)
+                    return later(POLL_MS)
                 }
                 if (now < j.notBefore + LOAD_GRACE_MS) return later(POLL_MS) // let the page finish loading
+                // Opened via the BOOX launcher and the note isn't on its home screen: go to its Notes tab.
+                if (openNotesTab(j, root, now, signature)) return
 
                 if (turnPage(j, state, signature)) return wait(j, now, AFTER_PAGE_MS)
                 // Not in this folder. Only the first segment is searched from wherever
                 // we are; later segments must be inside the folder we just opened.
-                if (j.index == 0) back(j, now, "\"$target\" not in this folder") else fail(j, "\"$target\" isn't in that folder")
+                if (j.index == 0) back(j, now, signature, "\"$target\" not in this folder") else fail(j, "\"$target\" isn't in that folder")
             }
 
             NotesScreen.State.Unknown -> {
-                if (now < j.notBefore + LOAD_GRACE_MS) return later(POLL_MS)
-                back(j, now, "unrecognised Notes screen")
+                // Usually a screen still loading (the BOOX home takes ~2 s on e-ink): be patient.
+                if (now < j.notBefore + UNKNOWN_GRACE_MS) return later(POLL_MS)
+                if (openNotesTab(j, root, now, signature)) return
+                back(j, now, signature, "unrecognised Notes screen")
             }
         }
     }
@@ -257,13 +262,36 @@ class NoteOpener(private val service: AccessibilityService) {
         return true
     }
 
-    private fun back(j: Job, now: Long, why: String) {
+    /** Taps the BOOX launcher's "Notes" tab, once, when we came in through the launcher. */
+    private fun openNotesTab(j: Job, root: AccessibilityNodeInfo, now: Long, signature: String): Boolean {
+        if (!j.needsNotesTab || root.packageName?.toString() != BooxNotes.BOOX_HOME_PACKAGE) return false
+        j.needsNotesTab = false
+        val tab = findFirst(root) { n ->
+            val t = NotesScreen.textOf(n).lowercase()
+            (t == "notes" || t == "note") && n.isVisibleToUser
+        }
+        if (tab == null) {
+            DebugLog.w("note", "no Notes tab found in the BOOX launcher")
+            return false
+        }
+        DebugLog.i("note", "not on the BOOX home screen; tapping its Notes tab")
+        click(tab, null)
+        j.resetFolder()
+        j.awaitChangeFrom = signature
+        j.awaitUntil = now + AFTER_BACK_MS
+        later(POLL_MS)
+        return true
+    }
+
+    private fun back(j: Job, now: Long, signature: String, why: String) {
         if (j.backs >= MAX_BACKS) return fail(j, "pressed Back $MAX_BACKS times without finding it")
         j.backs++
         j.resetFolder()
         DebugLog.i("note", "Back ($why) ${j.backs}/$MAX_BACKS")
         service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
-        wait(j, now, AFTER_BACK_MS)
+        j.awaitChangeFrom = signature
+        j.awaitUntil = now + AFTER_BACK_MS
+        later(POLL_MS)
     }
 
     private fun succeed(j: Job) {
@@ -364,12 +392,14 @@ class NoteOpener(private val service: AccessibilityService) {
     companion object {
         // E-ink redraws are slow; these are deliberately generous.
         private const val TIMEOUT_MS = 30_000L
-        private const val FIRST_DELAY_MS = 900L
-        private const val POLL_MS = 350L
+        // Waits are upper bounds: the loop polls and moves on as soon as the screen changes.
+        private const val FIRST_DELAY_MS = 250L
+        private const val POLL_MS = 300L
         private const val AFTER_TAP_MS = 1_500L
-        private const val AFTER_BACK_MS = 1_200L
+        private const val AFTER_BACK_MS = 2_000L
         private const val AFTER_PAGE_MS = 1_000L
         private const val LOAD_GRACE_MS = 800L
+        private const val UNKNOWN_GRACE_MS = 3_000L
         private const val MISSING_MS = 2_000L
         private const val MAX_PAGE_TURNS = 25
         private const val MAX_BACKS = 5

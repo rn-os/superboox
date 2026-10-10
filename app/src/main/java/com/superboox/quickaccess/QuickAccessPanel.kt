@@ -1,6 +1,7 @@
 package com.superboox.quickaccess
 
 import android.accessibilityservice.AccessibilityService
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -224,7 +225,7 @@ class QuickAccessPanel(
 
     private fun lastNoteRow(): View {
         val note = Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.NOTE && !isCurrentNote(it) }
-        return lastRow("Last Opened Note", note?.title, enabled = note != null) {
+        return lastRow(R.drawable.ic_note, "Last Opened Note", note?.title, enabled = note != null) {
             note?.let { service.openBooxNote(it.title) }
         }
     }
@@ -233,16 +234,16 @@ class QuickAccessPanel(
         val doc = Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.DOCUMENT && !isCurrent(it) }
         val app = doc?.let { Launcher.appLabel(service, it.pkg) }
         val sub = doc?.let { if (it.title == app) app else "${it.title} · $app" }
-        return lastRow("Last Opened Document", sub, enabled = doc != null) {
+        return lastRow(R.drawable.ic_book, "Last Opened Document", sub, enabled = doc != null) {
             doc?.let { openRecentDocument(it) }
         }
     }
 
-    private fun lastRow(label: String, subtitle: String?, enabled: Boolean, onClick: () -> Unit): View = with(ctx) {
+    private fun lastRow(iconRes: Int, label: String, subtitle: String?, enabled: Boolean, onClick: () -> Unit): View = with(ctx) {
         val color = if (enabled) Ink.INK else Ink.DISABLED
         hbox().apply {
             setPadding(s(16), s(12), s(16), s(12))
-            addView(icon(getDrawable(R.drawable.ic_book), iconPx(30)).apply { imageTintList = ColorStateList.valueOf(color) })
+            addView(icon(getDrawable(iconRes), iconPx(30)).apply { imageTintList = ColorStateList.valueOf(color) })
             addView(vbox().apply {
                 setPadding(s(14), 0, 0, 0)
                 addView(text(label, sp(17f), color = color, medium = true))
@@ -290,10 +291,37 @@ class QuickAccessPanel(
         box
     }
 
+    /**
+     * What kind of item a pin is, at a glance: the same icon as everywhere else
+     * in the panel. Apps use a uniform glyph unless Settings asks for their own icons.
+     */
+    private fun pinIcon(pin: Pin): View = with(ctx) {
+        val size = iconPx(22)
+        if (pin.type == PinType.APP && prefs.appOwnIcons) {
+            val own = runCatching {
+                val pm = packageManager
+                ComponentName.unflattenFromString(pin.value)?.let { pm.getActivityIcon(it) }
+                    ?: pm.getApplicationIcon(pin.value.substringBefore('/'))
+            }.getOrNull()
+            if (own != null) return@with icon(own, size, tint = false)
+        }
+        val res = when (pin.type) {
+            PinType.BOOX_NOTE -> R.drawable.ic_note
+            PinType.DOCUMENT -> R.drawable.ic_book
+            PinType.FILE -> R.drawable.ic_file
+            PinType.FOLDER -> R.drawable.ic_folder
+            PinType.APP -> R.drawable.ic_apps
+            PinType.INTENT -> R.drawable.ic_link
+        }
+        icon(getDrawable(res), size)
+    }
+
     private fun itemRow(pin: Pin): View {
         val label = if (pin.type == PinType.FOLDER && pin.id in expandedFolders) "${pin.label}  ▾" else pin.label
-        return oneLine(ctx.text(label, sp(17f))).apply {
-            setPadding(s(20), s(13), s(20), s(13))
+        return ctx.hbox().apply {
+            setPadding(s(18), s(13), s(20), s(13))
+            addView(pinIcon(pin))
+            addView(oneLine(ctx.text(label, sp(17f))).apply { setPadding(s(12), 0, 0, 0) }, lp(0, WRAP, 1f))
             pressable()
             setOnClickListener { activate(pin) }
             setOnLongClickListener {
@@ -500,7 +528,8 @@ class QuickAccessPanel(
             if (i > 0) box.addView(insetRule())
             box.addView(hbox().apply {
                 setPadding(s(20), s(7), s(8), s(7))
-                addView(oneLine(text(pin.label, sp(17f))), lp(0, WRAP, 1f))
+                addView(pinIcon(pin))
+                addView(oneLine(text(pin.label, sp(17f))).apply { setPadding(s(12), 0, s(6), 0) }, lp(0, WRAP, 1f))
                 val b = iconPx(44)
                 addView(inkIconButton(R.drawable.ic_arrow_up, "Move up", b, enabled = i > 0) { movePin(i, i - 1) })
                 addView(inkIconButton(R.drawable.ic_arrow_down, "Move down", b, enabled = i < pins.size - 1) { movePin(i, i + 1) })

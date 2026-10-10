@@ -75,7 +75,9 @@ object Launcher {
 
     fun appLabel(context: Context, pkg: String): String = runCatching {
         val pm = context.packageManager
+        // Drop a trailing version some apps put in their name ("NeoReader V3.0" -> "NeoReader").
         pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+            .replace(Regex("""\s+[vV]?\d+(\.\d+)+$"""), "").ifBlank { pkg }
     }.getOrDefault(pkg)
 
     fun displayName(context: Context, uri: Uri): String {

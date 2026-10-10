@@ -112,6 +112,7 @@ class SettingsActivity : Activity() {
             choiceRow("Menu size", prefs.menuSize.title) {
                 pick("Menu size", MenuSize.entries.map { it.title }, prefs.menuSize.ordinal) { prefs.menuSize = MenuSize.entries[it] }
             },
+            check("Use apps' own icons for pinned apps", prefs.appOwnIcons) { prefs.appOwnIcons = it },
         )))
         list.addView(
             note(

@@ -65,6 +65,11 @@ class Prefs(context: Context) {
         get() = enumOr(sp.getString(K_MENU_SIZE, null), MenuSize.LARGE) // easier to hit on e-ink
         set(v) = sp.edit().putString(K_MENU_SIZE, v.name).apply()
 
+    /** Pinned apps show the app's own (color) icon instead of the uniform black app glyph. */
+    var appOwnIcons: Boolean
+        get() = sp.getBoolean(K_APP_OWN_ICONS, false)
+        set(v) = sp.edit().putBoolean(K_APP_OWN_ICONS, v).apply()
+
     var showSystemActions: Boolean
         // Supernote's panel has no Back/Home row, so it's opt-in.
         get() = sp.getBoolean(K_SYSTEM_ACTIONS, false)
@@ -141,6 +146,7 @@ class Prefs(context: Context) {
         const val K_HANDLE_ENABLED = "handle_enabled"
         const val K_PANEL_WIDTH = "panel_width_pct"
         const val K_SYSTEM_ACTIONS = "system_actions"
+        const val K_APP_OWN_ICONS = "app_own_icons"
         const val K_MENU_SIZE = "menu_size"
         const val K_RECENTS = "recents"
         const val K_NOTES_PKG = "notes_package"

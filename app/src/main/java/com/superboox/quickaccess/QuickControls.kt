@@ -155,20 +155,57 @@ object QuickControls {
     private const val POLL_MS = 150L
     private const val FIND_TIMEOUT_MS = 2_500L
     const val AFTER_TAP_MS = 600L
+    private const val SWITCH_MS = 1_000L
+    private val CONTROL_CENTER_IDS = listOf("control_center_ll", "tablet_control_title")
 
-    /** Opens the Control Center and calls [ready] once its tiles can be read (false: they never appeared). */
+    /**
+     * Opens the Control Center and calls [ready] once its tiles can be read
+     * (false: they never appeared). After Alerts, BOOX can answer "open quick
+     * settings" with the notification list; if the Control Center hasn't shown
+     * up within [SWITCH_MS], close the shade and pull down from the top-right,
+     * where BOOX keeps the Control Center.
+     */
     fun open(service: AccessibilityService, ready: (Boolean) -> Unit) {
         val handler = Handler(Looper.getMainLooper())
         if (!service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)) {
             DebugLog.w("controls", "couldn't open the Control Center")
             return ready(false)
         }
-        val deadline = System.currentTimeMillis() + FIND_TIMEOUT_MS
+        val start = System.currentTimeMillis()
+        var deadline = start + FIND_TIMEOUT_MS
+        var pulled = false
         fun check() {
-            if (runCatching { readTiles(service) }.getOrDefault(emptyList()).isNotEmpty()) return ready(true)
-            if (System.currentTimeMillis() < deadline) handler.postDelayed(::check, POLL_MS) else ready(false)
+            if (runCatching { controlCenterShowing(service) }.getOrDefault(false)) return ready(true)
+            val now = System.currentTimeMillis()
+            if (!pulled && now - start >= SWITCH_MS) {
+                pulled = true
+                DebugLog.w("controls", "the Control Center didn't open (notifications instead?); pulling down from the top-right")
+                logShade(service, "controls")
+                closeShade(service)
+                handler.postDelayed({ pullDown(service, 0.8f, "controls") }, 500)
+                deadline = now + 500 + FIND_TIMEOUT_MS
+                handler.postDelayed(::check, 900)
+                return
+            }
+            if (now < deadline) handler.postDelayed(::check, POLL_MS) else ready(false)
         }
         handler.postDelayed(::check, POLL_MS)
+    }
+
+    /**
+     * True when the Control Center itself is on screen, not just the shade:
+     * three or more tiles SuperBoox knows, or BOOX's Control Center layout.
+     */
+    fun controlCenterShowing(service: AccessibilityService): Boolean {
+        val tiles = runCatching { readTiles(service) }.getOrDefault(emptyList())
+        if (tiles.count { t -> ALL.any { it.kind != Kind.ACTION && it.matches(t.normalized) } } >= 3) return true
+        for (w in service.windows) {
+            val root = w.root ?: continue
+            val pkg = root.packageName?.toString() ?: continue
+            if (!pkg.contains("systemui")) continue
+            if (CONTROL_CENTER_IDS.any { root.findAccessibilityNodeInfosByViewId("$pkg:id/$it").isNotEmpty() }) return true
+        }
+        return false
     }
 
     /**
@@ -231,17 +268,18 @@ object QuickControls {
             if (!controlCenter) return@postDelayed DebugLog.i("alerts", "notifications opened")
             val toNotifications = tiles.firstOrNull { "notif" in it.normalized && !it.normalized.startsWith("mute") }
             DebugLog.w("alerts", "the Control Center opened instead; ${if (toNotifications != null) "tapping \"${toNotifications.label}\"" else "no notifications switch in it"}")
-            logShade(service)
+            logShade(service, "alerts")
             if (toNotifications != null && pressable(toNotifications.node, false)?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return@postDelayed
             closeShade(service)
-            handler.postDelayed({ pullDownTopLeft(service) }, 500)
-            handler.postDelayed({ logShade(service) }, 1_400)
+            handler.postDelayed({ pullDown(service, 0.2f, "alerts") }, 500)
+            handler.postDelayed({ logShade(service, "alerts") }, 1_400)
         }, 700)
     }
 
-    private fun pullDownTopLeft(service: AccessibilityService) {
+    /** Swipes down from the top edge at [xFraction] of the width: BOOX opens notifications on the left, the Control Center on the right. */
+    private fun pullDown(service: AccessibilityService, xFraction: Float, tag: String) {
         val dm = service.resources.displayMetrics
-        val x = dm.widthPixels * 0.2f
+        val x = dm.widthPixels * xFraction
         val path = android.graphics.Path().apply {
             moveTo(x, 2f)
             lineTo(x, dm.heightPixels * 0.45f)
@@ -249,14 +287,14 @@ object QuickControls {
         val gesture = android.accessibilityservice.GestureDescription.Builder()
             .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 300))
             .build()
-        DebugLog.i("alerts", "pulling down from the top-left")
+        DebugLog.i(tag, "pulling down from the top-${if (xFraction < 0.5f) "left" else "right"}")
         service.dispatchGesture(gesture, null, null)
     }
 
-    private fun logShade(service: AccessibilityService) {
+    private fun logShade(service: AccessibilityService, tag: String) {
         runCatching {
             service.windows.filter { it.root?.packageName?.toString()?.contains("systemui") == true }
-                .forEach { DebugLog.i("alerts", "shade:\n" + DebugReport.describeTree(it.root, 120)) }
+                .forEach { DebugLog.i(tag, "shade:\n" + DebugReport.describeTree(it.root, 120)) }
         }
     }
 

@@ -2,8 +2,6 @@ package com.superboox.quickaccess
 
 import android.accessibilityservice.AccessibilityService
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 
@@ -14,15 +12,10 @@ import android.view.accessibility.AccessibilityWindowInfo
  * nothing. Runs only when the debug report is built.
  */
 object ControlCenterProbe {
-    private const val OPEN_WAIT_MS = 1_500L
-
     fun run(service: AccessibilityService, done: (List<String>) -> Unit) {
-        val handler = Handler(Looper.getMainLooper())
-        val opened = service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)
-        if (!opened) return done(listOf("open Control Center: refused"))
-        handler.postDelayed({
+        QuickControls.open(service) { confirmed ->
             val out = ArrayList<String>()
-            out += "open Control Center: ok"
+            out += "open Control Center: ${if (confirmed) "ok" else "not confirmed (notifications or nothing showed)"}"
             runCatching { read(service, out) }.onFailure { out += "read failed: ${it.javaClass.simpleName} ${it.message}" }
             val closed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
@@ -31,7 +24,7 @@ object ControlCenterProbe {
             }
             out += "close Control Center: ${if (closed) "ok" else "refused"}"
             done(out)
-        }, OPEN_WAIT_MS)
+        }
     }
 
     private fun read(service: AccessibilityService, out: MutableList<String>) {

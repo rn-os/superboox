@@ -57,6 +57,16 @@ object Launcher {
         fail(context, "Not allowed: ${e.message}")
     }
 
+    /** Like [start] but silent on failure: for trying several ways to open something. */
+    fun tryStart(context: Context, intent: Intent): Boolean = try {
+        context.startActivity(intent)
+        DebugLog.i("launch", intent.toUri(0))
+        true
+    } catch (e: Exception) {
+        DebugLog.i("launch", "couldn't start ${intent.toUri(0)}: ${e.javaClass.simpleName} ${e.message}")
+        false
+    }
+
     fun appIcon(context: Context, value: String): Drawable? = runCatching {
         val pm = context.packageManager
         val cn = ComponentName.unflattenFromString(value)

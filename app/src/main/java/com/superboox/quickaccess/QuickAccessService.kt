@@ -36,6 +36,13 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     var foregroundPackage: String? = null
         private set
 
+    /** Activity class of [foregroundPackage], e.g. to tell the BOOX Notes library apart from the launcher. */
+    var foregroundActivity: String? = null
+        private set
+
+    val isNotesInFront: Boolean
+        get() = BooxNotes.isNotesScreen(foregroundPackage, foregroundActivity, prefs.notesPackage)
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         DebugLog.init(this)
@@ -54,9 +61,16 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (pkg == packageName || pkg in IGNORED_PACKAGES || pkg.contains("inputmethod")) return
         // Dialogs/toasts from other apps also fire this event; only count real app windows.
         val windowType = runCatching { windows.firstOrNull { it.id == event.windowId }?.type }.getOrNull()
-        if ((windowType == null || windowType == AccessibilityWindowInfo.TYPE_APPLICATION) && pkg != foregroundPackage) {
-            foregroundPackage = pkg
-            DebugLog.i("foreground", "$pkg (${event.className})")
+        if (windowType == null || windowType == AccessibilityWindowInfo.TYPE_APPLICATION) {
+            val cls = event.className?.toString()
+            // Only real activities; views inside an app also report their class names here.
+            val isActivity = cls != null && !cls.startsWith("android.widget.") && !cls.startsWith("android.view.")
+            val newApp = pkg != foregroundPackage
+            if (newApp || (isActivity && cls != foregroundActivity)) {
+                foregroundPackage = pkg
+                if (isActivity) foregroundActivity = cls else if (newApp) foregroundActivity = null
+                DebugLog.i("foreground", "$pkg ($cls)")
+            }
         }
     }
 
@@ -177,16 +191,18 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     fun openBooxNote(path: String) {
         hidePanel()
-        DebugLog.i("note", "open \"$path\" in ${prefs.notesPackage}")
-        noteOpener.open(prefs.notesPackage, path)
+        val inNotes = isNotesInFront
+        DebugLog.i("note", "open \"$path\" (Notes in front: $inNotes, $foregroundPackage/$foregroundActivity)")
+        noteOpener.open(prefs.notesPackage, path, inNotes)
     }
 
     /** What BOOX Notes is showing (open note or library), for pinning from the panel. */
     fun notesState(): NotesScreen.State? {
-        val pkg = prefs.notesPackage
+        val packages = BooxNotes.packages(prefs.notesPackage)
+        val pkg = packages.joinToString("/")
         val root = runCatching {
             windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
-                .firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName == pkg } }
+                .firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName?.toString() in packages } }
         }.getOrNull()
         if (root == null) {
             DebugLog.w("picker", "no $pkg window found; windows=${runCatching { windows.map { "${it.type}:${it.root?.packageName}" } }.getOrNull()}")

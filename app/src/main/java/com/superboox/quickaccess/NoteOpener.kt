@@ -34,7 +34,9 @@ class NoteOpener(private val service: AccessibilityService) {
     private val handler = Handler(Looper.getMainLooper())
     private var job: Job? = null
 
-    private class Job(val pkg: String, val steps: List<String>, val deadline: Long) {
+    private class Job(val packages: Set<String>, val notesPackage: String, val steps: List<String>, val deadline: Long) {
+        /** Set when we opened the BOOX launcher and still need to tap its "Notes" tab. */
+        var needsNotesTab = false
         var index = 0
         var backs = 0
         var relaunches = 0
@@ -63,23 +65,39 @@ class NoteOpener(private val service: AccessibilityService) {
         }
     }
 
-    fun open(pkg: String, path: String) {
+    /**
+     * @param inNotes BOOX Notes (library or a note) is already on screen, so
+     *   there's nothing to launch: the loop navigates from where we are.
+     */
+    fun open(notesPackage: String, path: String, inNotes: Boolean) {
         cancel()
         val steps = BooxNotes.splitPath(path)
-        // Bring the existing task forward instead of restarting it: restarting
-        // can drop the last strokes of a note that's open, and BOOX may reopen
-        // the last note anyway. The loop below backs out of an open note.
-        val intent = BooxNotes.launchIntent(service, pkg, fresh = false)
-        if (intent == null) {
-            DebugLog.w("note", "no launch intent for $pkg")
-            toast("BOOX Notes ($pkg) is not installed")
+        if (steps.isEmpty()) return
+        val j = Job(BooxNotes.packages(notesPackage), notesPackage, steps, SystemClock.uptimeMillis() + TIMEOUT_MS)
+        if (!inNotes && !launchNotes(j)) {
+            toast("Couldn't open BOOX Notes on this device")
             return
         }
-        if (!Launcher.start(service, intent) || steps.isEmpty()) return
         toast("Opening \"${steps.last()}\"…")
         val now = SystemClock.uptimeMillis()
-        job = Job(pkg, steps, now + TIMEOUT_MS).also { it.notBefore = now + FIRST_DELAY_MS }
+        job = j.also { it.notBefore = now + FIRST_DELAY_MS }
         handler.postDelayed(::tick, FIRST_DELAY_MS)
+    }
+
+    /**
+     * Brings up Notes. Doesn't restart it: restarting could drop the last
+     * strokes of an open note. The loop backs out of an open note itself.
+     */
+    private fun launchNotes(j: Job): Boolean {
+        for ((how, intent) in BooxNotes.launchCandidates(service, j.notesPackage)) {
+            if (Launcher.tryStart(service, intent)) {
+                DebugLog.i("note", "opened Notes via $how")
+                j.needsNotesTab = how == "BOOX launcher"
+                return true
+            }
+        }
+        DebugLog.w("note", "no way to open Notes. Activities: ${BooxNotes.describeActivities(service, j.notesPackage)}")
+        return false
     }
 
     fun cancel() {
@@ -93,7 +111,7 @@ class NoteOpener(private val service: AccessibilityService) {
         if (now > j.deadline) return fail(j, "timed out")
         if (now < j.notBefore) return later(j.notBefore - now)
 
-        val root = notesRoot(j.pkg)
+        val root = notesRoot(j.packages)
         if (root == null) {
             // Backed out of Notes entirely (or it's still starting): bring it back once or twice.
             if (j.missingSince == 0L) j.missingSince = now
@@ -102,12 +120,27 @@ class NoteOpener(private val service: AccessibilityService) {
                 j.missingSince = 0L
                 j.resetFolder()
                 DebugLog.i("note", "Notes not in front; relaunching (${j.relaunches})")
-                BooxNotes.launchIntent(service, j.pkg, fresh = false)?.let { Launcher.start(service, it) }
+                launchNotes(j)
                 return wait(j, now, AFTER_BACK_MS)
             }
             return later(POLL_MS)
         }
         j.missingSince = 0L
+
+        // Opened via the BOOX launcher: switch it to its Notes tab first.
+        if (j.needsNotesTab && root.packageName == BooxNotes.BOOX_HOME_PACKAGE) {
+            j.needsNotesTab = false
+            val tab = findFirst(root) { n ->
+                val t = NotesScreen.textOf(n).lowercase()
+                (t == "notes" || t == "note") && n.isVisibleToUser
+            }
+            if (tab != null) {
+                DebugLog.i("note", "tapping the launcher's Notes tab")
+                click(tab, null)
+                return wait(j, now, AFTER_TAP_MS)
+            }
+            DebugLog.w("note", "no Notes tab found in the BOOX launcher")
+        }
 
         val state = NotesScreen.read(root)
         val signature = NotesScreen.signature(state)
@@ -240,7 +273,7 @@ class NoteOpener(private val service: AccessibilityService) {
 
     private fun fail(j: Job, why: String) {
         job = null
-        val root = notesRoot(j.pkg)
+        val root = notesRoot(j.packages)
         DebugLog.w(
             "note",
             "gave up on \"${j.steps.getOrNull(j.index)}\" (step ${j.index + 1}/${j.steps.size}): $why. " +
@@ -269,13 +302,14 @@ class NoteOpener(private val service: AccessibilityService) {
         j.lastState = text
     }
 
-    private fun notesRoot(pkg: String): AccessibilityNodeInfo? {
+    /** The Notes window on screen: the editor package or the library inside the BOOX launcher. */
+    private fun notesRoot(packages: Set<String>): AccessibilityNodeInfo? {
         val fromWindows = runCatching {
             service.windows
                 .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
-                .firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName == pkg } }
+                .firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName?.toString() in packages } }
         }.getOrNull()
-        return fromWindows ?: service.rootInActiveWindow?.takeIf { it.packageName == pkg }
+        return fromWindows ?: service.rootInActiveWindow?.takeIf { it.packageName?.toString() in packages }
     }
 
     private fun findLabel(root: AccessibilityNodeInfo, label: String): AccessibilityNodeInfo? {

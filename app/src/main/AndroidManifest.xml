@@ -3,6 +3,10 @@
 
     <!-- Needed to list launchable apps (dock + app pins) on Android 11+. -->
     <queries>
+        <!-- BOOX Notes: the editor has no launcher icon on newer firmware, and the
+             library lives in the BOOX launcher. Needed to find their activities. -->
+        <package android:name="com.onyx.android.note" />
+        <package android:name="com.onyx" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />

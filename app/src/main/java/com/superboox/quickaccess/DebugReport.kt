@@ -44,7 +44,11 @@ object DebugReport {
                 line("${ai.packageName}/${ai.name}  v$v")
             }
         val notesPkg = prefs.notesPackage
-        line("notes package setting: $notesPkg (launchable: ${BooxNotes.isInstalled(context, notesPkg)})")
+        line("notes package setting: $notesPkg (launcher entry: ${pm.getLaunchIntentForPackage(notesPkg) != null})")
+        line("notes in front: ${QuickAccessService.instance?.isNotesInFront} (${QuickAccessService.instance?.foregroundActivity})")
+        line("ways to open Notes: ${BooxNotes.launchCandidates(context, notesPkg).joinToString { it.first }.ifEmpty { "none" }}")
+        line("note activities:")
+        BooxNotes.describeActivities(context, notesPkg).forEach { line("  $it") }
 
         section("Settings")
         line("edge=${prefs.edge} trigger=${prefs.trigger} handleEnabled=${prefs.handleEnabled} showMarker=${prefs.showHandle}")

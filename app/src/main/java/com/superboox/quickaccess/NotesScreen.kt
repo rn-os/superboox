@@ -34,6 +34,8 @@ object NotesScreen {
         val list = mainList(root, screen)
         val cards = cards(root, screen)
         if (cards.isNotEmpty()) return State.Library(cards, list)
+        // The editor names its title view note_name (seen on firmware 4.3); use it when present.
+        noteNameView(root)?.let { return State.Editor(it) }
         // No cards: an open note (its tall tool column may scroll, so a list alone
         // doesn't mean library). An empty folder also lands here, and backing out
         // of it is the right move anyway.
@@ -103,6 +105,12 @@ object NotesScreen {
     }
 
     // ---- Editor --------------------------------------------------------------------------
+
+    private fun noteNameView(root: AccessibilityNodeInfo): String? =
+        runCatching { root.findAccessibilityNodeInfosByViewId("com.onyx.android.note:id/note_name") }.getOrNull()
+            ?.firstOrNull { it.isVisibleToUser }
+            ?.let { textOf(it) }
+            ?.takeIf { it.isNotEmpty() }
 
     /** Left-most real text in the top bar: the note's name (next to the back arrow). */
     private fun editorTitle(root: AccessibilityNodeInfo, screen: Rect): String? =

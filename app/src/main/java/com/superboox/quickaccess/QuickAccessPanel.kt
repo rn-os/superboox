@@ -45,7 +45,7 @@ class QuickAccessPanel(
 
     /** What BOOX Notes is showing, if it's the app behind the panel. */
     private val notesState: NotesScreen.State? =
-        if (foregroundPackage == prefs.notesPackage) service.notesState() else null
+        if (service.isNotesInFront) service.notesState() else null
 
     val root: FrameLayout = object : FrameLayout(ctx) {
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -296,7 +296,7 @@ class QuickAccessPanel(
             null -> Unit
         }
         val pkg = foregroundPackage ?: return null
-        if (pkg == prefs.notesPackage || pkg == service.packageName) return null
+        if (pkg == prefs.notesPackage || pkg == service.packageName || service.isNotesInFront) return null
         if (service.packageManager.getLaunchIntentForPackage(pkg) == null) return null
         if (prefs.pins.any { it.type == PinType.APP && it.value.substringBefore('/') == pkg }) return null
         val label = Launcher.appLabel(service, pkg)

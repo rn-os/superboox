@@ -128,13 +128,13 @@ class SettingsActivity : Activity() {
         )))
         list.addView(heading("In the panel"))
         list.addView(card(listOf(
-            menuRow(R.drawable.ic_star, Page.ITEMS, prefs.pins.size.let { if (it == 1) "1 item" else "$it items" }),
-            menuRow(R.drawable.ic_toggle, Page.CONTROLS,
-                if (prefs.showSystemActions) "On · ${controls.size} controls" else "Off"),
-            menuRow(R.drawable.ic_apps, Page.APPS,
-                (if (apps == 1) "1 app" else "$apps apps") + if (prefs.previousAppInDock) " · Previous app included" else ""),
             menuRow(R.drawable.ic_clock, Page.RECENT,
                 if (folder == null) "Off" else "Folder: ${Launcher.displayName(this, Uri.parse(folder))}"),
+            menuRow(R.drawable.ic_toggle, Page.CONTROLS,
+                if (prefs.showSystemActions) "On · ${controls.size} controls" else "Off"),
+            menuRow(R.drawable.ic_star, Page.ITEMS, prefs.pins.size.let { if (it == 1) "1 item" else "$it items" }),
+            menuRow(R.drawable.ic_apps, Page.APPS,
+                (if (apps == 1) "1 app" else "$apps apps") + if (prefs.previousAppInDock) " · Previous app included" else ""),
         )))
         list.addView(heading("Help"))
         list.addView(card(listOf(
@@ -284,6 +284,36 @@ class SettingsActivity : Activity() {
                     if (existing == null) mine + QuickControls.LightPreset(id, label, levels)
                     else mine.map { if (it.id == existing.id) it.copy(name = label, levels = levels) else it })
                 render()
+            }
+            .show()
+    }
+
+    /**
+     * Can SuperBoox set the light without BOOX's Custom? Writes BOOX's own
+     * light settings (screen_ctm_*) to a dim level for a few seconds, then asks
+     * whether the light changed. The answer goes in the log for the report.
+     */
+    private fun lightTest() {
+        if (!Settings.System.canWrite(this)) {
+            toast("Allow \"Modify system settings\" first, then run the test again")
+            startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName")))
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Front light test")
+            .setMessage("SuperBoox will dim the front light for 3 seconds, then put it back. Watch the screen.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Start") { _, _ ->
+                val result = QuickControls.directLightTest(this)
+                list.postDelayed({
+                    QuickControls.directLightRestore(this, result)
+                    AlertDialog.Builder(this)
+                        .setTitle("Did the light change?")
+                        .setMessage("Write: ${result.summary}")
+                        .setNegativeButton("No") { _, _ -> DebugLog.i("light-test", "user: light did NOT change"); toast("Noted in the log") }
+                        .setPositiveButton("Yes, it dimmed") { _, _ -> DebugLog.i("light-test", "user: light DID change"); toast("Noted in the log") }
+                        .show()
+                }, 3_000)
             }
             .show()
     }
@@ -644,6 +674,7 @@ class SettingsActivity : Activity() {
                 "Share…" to { shareReport() },
             ),
             buttonRow("Clear log" to { DebugLog.clear(); toast("Log cleared"); render() }),
+            buttonRow("Front light test" to { lightTest() }),
         )))
         list.addView(View(this), lp(MATCH, dp(24)))
     }

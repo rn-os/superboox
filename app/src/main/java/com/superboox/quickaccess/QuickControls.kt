@@ -424,8 +424,11 @@ object QuickControls {
     /** Sets Custom's sliders (Custom must already be selected). */
     fun setLevels(service: AccessibilityService, prefs: Prefs, target: Levels): Boolean {
         val nodes = levelNodes(service) ?: return false.also { DebugLog.w("controls", "front light sliders not found") }
-        val ok = listOf(nodes.first to target.brightness, nodes.second to target.warmth).all { (bar, v) -> setSlider(bar, v) }
-        DebugLog.i("controls", "front light Custom -> $target: $ok")
+        // A slider already at its value reports false, so it's judged by what it reads afterwards.
+        listOf(nodes.first to target.brightness, nodes.second to target.warmth).forEach { (bar, v) -> setSlider(bar, v) }
+        val after = levelNodes(service)?.let { (b, w) -> Levels(b.rangeInfo?.current?.roundToInt() ?: -1, w.rangeInfo?.current?.roundToInt() ?: -1) }
+        val ok = after == target
+        DebugLog.i("controls", "front light Custom -> $target: ${if (ok) "ok" else "now $after"}")
         if (ok) saveLevels(prefs, target)
         return ok
     }
@@ -451,6 +454,33 @@ object QuickControls {
         }
         return null
     }
+
+    // ---- Front light straight through BOOX's settings (experiment) -----------------------
+
+    class LightTest(val before: Levels?, val summary: String)
+
+    /** Sets BOOX's own light settings to a dim level; [directLightRestore] puts them back. */
+    fun directLightTest(context: Context): LightTest {
+        val cr = context.contentResolver
+        fun get(k: String) = runCatching { Settings.System.getInt(cr, k) }.getOrNull()
+        val before = get(CTM_BRIGHTNESS)?.let { b -> Levels(b, get(CTM_TEMPERATURE) ?: 0) }
+        val target = if ((before?.brightness ?: 32) > 10) 4 else 24
+        val wrote = runCatching { Settings.System.putInt(cr, CTM_BRIGHTNESS, target) }
+        val now = get(CTM_BRIGHTNESS)
+        val summary = wrote.fold({ "put $CTM_BRIGHTNESS=$target -> $it, reads back $now (was ${before?.brightness})" },
+            { "put $CTM_BRIGHTNESS refused: ${it.javaClass.simpleName} ${it.message?.take(120)}" })
+        DebugLog.i("light-test", summary)
+        return LightTest(before, summary)
+    }
+
+    fun directLightRestore(context: Context, test: LightTest) {
+        val b = test.before ?: return
+        val ok = runCatching { Settings.System.putInt(context.contentResolver, CTM_BRIGHTNESS, b.brightness) }.getOrDefault(false)
+        DebugLog.i("light-test", "restore $CTM_BRIGHTNESS=${b.brightness} -> $ok")
+    }
+
+    private const val CTM_BRIGHTNESS = "screen_ctm_brightness"
+    private const val CTM_TEMPERATURE = "screen_ctm_temperature"
 
     // ---- Your own Front Light presets (applied through Custom) ----------------------------
 

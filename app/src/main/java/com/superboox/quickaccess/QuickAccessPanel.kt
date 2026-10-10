@@ -1116,6 +1116,12 @@ private class LevelBar(
     override fun onDraw(canvas: android.graphics.Canvas) {
         val r = height / 2f
         rect.set(stroke / 2f, stroke / 2f, width - stroke / 2f, height - stroke / 2f)
+        if (value >= max) {
+            // Full: one solid pill, so no sliver is left at the rounded end.
+            canvas.drawRoundRect(rect, r, r, fill)
+            canvas.drawRoundRect(rect, r, r, line)
+            return
+        }
         canvas.save()
         val clip = android.graphics.Path().apply { addRoundRect(rect, r, r, android.graphics.Path.Direction.CW) }
         canvas.clipPath(clip)
@@ -1128,7 +1134,13 @@ private class LevelBar(
         when (e.actionMasked) {
             android.view.MotionEvent.ACTION_DOWN -> parent?.requestDisallowInterceptTouchEvent(true)
             android.view.MotionEvent.ACTION_UP -> {
-                value = (e.x / width * max).roundToInt().coerceIn(0, max)
+                // The ends snap, so the first and last steps are easy to hit.
+                val f = (e.x / width).coerceIn(0f, 1f)
+                value = when {
+                    f > 0.96f -> max
+                    f < 0.04f -> 0
+                    else -> (f * max).roundToInt().coerceIn(0, max)
+                }
                 invalidate()
                 onPick(value)
             }

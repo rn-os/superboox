@@ -153,7 +153,11 @@ class QuickAccessPanel(
             setPadding(0, s(12), 0, s(10))
             contentDescription = label
             addView(icon(getDrawable(iconRes), iconPx(32)))
-            addView(text(label, sp(15f), medium = true).apply { setPadding(0, s(4), 0, 0) })
+            // Text views in a vertical LinearLayout default to full width: centre the text itself.
+            addView(text(label, sp(15f), medium = true).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, s(4), 0, 0)
+            })
             pressable()
             setOnClickListener { onClick() }
         }
@@ -186,7 +190,7 @@ class QuickAccessPanel(
                     setPadding(0, s(6), 0, s(6))
                     contentDescription = label
                     addView(icon(getDrawable(iconRes), iconPx(26)))
-                    addView(text(label, sp(12f), medium = true))
+                    addView(text(label, sp(12f), medium = true).apply { gravity = Gravity.CENTER })
                     pressable()
                     setOnClickListener { service.systemAction(global) }
                 }, lp(0, WRAP, 1f))
@@ -247,7 +251,7 @@ class QuickAccessPanel(
                 setPadding(s(6), 0, s(6), 0)
                 contentDescription = "Add to Quick Access"
                 addView(icon(getDrawable(R.drawable.ic_link_add), iconPx(24)))
-                addView(text("Add", sp(11f)))
+                addView(text("Add", sp(11f)).apply { gravity = Gravity.CENTER })
                 pressable()
                 setOnClickListener { addFromContext() }
             }, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.END or Gravity.CENTER_VERTICAL))

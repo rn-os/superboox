@@ -209,16 +209,23 @@ class SettingsActivity : Activity() {
         list.addView(buttonRow("Clear log" to { DebugLog.clear(); toast("Log cleared"); render() }))
     }
 
-    private fun copyReport() {
-        val report = DebugReport.build(this)
+    /** Builds the report off the main thread (it scans the Notes app), then hands it over. */
+    private fun withReport(then: (String) -> Unit) {
+        toast("Building debug report…")
+        io.execute {
+            val report = DebugReport.build(this)
+            runOnUiThread { if (!isFinishing) then(report) }
+        }
+    }
+
+    private fun copyReport() = withReport { report ->
         val cm = getSystemService(ClipboardManager::class.java)
         cm.setPrimaryClip(ClipData.newPlainText("SuperBoox debug report", report))
         DebugLog.i("report", "copied (${report.length} chars)")
         toast("Debug report copied (${report.length / 1024 + 1} KB)")
     }
 
-    private fun shareReport() {
-        val report = DebugReport.build(this)
+    private fun shareReport() = withReport { report ->
         val send = Intent(Intent.ACTION_SEND)
             .setType("text/plain")
             .putExtra(Intent.EXTRA_SUBJECT, "SuperBoox debug report")

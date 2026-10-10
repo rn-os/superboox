@@ -50,6 +50,7 @@ object DebugReport {
         line("new note screen available: ${BooxNotes.newNoteIntent(context, notesPkg) != null}")
         line("note-id access (for instant opening):")
         BooxNotes.describeNoteIdAccess(context, notesPkg).forEach { line("  $it") }
+        NoteIdProbe.run(context, notesPkg).forEach { line("  $it") }
         val recents = Recents.list(prefs)
         line("remembered recent items: ${recents.size}${recents.take(5).joinToString(prefix = " (", postfix = ")") { "${it.kind}:${it.title}" }}")
         line("note activities:")

@@ -144,6 +144,8 @@ class NoteOpener(private val service: AccessibilityService) {
 
         // 1. Confirm the last tap did something before moving on.
         j.tapSignature?.let { before ->
+            // BOOX shows a blank hand-off screen between library and editor; wait it out.
+            if (state is NotesScreen.State.Unknown && signature != before && now - j.tapAt < AFTER_TAP_MS * 2) return later(POLL_MS)
             if (signature != before) {
                 DebugLog.i("note", "tap on \"${j.steps[j.index]}\" worked")
                 j.tapSignature = null

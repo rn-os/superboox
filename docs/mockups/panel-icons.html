@@ -1,0 +1,80 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- Quick Access panel icons: now (build 22) vs. proposed. Mirrors QuickAccessPanel.kt. -->
+<style>
+  @font-face { font-family: Roboto; src: url(fonts/roboto-latin-400-normal.woff2); }
+  @font-face { font-family: Roboto; font-weight: 500; src: url(fonts/roboto-latin-500-normal.woff2); }
+  @font-face { font-family: Roboto; font-weight: 700; src: url(fonts/roboto-latin-700-normal.woff2); }
+  body { margin: 0; background: #ddd; font-family: Roboto, sans-serif; color: #000; }
+  .stage { display: flex; gap: 28px; padding: 24px; width: max-content; align-items: flex-start; }
+  .col { display: flex; flex-direction: column; gap: 10px; width: 470px; }
+  .cap { font-size: 22px; font-weight: 700; }
+  .cap small { display: block; font-size: 15px; font-weight: 400; color: #333; margin-top: 4px; line-height: 1.35; }
+  .panel { width: 450px; background: #fff; border-left: 3px solid #000; border: 1px solid #999; border-left: 3px solid #000; }
+  svg { display: block; flex: none; }
+  .top { display: flex; border-bottom: 1.5px solid #000; }
+  .top .c { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 12px 0 10px; font-size: 15px; font-weight: 500; gap: 4px; }
+  .top .sep { width: 1.5px; background: #000; }
+  .top .gear { width: 50px; display: flex; align-items: center; justify-content: center; }
+  .sys { display: flex; justify-content: space-around; padding: 10px 0 8px; border-bottom: 2.5px solid #000; font-size: 12px; }
+  .sys div { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .last { display: flex; align-items: center; padding: 12px 16px; gap: 14px; }
+  .last b { display: block; font-size: 17px; font-weight: 500; }
+  .last span { display: block; font-size: 13px; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px; }
+  .ir { height: 1px; background: #000; margin: 0 16px; }
+  .qa { position: relative; text-align: center; font-size: 17px; font-weight: 700; padding: 14px 16px; border-top: 2.5px solid #000; border-bottom: 1px solid #000; }
+  .qa .add { position: absolute; right: 10px; top: 8px; display: flex; flex-direction: column; align-items: center; font-size: 11px; font-weight: 400; }
+  .pin { display: flex; align-items: center; gap: 12px; padding: 13px 20px; font-size: 17px; white-space: nowrap; overflow: hidden; }
+  .pin t { overflow: hidden; text-overflow: ellipsis; }
+  .key { margin-top: 6px; background: #fff; border: 1px solid #999; padding: 12px 14px; font-size: 14px; }
+  .key div { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+</style></head>
+<body><div class="stage" id="stage"></div>
+<script>
+// Filled Material icons in use today.
+const F = {
+  clock: "M11.99,2C6.47,2 2,6.48 2,12s4.47,10 9.99,10C17.52,22 22,17.52 22,12S17.52,2 11.99,2zM12,20c-4.42,0 -8,-3.58 -8,-8s3.58,-8 8,-8 8,3.58 8,8 -3.58,8 -8,8zM12.5,7H11v6l5.25,3.15 0.75,-1.23 -4.5,-2.67z",
+  note_add: "M14,2H6c-1.1,0 -1.99,0.9 -1.99,2L4,20c0,1.1 0.89,2 1.99,2H18c1.1,0 2,-0.9 2,-2V8l-6,-6zM16,16h-3v3h-2v-3H8v-2h3v-3h2v3h3v2zM13,9V3.5L18.5,9H13z",
+  book: "M21,5c-1.11,-0.35 -2.33,-0.5 -3.5,-0.5 -1.95,0 -4.05,0.4 -5.5,1.5 -1.45,-1.1 -3.55,-1.5 -5.5,-1.5S2.45,4.9 1,6v14.65c0,0.25 0.25,0.5 0.5,0.5 0.1,0 0.15,-0.05 0.25,-0.05C3.1,20.45 5.05,20 6.5,20c1.95,0 4.050,0.4 5.5,1.5 1.35,-0.85 3.8,-1.5 5.5,-1.5 1.65,0 3.35,0.3 4.75,1.05 0.1,0.05 0.15,0.05 0.25,0.05 0.25,0 0.5,-0.25 0.5,-0.5V6c-0.6,-0.45 -1.25,-0.75 -2,-1zM21,18.5c-1.1,-0.35 -2.3,-0.5 -3.5,-0.5 -1.7,0 -4.15,0.65 -5.5,1.5V8c1.35,-0.85 3.8,-1.5 5.5,-1.5 1.2,0 2.4,0.15 3.5,0.5v11.5z",
+  link_add: "M8,11h8v2H8zM20.1,12H22c0,-2.76 -2.24,-5 -5,-5h-4v1.9h4c1.71,0 3.1,1.39 3.1,3.1zM3.9,12c0,-1.71 1.39,-3.1 3.1,-3.1h4V7H7c-2.76,0 -5,2.24 -5,5s2.24,5 5,5h4v-1.9H7c-1.71,0 -3.1,-1.39 -3.1,-3.1zM19,12h-2v3h-3v2h3v3h2v-3h3v-2h-3z",
+  settings: "M3,17v2h6v-2H3zM3,5v2h10V5H3zM13,21v-2h8v-2h-8v-2h-2v6h2zM7,9v2H3v2h4v2h2V9H7zM21,13v-2H11v2h10zM15,9h2V7h4V5h-4V3h-2v6z",
+  back: "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z",
+  home: "M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z",
+  recents: "M3,5v14h18V5H3zM19,17H5V7h14v10z",
+  bell: "M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.89,2 2,2zM18,16v-5c0,-3.07 -1.64,-5.64 -4.5,-6.32V4c0,-0.83 -0.67,-1.5 -1.5,-1.5s-1.5,0.67 -1.5,1.5v0.68C7.63,5.36 6,7.92 6,11v5l-2,2v1h16v-1l-2,-2z",
+  crop: "M17,15h2V7c0,-1.1 -0.9,-2 -2,-2H9v2h8v8zM7,17V1H5v4H1v2h4v10c0,1.1 0.9,2 2,2h10v4h2v-4h4v-2H7z",
+  folder: "M10,4H4c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V8c0,-1.1 -0.9,-2 -2,-2h-8l-2,-2z",
+  file: "M14,2H6c-1.1,0 -2,0.9 -2,2v16c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V8l-6,-6zM16,18H8v-2h8v2zM16,14H8v-2h8v2zM13,9V3.5L18.5,9H13z",
+};
+// New outlined "notebook" family (stroke 2): a note, and the same notebook with a plus for New Note.
+const S = {
+  note: "M7,3h10a2,2 0 0 1 2,2v14a2,2 0 0 1 -2,2H7z M4,7.5h5 M4,12h5 M4,16.5h5 M12,8.5h4 M12,12h4 M12,15.5h3",
+  note_new: "M7,3h10a2,2 0 0 1 2,2v14a2,2 0 0 1 -2,2H7z M4,7.5h5 M4,12h5 M4,16.5h5 M14,8.5v7 M10.5,12h7",
+  apps: "M4,4h6v6H4z M14,4h6v6h-6z M4,14h6v6H4z M14,14h6v6h-6z",
+};
+const f = (k, s = 24) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"><path fill="#000" d="${F[k]}"/></svg>`;
+const st = (k, s = 24) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"><path fill="none" stroke="#000" stroke-width="2" stroke-linejoin="round" d="${S[k]}"/></svg>`;
+const g = (k, s) => (S[k] ? st(k, s) : f(k, s));
+
+const PINS = [["note", "Alex Alsup Notes"], ["note", "SuperBoox Notes"], ["note", "Boox Note Air Thoughts"], ["book", "Outlive - The Science and Art of Longevity"]];
+function panel(proposed) {
+  const newIcon = proposed ? "note_new" : "note_add";
+  const noteIcon = proposed ? "note" : "book";
+  const docSub = proposed ? "Outlive - The Science and Art of Longevity · NeoReader" : "Outlive - The Science and Art of Longevity · NeoReader V3.0";
+  return `<div class="panel">
+    <div class="top"><div class="c">${g("clock", 32)}Recent Files</div><div class="sep"></div><div class="c">${g(newIcon, 32)}New Note</div><div class="sep"></div><div class="gear">${f("settings", 26)}</div></div>
+    <div class="sys">${[["back","Back"],["home","Home"],["recents","Recents"],["bell","Alerts"],["crop","Capture"]].map(([k,l]) => `<div>${f(k, 22)}${l}</div>`).join("")}</div>
+    <div class="last">${g(noteIcon, 30)}<div><b>Last Opened Note</b><span>Alex Alsup Notes</span></div></div><div class="ir"></div>
+    <div class="last">${g("book", 30)}<div><b>Last Opened Document</b><span>${docSub}</span></div></div>
+    <div class="qa">Quick Access<div class="add">${f("link_add", 24)}Add</div></div>
+    ${PINS.map(([k, t], i) => (i ? `<div class="ir"></div>` : "") + `<div class="pin">${proposed ? g(k, 22) : ""}<t>${t}</t></div>`).join("")}
+    <div style="height:40px"></div></div>`;
+}
+const key = `<div class="key"><b>One icon per kind, used everywhere</b> (panel, Recent Files, Add picker)
+  <div>${st("note", 22)} BOOX note</div><div>${st("note_new", 22)} New Note (the same notebook, with a plus)</div>
+  <div>${f("book", 22)} Book / document in NeoReader</div><div>${f("file", 22)} Other document file</div>
+  <div>${f("folder", 22)} Folder</div><div>${st("apps", 22)} App</div><div>${f("link_add".replace("_add",""), 22).replace('d="undefined"', 'd="M3.9,12c0,-1.71 1.39,-3.1 3.1,-3.1h4V7H7c-2.76,0 -5,2.24 -5,5s2.24,5 5,5h4v-1.9H7c-1.71,0 -3.1,-1.39 -3.1,-3.1zM8,13h8v-2H8v2zM17,7h-4v1.9h4c1.71,0 3.1,1.39 3.1,3.1s-1.39,3.1 -3.1,3.1h-4V17h4c2.76,0 5,-2.24 5,-5s-2.24,-5 -5,-5z"')} Custom link</div></div>`;
+document.getElementById("stage").innerHTML = `
+  <div class="col"><div class="cap">Now<small>New Note is a page, Last Opened Note is a book (same as documents), and pins have no icon.</small></div>${panel(false)}</div>
+  <div class="col"><div class="cap">Proposed<small>Notes share one notebook icon (New Note adds a plus); documents keep the book. Each pinned item shows its kind. "NeoReader V3.0" is shortened to "NeoReader".</small></div>${panel(true)}${key}</div>`;
+</script></body></html>

@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 19)
+# SuperBoox: handoff / status (as of build 20)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -68,22 +68,25 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - OpenNoteBean fields: `documentId`, `title`, `parentUniqueId`, `pageIndex`, `jumpBackToNote`, …
   - OpenNoteByDocIdActivity reads the id via `OpenNoteIntentsKt.noteDocIdFromIntent`. Build 18's report dumps that helper's strings, under `code strings …OpenNoteIntentsKt`.
 
-## Build 19 (latest)
-- **Direct open is on.** The build 18 report showed `OpenNoteIntentsKt` strings `note_document_id | position | type | note`. `NotesDb.openIntent()` sends `ACTION_VIEW` + `note_document_id=<uniqueId>` to `OpenNoteByDocIdActivity`.
-  - That activity's `OpenNoteByDocIdAction` loads the NoteModel, builds an OpenNoteBean and calls `RouterUtils.startScribbleActivity`. An unknown id gives a "note not found" toast; it never creates a note.
-  - If a note is already open, `NoteOpener` presses Back first (BOOX saves it). `pendingDirect` fires once the editor is gone.
-  - Confirmed or not within 3.5 s, then it falls back to the library route.
+## Direct note opening: confirmed working (build 19)
+- Build 19 log: "opening by id → opened by id". From outside Notes it takes about 1 s. Switching from another note takes about 1.7 s (Back, which saves, then open by id), all under the cover.
+- `NotesDb.openIntent()` sends `ACTION_VIEW` + `note_document_id=<uniqueId>` to `OpenNoteByDocIdActivity`. That activity's `OpenNoteByDocIdAction` loads the NoteModel and calls `RouterUtils.startScribbleActivity`. An unknown id only shows a "note not found" toast; it never creates a note.
+- When a note is open, `NoteOpener.pendingDirect` fires once the editor is gone. If the right note isn't confirmed within 3.5 s, it falls back to the library route.
 - `NotesScreen.read`: when the `note_name` view is present but blank (still loading), the screen is Unknown, not Library.
-- Build 18's report confirmed the cover works (`[cover] screen held …`) and that pin ids are saved.
-- The reader DB is readable: `content://com.onyx.content.database.ContentProvider/Metadata` (package com.onyx.kreader, NeoReader) has 192 rows, with columns including `title`, `name`, `nativeAbsolutePath`, `lastAccess`, `progress`, `uuid`, `type`. `ReaderHomeActivity` handles VIEW for PDF and EPUB.
+
+## Build 20 (latest): NeoReader documents
+- `ReaderLibrary` reads `content://com.onyx.content.database.ContentProvider/Metadata`. That's NeoReader (`com.onyx.kreader`), exported with no permission, 192 rows. Columns used: `title`, `name`, `nativeAbsolutePath`, `lastAccess`. The newest `lastAccess` is the document currently open.
+- Add while NeoReader is in front pins `PinType.DOCUMENT` (value = file path).
+- Opening uses `ACTION_VIEW` on `file://` + mime, aimed at the NeoReader package, with StrictMode `VmPolicy.LAX` for that one launch. **Not yet confirmed on device.**
+- Recents: NeoReader window events record the document 1.5 s later, with `path`. Last Opened Document and Recent Files open the path directly when they have it.
+- The debug report line `NeoReader last opened: "<title>" (.ext)` checks the lookup. The build 17/18 probes (`openHelpers`, `readers`, `deep`) no longer run, but their code is kept.
 
 ## Next step
-1. Check the build 19 report for `opening by id` → `opened by id`. If it's `open by id didn't show`, look at what the screen showed.
-2. Document pins (step 3, approved in principle; no UI change):
-   - while NeoReader is in front, look up the title in Metadata (`lastAccess` newest) to get `nativeAbsolutePath`;
-   - pin it as a document;
-   - open it with `ACTION_VIEW` on a `content://` or `file://` path aimed at `com.onyx.kreader`. A file URI needs a FileProvider or NeoReader's own handling; test it.
-   - Last Opened Document can use the same lookup.
+- Build 20 report:
+  - Check that `added open document` names the book that's open.
+  - Check that tapping the pin opens the book in NeoReader. Look for the `[launch]` line with `file://`, then a NeoReader foreground.
+  - If the file URI is refused, try a `content://` URI from MediaStore or NeoReader's own intent extras.
+- Possible: Last Opened Document skips the document currently open (like notes already do).
 
 ## Open ideas / backlog
 - Store the note id in pins when pinning, so lookup by title isn't needed.

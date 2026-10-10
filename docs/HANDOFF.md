@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 28)
+# SuperBoox: handoff / status (as of build 29)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -119,7 +119,7 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - Hold taps the tile (`Control.holdTaps`), which shows the menu, and the shade is left open.
 
 ## Next step
-- Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session.
+- Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`).
 
 ## Open ideas / backlog
 - Store the note id in pins when pinning, so lookup by title isn't needed.

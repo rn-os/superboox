@@ -255,7 +255,7 @@ class SettingsActivity : Activity() {
             val p = path.text.toString().trim()
             if (p.isEmpty()) return@dialogWith
             val l = label.text.toString().trim().ifEmpty { BooxNotes.splitPath(p).lastOrNull() ?: p }
-            if (existing == null) prefs.addPin(Pin(PinType.BOOX_NOTE, l, p)) else replacePin(existing.copy(label = l, value = p))
+            if (existing == null) prefs.addPin(Pin(PinType.BOOX_NOTE, l, p)) else replacePin(existing.copy(label = l, value = p, noteId = if (p == existing.value) existing.noteId else ""))
         }
     }
 

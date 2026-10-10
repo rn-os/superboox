@@ -25,12 +25,15 @@ data class Pin(
     val label: String,
     val value: String,
     val id: String = UUID.randomUUID().toString(),
+    /** BOOX_NOTE only: the note's id in the Notes database, saved when pinned ("" if not found yet). */
+    val noteId: String = "",
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id)
         .put("type", type.name)
         .put("label", label)
         .put("value", value)
+        .apply { if (noteId.isNotEmpty()) put("noteId", noteId) }
 
     companion object {
         fun fromJson(o: JSONObject): Pin? {
@@ -40,6 +43,7 @@ data class Pin(
                 label = o.optString("label"),
                 value = o.optString("value"),
                 id = o.optString("id").ifEmpty { UUID.randomUUID().toString() },
+                noteId = o.optString("noteId"),
             )
         }
     }

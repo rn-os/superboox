@@ -53,6 +53,12 @@ object NotesDb {
         return best?.id
     }
 
+    /** The current name of the note with this id, or null if it's gone (deleted, or the database isn't readable). */
+    fun titleForId(context: Context, id: String): String? {
+        val rows = runCatching { query(context) }.getOrNull() ?: return null
+        return rows.firstOrNull { it.id == id && it.status == 0 }?.title
+    }
+
     fun openIntent(context: Context, notesPackage: String, id: String): Intent? {
         val cn = ComponentName(notesPackage, OPEN_BY_ID)
         val info = runCatching { context.packageManager.getActivityInfo(cn, 0) }.getOrNull() ?: return null

@@ -53,7 +53,7 @@ object DexProbe {
             if (SystemClock.uptimeMillis() > deadline) return
             val def = classDefsOff + c * 32
             val name = typeName(u32(d, def))
-            if (prefixes.none { name.startsWith(it) }) continue
+            if (prefixes.none { matchesClass(name, it) }) continue
             val classDataOff = u32(d, def + 24)
             if (classDataOff == 0) continue
             val strings = LinkedHashSet<String>()
@@ -73,6 +73,10 @@ object DexProbe {
             out[name.removePrefix("L").removeSuffix(";").replace('/', '.')] = strings.filter { it.isNotBlank() }
         }
     }
+
+    /** A descriptor prefix ("Lcom/x/Foo"), or "*" followed by a suffix, matching classes in any package. */
+    private fun matchesClass(name: String, pattern: String) =
+        if (pattern.startsWith("*")) name.endsWith(pattern.substring(1)) else name.startsWith(pattern)
 
     private fun safeString(read: (Int) -> String, idx: Int, size: Int): String =
         if (idx in 0 until size) runCatching { read(idx) }.getOrDefault("") else ""
@@ -157,7 +161,7 @@ object DexProbe {
                 if (beanSuffixes.any { name.endsWith(it) } && dataOff != 0) {
                     out += "bean $nice: " + fields(d, dataOff, t).joinToString(", ") { (n, ty, st) -> "${if (st) "static " else ""}$n:${shortType(ty)}" }
                 }
-                if (targetPrefixes.none { name.startsWith(it) } || dataOff == 0) continue
+                if (targetPrefixes.none { matchesClass(name, it) } || dataOff == 0) continue
                 val calls = LinkedHashSet<String>()
                 val reads = LinkedHashSet<String>()
                 for (codeOff in codeOffsets(d, dataOff)) {

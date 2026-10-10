@@ -39,11 +39,85 @@ object NoteIdProbe {
             .onFailure { out += "providers: ${it.javaClass.simpleName} ${it.message}" }
         // dexKeys() (id-like names across the whole Notes app) already did its job in
         // build 14's report; activityStrings() (build 16) is superseded by deep() below.
-        // Build 16 listed the strings; this resolves the fields, calls and bean shapes behind them.
-        runCatching { out += deep(context, notesPackage) }
-            .onFailure { out += "deep scan: ${it.javaClass.simpleName} ${it.message}" }
+        // Build 17 showed OpenNoteByDocIdActivity reads the id through
+        // OpenNoteIntentsKt.noteDocIdFromIntent: look inside that helper.
+        runCatching { out += openHelpers(context, notesPackage) }
+            .onFailure { out += "open helpers: ${it.javaClass.simpleName} ${it.message}" }
+        runCatching { out += readers(context, deadline + 15_000) }
+            .onFailure { out += "readers: ${it.javaClass.simpleName} ${it.message}" }
         return out
     }
+
+    private fun openHelpers(context: Context, notesPackage: String): List<String> {
+        val apk = runCatching { context.packageManager.getApplicationInfo(notesPackage, 0).sourceDir }.getOrNull()
+            ?: return listOf("open helpers: notes apk not found")
+        val classes = listOf("*/OpenNoteIntentsKt;", "*/OpenNoteByDocIdAction;")
+        val out = ArrayList<String>()
+        DexProbe.classStrings(apk, classes, SystemClock.uptimeMillis() + 10_000).forEach { (cls, strings) ->
+            out += "code strings $cls: ${strings.joinToString(" | ") { it.replace("\n", " ").take(80) }}"
+        }
+        DexProbe.deepScan(apk, classes, emptyList(), SystemClock.uptimeMillis() + 10_000)
+            .forEach { out += "deep: ${it.take(1500)}" }
+        if (out.isEmpty()) out += "open helpers: not found"
+        return out
+    }
+
+    /**
+     * Document readers (NeoReader and whatever opens PDF/EPUB): their package,
+     * and what their exported databases look like (table and column names,
+     * row counts; no titles), to find a document's file from its title.
+     */
+    private fun readers(context: Context, deadline: Long): List<String> {
+        val pm = context.packageManager
+        val out = ArrayList<String>()
+        val pkgs = linkedSetOf("com.onyx.kreader", "com.onyx.neoreader")
+        for (mime in listOf("application/pdf", "application/epub+zip")) {
+            val probe = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                .setDataAndType(Uri.parse("content://x/y"), mime)
+            val handlers = runCatching { pm.queryIntentActivities(probe, 0) }.getOrDefault(emptyList())
+            out += "opens $mime: " + handlers.joinToString { "${it.activityInfo.packageName}/${it.activityInfo.name}" }.ifEmpty { "none visible" }
+            handlers.mapTo(pkgs) { it.activityInfo.packageName }
+        }
+        val installed = pkgs.filter { runCatching { pm.getPackageInfo(it, 0) }.isSuccess }
+        out += "reader packages: ${installed.joinToString().ifEmpty { "none" }}"
+        val canceller = Handler(Looper.getMainLooper())
+        for (pkg in installed + BooxNotes.BOOX_HOME_PACKAGE) {
+            val providers = runCatching { pm.getPackageInfo(pkg, PackageManager.GET_PROVIDERS).providers }.getOrNull().orEmpty()
+            val apk = runCatching { pm.getApplicationInfo(pkg, 0).sourceDir }.getOrNull()
+            for (p in providers.filter { it.exported && it.readPermission == null }) {
+                if (pkg != BooxNotes.BOOX_HOME_PACKAGE) out += "provider $pkg: ${p.authority} (${p.name})"
+                // A provider's code names the tables it serves (UriMatcher paths).
+                if (apk != null && SystemClock.uptimeMillis() < deadline) {
+                    val cls = "L" + p.name.replace('.', '/') + ";"
+                    DexProbe.classStrings(apk, listOf(cls), minOf(deadline, SystemClock.uptimeMillis() + 5_000), 40)
+                        .forEach { (_, strings) -> out += "provider strings ${p.name}: ${strings.joinToString(" | ") { it.take(60) }}" }
+                }
+                for (auth in p.authority.split(';')) {
+                    for (table in READER_TABLES) {
+                        if (SystemClock.uptimeMillis() > deadline) return out + "reader queries stopped: time limit"
+                        val uri = Uri.parse("content://$auth/$table")
+                        val cancel = CancellationSignal()
+                        val timeout = Runnable { cancel.cancel() }
+                        canceller.postDelayed(timeout, QUERY_TIMEOUT_MS)
+                        val result = runCatching {
+                            context.contentResolver.query(uri, null, null, null, null, cancel)?.use { c ->
+                                "rows=${c.count} columns=${c.columnNames.take(40).joinToString(",")}"
+                            }
+                        }.getOrNull()
+                        canceller.removeCallbacks(timeout)
+                        if (result != null) out += "query $uri -> $result"
+                    }
+                }
+            }
+        }
+        return out
+    }
+
+    /** Table names BOOX has used for its reading library (DBFlow models). */
+    private val READER_TABLES = listOf(
+        "Metadata", "MetadataModel", "metadata", "Library", "LibraryModel", "Book", "BookModel",
+        "DocumentInfo", "FileModel", "RecentModel", "ReadingProgress", "Thumbnail",
+    )
 
     /**
      * What BOOX's note-opening screens read and call, the values of the

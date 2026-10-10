@@ -77,7 +77,7 @@ class NoteOpener(private val service: AccessibilityService) {
      * @param inNotes BOOX Notes (library or a note) is already on screen, so
      *   there's nothing to launch: the loop navigates from where we are.
      */
-    fun open(notesPackage: String, path: String, inNotes: Boolean) {
+    fun open(notesPackage: String, path: String, inNotes: Boolean, knownId: String? = null) {
         cancel()
         val steps = BooxNotes.splitPath(path)
         if (steps.isEmpty()) return
@@ -87,7 +87,7 @@ class NoteOpener(private val service: AccessibilityService) {
         val token = Any()
         pending = token
         io.execute {
-            val id = NotesDb.findNoteId(service, steps)
+            val id = knownId ?: NotesDb.findNoteId(service, steps)
             handler.post { if (pending === token) start(notesPackage, steps, inNotes, id) }
         }
     }
@@ -336,7 +336,10 @@ class NoteOpener(private val service: AccessibilityService) {
     private fun succeed(j: Job) {
         job = null
         DebugLog.i("note", "opened \"${j.steps.joinToString(" / ")}\"")
-        (service as? QuickAccessService)?.noteOpened(j.steps.last())
+        (service as? QuickAccessService)?.apply {
+            noteOpened(j.steps.last())
+            noteOpenFinished(true)
+        }
     }
 
     private fun fail(j: Job, why: String) {
@@ -347,6 +350,7 @@ class NoteOpener(private val service: AccessibilityService) {
             "gave up on \"${j.steps.getOrNull(j.index)}\" (step ${j.index + 1}/${j.steps.size}): $why. " +
                 if (root == null) "Notes window not found." else "Screen:\n" + DebugReport.describeTree(root),
         )
+        (service as? QuickAccessService)?.noteOpenFinished(false)
         toast("Couldn't open \"${j.steps.last()}\": $why")
     }
 

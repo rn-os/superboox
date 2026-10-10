@@ -40,11 +40,12 @@ object NotesScreen {
 
     fun read(root: AccessibilityNodeInfo): State {
         val screen = Rect().also(root::getBoundsInScreen)
+        // The editor names its title view note_name (seen on firmware 4.3); trust it first.
+        // Its tool column can look like a grid of cards ("Layer", "Margin", … seen in build 17).
+        noteNameView(root)?.let { return State.Editor(it) }
         val list = mainList(root, screen)
         val cards = cards(root, screen)
         if (cards.isNotEmpty()) return State.Library(cards, list)
-        // The editor names its title view note_name (seen on firmware 4.3); use it when present.
-        noteNameView(root)?.let { return State.Editor(it) }
         // No cards: an open note (its tall tool column may scroll, so a list alone
         // doesn't mean library). An empty folder also lands here, and backing out
         // of it is the right move anyway.

@@ -296,7 +296,7 @@ class QuickAccessPanel(
     private fun activate(pin: Pin) {
         DebugLog.i("pin", "${pin.type} \"${pin.label}\" -> ${pin.value}")
         when (pin.type) {
-            PinType.BOOX_NOTE -> service.openBooxNote(pin.value)
+            PinType.BOOX_NOTE -> service.openBooxNote(pin)
             PinType.FOLDER -> {
                 if (!expandedFolders.add(pin.id)) expandedFolders.remove(pin.id)
                 show(Mode.MAIN)

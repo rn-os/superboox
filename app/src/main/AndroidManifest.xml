@@ -7,6 +7,18 @@
              library lives in the BOOX launcher. Needed to find their activities. -->
         <package android:name="com.onyx.android.note" />
         <package android:name="com.onyx" />
+        <!-- Document readers (NeoReader etc.): to find their library databases, and to
+             open a pinned document in the app that handles it. -->
+        <package android:name="com.onyx.kreader" />
+        <package android:name="com.onyx.neoreader" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/pdf" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/epub+zip" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />

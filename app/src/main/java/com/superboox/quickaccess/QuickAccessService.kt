@@ -27,6 +27,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     private lateinit var prefs: Prefs
     private lateinit var wm: WindowManager
     private lateinit var noteOpener: NoteOpener
+    private lateinit var cover: OpeningCover
     private val handler = Handler(Looper.getMainLooper())
 
     private var handleView: EdgeHandleView? = null
@@ -50,9 +51,11 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         prefs = Prefs(this)
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         noteOpener = NoteOpener(this)
+        cover = OpeningCover(this, wm)
         prefs.sp.registerOnSharedPreferenceChangeListener(this)
         attachHandle()
         instance = this
+        NoteIds.capture(this, prefs)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
@@ -90,6 +93,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     override fun onSharedPreferenceChanged(sp: SharedPreferences?, key: String?) {
         if (key == null || key in Prefs.HANDLE_KEYS) attachHandle()
+        if (key == Prefs.K_PINS) NoteIds.capture(this, prefs)
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -107,6 +111,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (instance === this) instance = null
         if (::prefs.isInitialized) prefs.sp.unregisterOnSharedPreferenceChangeListener(this)
         if (::noteOpener.isInitialized) noteOpener.cancel()
+        if (::cover.isInitialized) cover.hide()
         hidePanel()
         detachHandle()
     }
@@ -183,6 +188,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     fun showPanel() {
         if (panel != null) return
+        cover.hide()
         val p = QuickAccessPanel(this, prefs, foregroundPackage)
         val params = overlayParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT, focusable = true)
         runCatching { wm.addView(p.root, params) }
@@ -219,11 +225,26 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         }, if (action == GLOBAL_ACTION_TAKE_SCREENSHOT) 600L else 50L)
     }
 
-    fun openBooxNote(path: String) {
+    fun openBooxNote(path: String) = openBooxNote(path, null)
+
+    /** Opens a pinned note: by its saved id when it has one (following renames), else by name. */
+    fun openBooxNote(pin: Pin) {
+        hidePanel()
+        NoteIds.resolve(this, prefs, pin) { path, id -> handler.post { openBooxNote(path, id) } }
+    }
+
+    private fun openBooxNote(path: String, noteId: String?) {
         hidePanel()
         val inNotes = isNotesInFront
-        DebugLog.i("note", "open \"$path\" (Notes in front: $inNotes, $foregroundPackage/$foregroundActivity)")
-        noteOpener.open(prefs.notesPackage, path, inNotes)
+        DebugLog.i("note", "open \"$path\"${noteId?.let { " (id ${it.take(8)}…)" } ?: ""} (Notes in front: $inNotes, $foregroundPackage/$foregroundActivity)")
+        // Hold the current screen so the BOOX home screen doesn't flash by on the way.
+        cover.show { noteOpener.open(prefs.notesPackage, path, inNotes, noteId) }
+    }
+
+    /** Called by [NoteOpener] when it's done, either way. */
+    fun noteOpenFinished(opened: Boolean) {
+        // On success give the note a moment to draw before revealing it.
+        cover.hide(if (opened) REVEAL_DELAY_MS else 0)
     }
 
     /** What BOOX Notes is showing (open note or library), for pinning from the panel. */
@@ -276,6 +297,8 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     fun screenWidth(): Int = screenSize().first
 
     companion object {
+        private const val REVEAL_DELAY_MS = 400L
+
         @Volatile
         var instance: QuickAccessService? = null
             private set

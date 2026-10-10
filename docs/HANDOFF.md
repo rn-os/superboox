@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 43)
+# SuperBoox: handoff / status (as of build 44)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -182,7 +182,7 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 ## Build 42
 - `setLevels` moves each slider one step short, then taps BOOX's own `#brightness_bright_up/_down` / `#brightness_temp_up/_down`, in case BOOX applies the light only from its buttons (the user saw the light differ at max). Log lines show `BOOX light b/t` from `screen_ctm_*` to compare.
 
-## Build 43 (approved mockup 29, plus gating)
+## Build 43–44 (approved mockup 29, plus gating; 43 failed CI until `android.useAndroidX=true`, 44 is the first good build)
 - **Advanced access** (`AdvancedAccess.kt`): on-device ADB through **Shizuku** (`dev.rikka.shizuku:api`/`provider` 13.1.5, the app's only library; `rikka.shizuku.ShizukuProvider` is in the manifest). Commands run through the private `Shizuku.newProcess`, via reflection.
 - The Settings page `Page.ADVANCED_ACCESS` (Help row) has the status card, three setup steps (Get Shizuku → GitHub releases, Open Shizuku, Connect = `requestPermission`), the **Front light test** (`settings put system screen_ctm_brightness` via Shizuku, 3 s, restore, asks Yes/No → `Prefs.lightTestPassed`), and the **Independent Front Light presets** checkbox (enabled only once the test has passed).
 - **Your presets are gated**: page 2 of the panel's Front Light box shows `advancedPrompt()` unless `AdvancedAccess.independentPresets(prefs)` is true. If access worked during an earlier boot (`K_ADV_BOOT` vs the current boot time) and Shizuku isn't running, it says the tablet restarted. The button opens Settings on that page (`SettingsActivity.EXTRA_PAGE`).

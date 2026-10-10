@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 50)
+# SuperBoox: handoff / status (as of build 51)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -212,7 +212,7 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - The Front Light box opens on the page holding the preset in use (`activeLightPage`): page 1 for BOOX's presets, or the page with your active preset.
 - Rename happens in the panel: a name field with Cancel / Save in place of the Rename/Remove row (`renaming`, `renameField`, `endRename`). Done on the keyboard saves; Back cancels. Focusable panel windows use `SOFT_INPUT_ADJUST_PAN`. The Settings `EXTRA_EDIT_PRESET` path remains but the panel no longer uses it.
 
-## Build 50
+## Build 51 (mockups 31–33 went out with 50)
 - Rename field puts the cursor at the end of the name when it gets focus (it had started at the beginning).
 - Mockups 31–33 (`clipboard.html`): clipboard hub replacing Quick Controls / Last Opened / Quick Access, Recent Files moved to the left of the Quick Access bar, option to cover the apps, held-clip actions, Settings → Clipboard. Awaiting decisions (cover apps or not; which actions).
 

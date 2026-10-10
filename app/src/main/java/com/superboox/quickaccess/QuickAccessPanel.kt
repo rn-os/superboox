@@ -260,7 +260,8 @@ class QuickAccessPanel(
     private fun frontLightMenu(): View = with(ctx) {
         val current = service.frontLightPreset()
         val mine = QuickControls.myPresets(prefs)
-        val active = QuickControls.activeMine(prefs)?.takeIf { current == "Custom" && mine.any { p -> p.id == it } }
+        val direct = AdvancedAccess.independentPresets(prefs)
+        val active = QuickControls.activeMine(prefs)?.takeIf { (direct || current == "Custom") && mine.any { p -> p.id == it } }
         // Page 0: BOOX's four. Then yours, four to a page, ending with + New.
         val extra: List<QuickControls.LightPreset?> = mine + listOf(null)
         val pages = 1 + (extra.size + LIGHT_PER_PAGE - 1) / LIGHT_PER_PAGE
@@ -304,6 +305,9 @@ class QuickAccessPanel(
                     }
                     row.addView(tile, lp(0, WRAP, 1f))
                 }
+            } else if (!direct) {
+                // Your presets need Advanced access; say why it's missing and where to set it up.
+                row.addView(advancedPrompt(), lp(MATCH, WRAP))
             } else {
                 val items = extra.drop((lightPage - 1) * LIGHT_PER_PAGE).take(LIGHT_PER_PAGE)
                 items.forEach { p ->
@@ -342,6 +346,26 @@ class QuickAccessPanel(
                 setPadding(s(6), s(6), s(6), s(8))
                 addView(menu, FrameLayout.LayoutParams(MATCH, WRAP))
             }
+        }
+    }
+
+    /** In place of your presets while Advanced access isn't on (or dropped after a restart). */
+    private fun advancedPrompt(): View = with(ctx) {
+        val restarted = prefs.independentPresets && prefs.lightTestPassed && AdvancedAccess.restartedSinceUse(prefs) && !AdvancedAccess.running()
+        vbox().apply {
+            setPadding(s(10), s(6), s(10), s(8))
+            addView(text(if (restarted) "Start Shizuku again" else "Your own presets need Advanced access", sp(15f), bold = true))
+            addView(text(
+                if (restarted) "The tablet has restarted since your presets were last used, so Advanced access is off until Shizuku is started again."
+                else "Advanced access (on-device ADB, no computer) lets your presets set the light without changing BOOX's Custom. Set it up once in Settings.",
+                sp(13f), color = Ink.MUTED,
+            ).apply { setPadding(0, s(4), 0, s(8)) })
+            addView(inkButton(if (restarted) "Open Advanced access" else "Set up in Settings", sp(14f)) {
+                service.hidePanel()
+                Launcher.start(service, Intent(service, SettingsActivity::class.java)
+                    .putExtra(SettingsActivity.EXTRA_PAGE, "ADVANCED_ACCESS")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+            }, lp(MATCH, WRAP))
         }
     }
 

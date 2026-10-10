@@ -70,6 +70,18 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(K_REMEMBER_PAGES, false)
         set(v) = sp.edit().putBoolean(K_REMEMBER_PAGES, v).apply()
 
+    /** Advanced access: SuperBoox presets set the light directly instead of borrowing Custom. */
+    var independentPresets: Boolean
+        get() = sp.getBoolean(K_ADV_INDEPENDENT, false)
+        set(v) = sp.edit().putBoolean(K_ADV_INDEPENDENT, v).apply()
+
+    /** The Advanced access light test: the user saw the light follow a direct change. */
+    var lightTestPassed: Boolean
+        get() = sp.getString(K_ADV_TEST, null) == "passed"
+        set(v) = sp.edit().putString(K_ADV_TEST, if (v) "passed" else "failed").apply()
+
+    val lightTestRun: Boolean get() = sp.contains(K_ADV_TEST)
+
     /** Pinned apps show the app's own (color) icon instead of the uniform black app glyph. */
     var appOwnIcons: Boolean
         get() = sp.getBoolean(K_APP_OWN_ICONS, false)
@@ -194,6 +206,10 @@ class Prefs(context: Context) {
         const val K_FL_MINE = "front_light_mine"
         const val K_FL_MINE_ACTIVE = "front_light_mine_active"
         const val K_LAST_BACKUP = "last_backup"
+        const val K_ADV_INDEPENDENT = "adv_independent_presets"
+        const val K_ADV_TEST = "adv_light_test"
+        const val K_ADV_BOOT = "adv_boot"
+        const val K_FL_DIRECT_BEFORE = "front_light_direct_before"
         const val K_FL_LAST_ON = "front_light_last_on"
 
         /** Keys whose change requires the edge handle window to be rebuilt. */

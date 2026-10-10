@@ -344,6 +344,18 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
      * borrowing it, your own levels are put back.
      */
     fun frontLight(preset: String) {
+        // A SuperBoox preset set the light directly: if BOOX already shows [preset], tapping it
+        // would do nothing, so put back the light it had.
+        val directBefore = prefs.sp.getString(Prefs.K_FL_DIRECT_BEFORE, null)
+        if (QuickControls.activeMine(prefs) != null && directBefore != null && preset == QuickControls.savedPreset(prefs) && AdvancedAccess.allowed()) {
+            val (b, w) = directBefore.split(",").map { it.toInt() }
+            QuickControls.setActiveMine(prefs, null)
+            prefs.sp.edit().remove(Prefs.K_FL_DIRECT_BEFORE).apply()
+            AdvancedAccess.setLight(QuickControls.Levels(b, w)) { panel?.refresh() }
+            DebugLog.i("controls", "front light: back to BOOX's $preset ($b/$w)")
+            return
+        }
+        prefs.sp.edit().remove(Prefs.K_FL_DIRECT_BEFORE).apply()
         val restore = if (preset == "Custom" && QuickControls.activeMine(prefs) != null) QuickControls.booxCustom(prefs) else null
         queuePreset(preset, levels = restore, read = preset == "Custom", mine = null)
     }
@@ -353,6 +365,21 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
      * presets ([mine]), which BOOX only knows as Custom.
      */
     fun frontLightLevels(levels: QuickControls.Levels, mine: String? = null) {
+        // Advanced access: SuperBoox presets set the light directly and leave BOOX's presets alone.
+        if (mine != null && AdvancedAccess.independentPresets(prefs)) {
+            if (QuickControls.activeMine(prefs) == null) {
+                AdvancedAccess.currentLight(this)?.let { prefs.sp.edit().putString(Prefs.K_FL_DIRECT_BEFORE, "${it.brightness},${it.warmth}").apply() }
+            }
+            QuickControls.setActiveMine(prefs, mine)
+            QuickControls.byId(QuickControls.FRONT_LIGHT)?.let { optimistic[it.id] = true to SystemClock.uptimeMillis() + OPTIMISTIC_MS }
+            AdvancedAccess.markUsed(prefs)
+            AdvancedAccess.setLight(levels) { ok ->
+                if (!ok) Toast.makeText(this, "Couldn't set the front light (Advanced access)", Toast.LENGTH_SHORT).show()
+                panel?.refresh()
+            }
+            panel?.refresh()
+            return
+        }
         // Before a SuperBoox preset first borrows Custom, read your BOOX Custom so it can be put back.
         if (mine != null && QuickControls.booxCustom(prefs) == null && QuickControls.activeMine(prefs) == null) {
             queuePreset("Custom", levels = null, read = true, mine = null)

@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 42)
+# SuperBoox: handoff / status (as of build 43)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -182,10 +182,17 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 ## Build 42
 - `setLevels` moves each slider one step short, then taps BOOX's own `#brightness_bright_up/_down` / `#brightness_temp_up/_down`, in case BOOX applies the light only from its buttons (the user saw the light differ at max). Log lines show `BOOX light b/t` from `screen_ctm_*` to compare.
 
+## Build 43 (approved mockup 29, plus gating)
+- **Advanced access** (`AdvancedAccess.kt`): on-device ADB through **Shizuku** (`dev.rikka.shizuku:api`/`provider` 13.1.5, the app's only library; `rikka.shizuku.ShizukuProvider` is in the manifest). Commands run through the private `Shizuku.newProcess`, via reflection.
+- The Settings page `Page.ADVANCED_ACCESS` (Help row) has the status card, three setup steps (Get Shizuku → GitHub releases, Open Shizuku, Connect = `requestPermission`), the **Front light test** (`settings put system screen_ctm_brightness` via Shizuku, 3 s, restore, asks Yes/No → `Prefs.lightTestPassed`), and the **Independent Front Light presets** checkbox (enabled only once the test has passed).
+- **Your presets are gated**: page 2 of the panel's Front Light box shows `advancedPrompt()` unless `AdvancedAccess.independentPresets(prefs)` is true. If access worked during an earlier boot (`K_ADV_BOOT` vs the current boot time) and Shizuku isn't running, it says the tablet restarted. The button opens Settings on that page (`SettingsActivity.EXTRA_PAGE`).
+- When on, `service.frontLightLevels(levels, mine)` writes `screen_ctm_*` directly, keeps the light it replaced (`K_FL_DIRECT_BEFORE`), and puts that back if the user picks the BOOX preset already showing.
+- **Unknown until tested on device**: whether BOOX's light follows `screen_ctm_brightness`.
+
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.
 
 ## Open ideas / backlog
 - Store the note id in pins when pinning, so lookup by title isn't needed.
 - Last Opened Document only returns to the last reading app; titles depend on that app.
-- Mockups `docs/mockups/10–14` show the approved Supernote design, `15–16` the approved bordered Settings (`settings-borders.html`), `17` the approved icons (`panel-icons.html`), `18/20/21` Quick Controls (`quick-controls.html`), `22` Previous app (`previous-app.html`), `23` proposed Settings menus (`settings-menus.html`, approved, built in 36), `24` Front Light (`front-light.html`, built in 36), `25` tap modes (built in 37), `26–28` proposed Custom sliders, own presets, backup & restore, drag to reorder (`front-light-more.html`, approved, built in 38), `29` proposed Advanced access via Shizuku (`advanced-access.html`, awaiting approval); `01–09` show the older design.
+- Mockups `docs/mockups/10–14` show the approved Supernote design, `15–16` the approved bordered Settings (`settings-borders.html`), `17` the approved icons (`panel-icons.html`), `18/20/21` Quick Controls (`quick-controls.html`), `22` Previous app (`previous-app.html`), `23` proposed Settings menus (`settings-menus.html`, approved, built in 36), `24` Front Light (`front-light.html`, built in 36), `25` tap modes (built in 37), `26–28` proposed Custom sliders, own presets, backup & restore, drag to reorder (`front-light-more.html`, approved, built in 38), `29` proposed Advanced access via Shizuku (`advanced-access.html`, approved, built in 43); `01–09` show the older design.

@@ -15,6 +15,8 @@
              open a pinned document in the app that handles it. -->
         <package android:name="com.onyx.kreader" />
         <package android:name="com.onyx.neoreader" />
+        <!-- Shizuku: optional on-device ADB for Advanced access. -->
+        <package android:name="moe.shizuku.privileged.api" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="application/pdf" />
@@ -80,6 +82,15 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
+
+        <!-- Receives Shizuku's binder (Advanced access). -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
         <service
             android:name=".PanelTileService"

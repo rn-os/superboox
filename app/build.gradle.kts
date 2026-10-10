@@ -45,3 +45,10 @@ android {
         jvmTarget = "17"
     }
 }
+
+dependencies {
+    // Shizuku: optional on-device ADB (Settings → Advanced access). The app's only library.
+    val shizuku = "13.1.5"
+    implementation("dev.rikka.shizuku:api:$shizuku")
+    implementation("dev.rikka.shizuku:provider:$shizuku")
+}

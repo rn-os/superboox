@@ -41,6 +41,31 @@ class SettingsActivity : Activity() {
             addView(list)
         }
         setContentView(scroll)
+        openRequestedPage(intent)
+        runCatching { rikka.shizuku.Shizuku.addRequestPermissionResultListener(shizukuResult) }
+    }
+
+    override fun onDestroy() {
+        runCatching { rikka.shizuku.Shizuku.removeRequestPermissionResultListener(shizukuResult) }
+        super.onDestroy()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        openRequestedPage(intent)
+    }
+
+    /** The panel can send the user straight to a page (Advanced access). */
+    private fun openRequestedPage(intent: Intent?) {
+        intent?.getStringExtra(EXTRA_PAGE)?.let { name -> runCatching { Page.valueOf(name) }.getOrNull() }?.let { page = it }
+    }
+
+    private val shizukuResult = rikka.shizuku.Shizuku.OnRequestPermissionResultListener { code, result ->
+        if (code != AdvancedAccess.REQUEST_CODE) return@OnRequestPermissionResultListener
+        val ok = result == android.content.pm.PackageManager.PERMISSION_GRANTED
+        DebugLog.i("adb", "Shizuku permission ${if (ok) "granted" else "denied"}")
+        if (ok) AdvancedAccess.markUsed(prefs)
+        runOnUiThread { render() }
     }
 
     override fun onResume() {
@@ -52,7 +77,7 @@ class SettingsActivity : Activity() {
     private enum class Page(val title: String) {
         HOME("SuperBoox"), GESTURE("Gesture"), LOOK("Look & size"), ITEMS("Quick Access items"),
         CONTROLS("Quick Controls"), APPS("Apps at the bottom"), RECENT("Recent files"),
-        TROUBLESHOOTING("Troubleshooting"), BACKUP("Backup & restore"), ADVANCED("Advanced"),
+        TROUBLESHOOTING("Troubleshooting"), BACKUP("Backup & restore"), ADVANCED_ACCESS("Advanced access"), ADVANCED("Advanced"),
     }
 
     private var page = Page.HOME
@@ -75,6 +100,7 @@ class SettingsActivity : Activity() {
                 Page.RECENT -> recentSection()
                 Page.TROUBLESHOOTING -> troubleshootingSection()
                 Page.BACKUP -> backupSection()
+                Page.ADVANCED_ACCESS -> advancedAccessSection()
                 Page.ADVANCED -> advancedSection()
                 Page.HOME -> Unit
             }
@@ -139,6 +165,11 @@ class SettingsActivity : Activity() {
         list.addView(heading("Help"))
         list.addView(card(listOf(
             menuRow(R.drawable.ic_bug, Page.TROUBLESHOOTING, "Copy or share a debug report"),
+            menuRow(R.drawable.ic_shield, Page.ADVANCED_ACCESS, when {
+                AdvancedAccess.allowed() -> "Connected" + if (AdvancedAccess.independentPresets(prefs)) " · independent Front Light presets on" else ""
+                AdvancedAccess.restartedSinceUse(prefs) -> "Off since the restart · start Shizuku again"
+                else -> "Off · unlocks independent Front Light presets"
+            }),
             menuRow(R.drawable.ic_save, Page.BACKUP, lastBackup()?.let { "Last backup: $it" } ?: "Save your settings to a file"),
             menuRow(R.drawable.ic_settings, Page.ADVANCED, "BOOX Notes package"),
         )))
@@ -184,6 +215,14 @@ class SettingsActivity : Activity() {
 
     private fun myLightPresets() {
         list.addView(heading("Front Light · your presets"))
+        if (!AdvancedAccess.independentPresets(prefs)) {
+            list.addView(card(listOf(
+                cardText(if (AdvancedAccess.restartedSinceUse(prefs) && prefs.independentPresets) "Advanced access is off since the tablet restarted: start Shizuku again to use these."
+                    else "Your presets need Advanced access (on-device ADB, no computer), so they can set the light without changing BOOX's Custom."),
+                buttonRow("Advanced access" to { open(Page.ADVANCED_ACCESS) }),
+            )))
+            list.addView(View(this), lp(MATCH, dp(10)))
+        }
         val mine = QuickControls.myPresets(prefs)
         val rows = mutableListOf<View>()
         if (mine.isEmpty()) rows += cardText("None yet. Add one here, or with + New on page 2 of the Front Light presets in the panel.")
@@ -222,7 +261,8 @@ class SettingsActivity : Activity() {
         var levels = existing?.levels ?: service?.customLevels() ?: QuickControls.Levels(16, 8)
         var previewed = false
         val name = field("Name", existing?.name ?: "Preset ${QuickControls.myPresets(prefs).size + 1}")
-        val preview = Runnable { previewed = true; service?.frontLightLevels(levels, id) }
+        // Only with Advanced access: without it, presets can't change the light.
+        val preview = Runnable { if (AdvancedAccess.independentPresets(prefs)) { previewed = true; service?.frontLightLevels(levels, id) } }
         fun bar(label: String, value: Int, onChange: (Int) -> Unit): View = vbox().apply {
             val title = text("$label: $value", 15f, bold = true).apply { setPadding(dp(4), dp(12), 0, 0) }
             addView(title)
@@ -262,7 +302,7 @@ class SettingsActivity : Activity() {
             addView(name)
             addView(bar("Brightness", levels.brightness) { levels = levels.copy(brightness = it) })
             addView(bar("Warmth", levels.warmth) { levels = levels.copy(warmth = it) })
-            addView(text(if (service != null) "Try it: the light changes as you slide." else "Turn the service on to try it out.", 13f, color = Ink.MUTED)
+            addView(text(if (service != null && AdvancedAccess.independentPresets(prefs)) "Try it: the light changes as you slide." else "Turn on Advanced access to try it out as you slide.", 13f, color = Ink.MUTED)
                 .apply { setPadding(dp(4), dp(8), 0, 0) })
         }
         AlertDialog.Builder(this)
@@ -284,6 +324,125 @@ class SettingsActivity : Activity() {
                     if (existing == null) mine + QuickControls.LightPreset(id, label, levels)
                     else mine.map { if (it.id == existing.id) it.copy(name = label, levels = levels) else it })
                 render()
+            }
+            .show()
+    }
+
+    // ---- Advanced access (on-device ADB through Shizuku) -----------------------------------
+
+    private fun advancedAccessSection() {
+        val installed = AdvancedAccess.installed(this)
+        val running = AdvancedAccess.running()
+        val allowed = AdvancedAccess.allowed()
+        val restarted = !running && AdvancedAccess.restartedSinceUse(prefs)
+        list.addView(View(this), lp(MATCH, dp(12)))
+        list.addView(hbox().apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            background = if (allowed) android.graphics.drawable.GradientDrawable().apply { setColor(Ink.INK); cornerRadius = dp(8).toFloat() } else outline(2, 8)
+            val fg = if (allowed) Ink.PAPER else Ink.INK
+            addView(icon(getDrawable(R.drawable.ic_shield), 30).apply { imageTintList = android.content.res.ColorStateList.valueOf(fg) })
+            addView(vbox().apply {
+                setPadding(dp(12), 0, 0, 0)
+                addView(text(when {
+                    allowed -> "Connected through Shizuku"
+                    restarted -> "Off since the tablet restarted"
+                    else -> "Not connected"
+                }, 17f, bold = true, color = fg))
+                addView(text(when {
+                    allowed -> "ADB-level options below are available."
+                    restarted -> "Start Shizuku again (step 2) to turn it back on."
+                    else -> "Optional. Unlocks features Android only allows over ADB. No computer needed."
+                }, 13f, color = if (allowed) Ink.PAPER else Ink.MUTED))
+            }, lp(0, WRAP, 1f))
+            layoutParams = lp(MATCH, WRAP).apply { marginStart = dp(12); marginEnd = dp(12) }
+        })
+        if (!allowed) {
+            list.addView(heading("Set up once · on this tablet"))
+            list.addView(card(listOf(
+                stepRow(1, installed, "Install Shizuku", "Free and open source. It runs ADB commands for apps you allow, right on the tablet.",
+                    if (installed) null else "Get Shizuku" to {
+                        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(AdvancedAccess.SHIZUKU_RELEASES))) }
+                            .onFailure { toast("Open ${AdvancedAccess.SHIZUKU_RELEASES} in a browser") }
+                    }),
+                stepRow(2, running, "Start Shizuku with Wireless debugging",
+                    "Turn on Developer options and Wireless debugging. In Shizuku, tap Pair and enter the code Wireless debugging shows, then Start. Needs Wi‑Fi, not a computer. Again after every restart.",
+                    if (!installed || running) null else "Open Shizuku" to {
+                        packageManager.getLaunchIntentForPackage(AdvancedAccess.SHIZUKU_PACKAGE)?.let { startActivity(it) } ?: toast("Shizuku isn't installed")
+                    }),
+                stepRow(3, allowed, "Allow SuperBoox", "Shizuku asks once.",
+                    if (!running) null else "Connect" to { AdvancedAccess.requestPermission() }),
+            )))
+        }
+        list.addView(heading(if (allowed) "Front light" else "Unlocks"))
+        val testText = when {
+            !prefs.lightTestRun -> "Checks that BOOX follows the light when it's set directly. Runs first."
+            prefs.lightTestPassed -> "Passed: BOOX followed the light set directly."
+            else -> "Didn't pass: BOOX didn't follow the light set directly, so presets keep borrowing Custom."
+        }
+        list.addView(card(listOf(
+            hbox().apply {
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(16), dp(10), dp(12), dp(10))
+                addView(vbox().apply {
+                    addView(text("Front light test", 17f, medium = true, color = if (allowed) Ink.INK else Ink.DISABLED))
+                    addView(text(testText, 13f, color = if (allowed) Ink.MUTED else Ink.DISABLED))
+                }, lp(0, WRAP, 1f))
+                if (allowed) addView(inkButton(if (prefs.lightTestRun) "Run again" else "Run test", 14f) { lightTest() }.apply { setPadding(dp(14), 0, dp(14), 0) })
+            },
+            CheckBox(this).apply {
+                buttonTintList = android.content.res.ColorStateList.valueOf(Ink.INK)
+                text = "Independent Front Light presets\nYour presets set the light directly. BOOX's Bright, Soft, Custom and Off stay as you set them."
+                textSize = 16f
+                setPadding(dp(8), dp(10), dp(12), dp(10))
+                isEnabled = allowed && prefs.lightTestPassed
+                isChecked = prefs.independentPresets && prefs.lightTestPassed
+                setOnCheckedChangeListener { _, on -> prefs.independentPresets = on; if (on) AdvancedAccess.markUsed(prefs); render() }
+            },
+        )))
+        list.addView(note(if (allowed) "To remove access, revoke SuperBoox in Shizuku. More options that need ADB will appear here as they're added."
+            else "Without it, SuperBoox works as before; your own Front Light presets stay unavailable."))
+    }
+
+    private fun stepRow(n: Int, done: Boolean, title: String, detail: String, action: Pair<String, () -> Unit>?): View = hbox().apply {
+        setPadding(dp(14), dp(12), dp(14), dp(12))
+        addView(text(if (done) "✓" else "$n", 15f, bold = true, color = if (done) Ink.PAPER else Ink.INK).apply {
+            gravity = Gravity.CENTER
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(if (done) Ink.INK else Ink.PAPER)
+                setStroke(dp(2), Ink.INK)
+            }
+        }, lp(dp(30), dp(30)))
+        addView(vbox().apply {
+            setPadding(dp(12), 0, 0, 0)
+            addView(text(title, 17f, medium = true))
+            addView(text(detail, 13f, color = Ink.MUTED))
+            if (action != null) addView(inkButton(action.first, 14f) { action.second() }, lp(WRAP, WRAP).apply { topMargin = dp(8) })
+        }, lp(0, WRAP, 1f))
+    }
+
+    /** Dims the light directly (through Shizuku) for 3 s, puts it back, and asks whether it changed. */
+    private fun lightTest() {
+        val before = AdvancedAccess.currentLight(this)
+        val dim = QuickControls.Levels(if ((before?.brightness ?: 32) > 10) 4 else 24, before?.warmth ?: 0)
+        AlertDialog.Builder(this)
+            .setTitle("Front light test")
+            .setMessage("SuperBoox will set the light to ${dim.brightness} for 3 seconds, then put it back. Watch the screen.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Start") { _, _ ->
+                AdvancedAccess.setLight(dim) { wrote ->
+                    list.postDelayed({
+                        val after = AdvancedAccess.currentLight(this)
+                        before?.let { AdvancedAccess.setLight(it) }
+                        DebugLog.i("light-test", "direct write ${if (wrote) "ok" else "failed"}; BOOX records $after (was $before)")
+                        AlertDialog.Builder(this)
+                            .setTitle("Did the light change?")
+                            .setNegativeButton("No") { _, _ -> prefs.lightTestPassed = false; prefs.independentPresets = false; DebugLog.i("light-test", "user: did NOT change"); render() }
+                            .setPositiveButton("Yes, it dimmed") { _, _ -> prefs.lightTestPassed = true; AdvancedAccess.markUsed(prefs); DebugLog.i("light-test", "user: DID change"); render() }
+                            .show()
+                    }, 3_000)
+                }
             }
             .show()
     }
@@ -980,8 +1139,9 @@ class SettingsActivity : Activity() {
         return toMutableList().apply { add(to, removeAt(from)) }
     }
 
-    private companion object {
+    companion object {
         const val K_PAGE = "page"
+        const val EXTRA_PAGE = "page"
         const val REQ_FILE = 1
         const val REQ_FOLDER = 2
         const val REQ_RECENT = 3

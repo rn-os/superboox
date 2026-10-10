@@ -17,7 +17,7 @@ It's black on white with no animations, so it draws cleanly on e-ink.
 2. Sideload it: `adb install app/build/outputs/apk/debug/app-debug.apk`, or copy the APK to the device and open it.
 3. Open **SuperBoox** and tap **Accessibility settings**, then turn on **SuperBoox Quick Access**.
 4. **BOOX only:** go to *Settings → Apps → App Management → SuperBoox* and allow it to run in the background (turn off freezing). Otherwise BOOX may stop the service after the device sleeps.
-5. Swipe left from the right edge of the screen. By default the touch strip covers the middle third of the right edge, and a small black marker shows where it is.
+5. Swipe up or down along the right edge of the screen, like the Supernote side bar. The touch strip covers the middle third of the right edge, and a small black marker shows where it is. You can switch to swiping inward or double-tapping in Settings.
 
 ## Ways to open the panel
 
@@ -28,12 +28,20 @@ It's black on white with no animations, so it draws cleanly on e-ink.
 | Quick Settings tile | Add **Quick Access** to the notification shade. |
 | adb / automation | `adb shell am start -a com.superboox.quickaccess.OPEN_PANEL` |
 
+## Using the panel
+
+- **Pin the note you're writing in:** open the panel inside a note and tap **Pin this note**.
+- **Pin from the library:** open the panel on the BOOX Notes library and tap **Pin a note from this screen**. Only note and folder cards are listed.
+- **Rearrange or remove pins:** long-press any item to enter edit mode. Use ↑ ↓ to move items and the trash can to remove them, then tap **Done**.
+- **Apps** at the bottom show 8 per page (4 × 2), like Supernote. With more than 8, use ‹ › to page through them.
+- **Menu size** (Settings → Gesture) scales the panel's text, icons and touch targets: Small, Standard, Large or Extra large.
+
 ## BOOX Notes integration
 
 BOOX Notes keeps its notes in a private database and has no documented "open note X" intent. SuperBoox uses three approaches instead:
 
 1. **Notes in the dock.** The BOOX Notes app (`com.onyx.android.note`) is placed in the dock by default.
-2. **Pinned notes, opened by name.** Tapping a pinned note restarts BOOX Notes at its library. The accessibility service then finds the item with that name and taps it, scrolling the list if it has to. Notes inside folders are written as a path: `Work / Meetings / Standup`.
+2. **Pinned notes, opened by name.** Tapping a pinned note brings BOOX Notes to the front. If a different note is open, SuperBoox presses Back until it reaches the library. It then scrolls the library to the top and taps the note, paging down if it has to. If the note isn't in the current folder, it goes up a level and looks again. Notes inside folders are written as a path: `Work / Meetings / Standup`.
    - The easiest way to pin a note: open BOOX Notes, open the panel, tap **Pin a note from this screen** and choose the note from what's shown.
    - This depends on the note names being on screen in the Notes library. If a firmware update changes that screen, it may need adjusting.
 3. **Files and custom intents.**

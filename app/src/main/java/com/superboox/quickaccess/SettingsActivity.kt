@@ -16,7 +16,6 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
-import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -65,7 +64,10 @@ class SettingsActivity : Activity() {
     // ---- Sections -------------------------------------------------------------------------
 
     private fun statusSection() {
-        list.addView(text("SuperBoox", 28f, bold = true).apply { setPadding(dp(16), dp(20), dp(16), dp(4)) })
+        // White title bar with a heavy rule instead of a black action bar (e-ink).
+        list.addView(text("SuperBoox", 28f, bold = true).apply { setPadding(dp(16), dp(20), dp(16), dp(10)) })
+        list.addView(divider(3))
+        list.addView(View(this), lp(MATCH, dp(8)))
         list.addView(paragraph("A Supernote-style Quick Access panel for BOOX. Swipe from the screen edge on any page to open it."))
 
         val on = isServiceEnabled()
@@ -107,6 +109,9 @@ class SettingsActivity : Activity() {
         list.addView(slider("Touch strip position from top", prefs.handleTopPct, 0, 90, "%") { prefs.handleTopPct = it })
         list.addView(slider("Panel width", prefs.panelWidthPct, 25, 100, "% of screen") { prefs.panelWidthPct = it })
         list.addView(check("Show Back / Home / Recents / Capture row", prefs.showSystemActions) { prefs.showSystemActions = it })
+        list.addView(choiceRow("Menu size", prefs.menuSize.title) {
+            pick("Menu size", MenuSize.entries.map { it.title }, prefs.menuSize.ordinal) { prefs.menuSize = MenuSize.entries[it] }
+        })
         list.addView(
             paragraph(
                 "Tip: the \"Quick Access\" app icon opens the panel too. Assign it to a BOOX gesture or the Navigation Ball " +
@@ -344,25 +349,22 @@ class SettingsActivity : Activity() {
         onEdit: (() -> Unit)?,
         onRemove: () -> Unit,
     ): View = hbox().apply {
-        setPadding(dp(16), dp(6), dp(8), dp(6))
+        setPadding(dp(16), dp(8), dp(12), dp(8))
         val texts = vbox().apply {
-            addView(text(pin.label, 17f))
-            addView(text(describe(pin), 12f, color = Ink.MUTED).apply { maxLines = 1 })
+            addView(text(pin.label, 17f, medium = true))
+            addView(text(describe(pin), 13f, color = Ink.MUTED).apply {
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            })
         }
         addView(texts, lp(0, WRAP, 1f))
-        fun small(label: String, enabled: Boolean = true, action: () -> Unit) {
-            addView(Button(context).apply {
-                text = label
-                isEnabled = enabled
-                minWidth = 0
-                minimumWidth = dp(44)
-                setOnClickListener { action(); render() }
-            }, lp(WRAP, WRAP))
+        fun small(iconRes: Int, label: String, enabled: Boolean = true, action: () -> Unit) {
+            addView(inkIconButton(iconRes, label, 44, enabled) { action(); render() })
         }
-        small("↑", index > 0) { onMove(index, index - 1) }
-        small("↓", index < count - 1) { onMove(index, index + 1) }
-        if (onEdit != null) small("Edit") { onEdit() }
-        small("✕") { onRemove() }
+        small(R.drawable.ic_arrow_up, "Move up", index > 0) { onMove(index, index - 1) }
+        small(R.drawable.ic_arrow_down, "Move down", index < count - 1) { onMove(index, index + 1) }
+        if (onEdit != null) small(R.drawable.ic_edit, "Edit") { onEdit() }
+        small(R.drawable.ic_delete, "Remove") { onRemove() }
     }
 
     private fun describe(pin: Pin): String = when (pin.type) {
@@ -377,25 +379,25 @@ class SettingsActivity : Activity() {
         text(s, 14f, color = Ink.MUTED).apply { setPadding(dp(16), dp(4), dp(16), dp(8)) }
 
     private fun buttonRow(vararg buttons: Pair<String, () -> Unit>): View = hbox().apply {
-        setPadding(dp(12), dp(4), dp(12), dp(4))
+        setPadding(dp(12), dp(6), dp(12), dp(6))
         buttons.forEach { (label, action) ->
-            addView(Button(context).apply {
-                text = label
-                isAllCaps = false
-                setOnClickListener { action() }
-            }, lp(0, WRAP, 1f))
+            addView(inkButton(label) { action() }, lp(0, WRAP, 1f).apply {
+                marginStart = dp(4)
+                marginEnd = dp(4)
+            })
         }
     }
 
     private fun choiceRow(title: String, value: String, onClick: () -> Unit): View = hbox().apply {
         setPadding(dp(16), dp(12), dp(16), dp(12))
-        addView(text(title, 17f), lp(0, WRAP, 1f))
-        addView(text(value, 15f, color = Ink.MUTED).apply { gravity = Gravity.END })
+        addView(text(title, 17f, medium = true), lp(0, WRAP, 1f))
+        addView(text("$value  ›", 15f, bold = true).apply { gravity = Gravity.END })
         pressable()
         setOnClickListener { onClick() }
     }
 
     private fun check(title: String, value: Boolean, onChange: (Boolean) -> Unit): View = CheckBox(this).apply {
+        buttonTintList = android.content.res.ColorStateList.valueOf(Ink.INK)
         text = title
         textSize = 17f
         isChecked = value
@@ -409,6 +411,9 @@ class SettingsActivity : Activity() {
         val label = text("$title: $value $unit".trim(), 15f)
         addView(label)
         addView(SeekBar(context).apply {
+            progressTintList = android.content.res.ColorStateList.valueOf(Ink.INK)
+            thumbTintList = android.content.res.ColorStateList.valueOf(Ink.INK)
+            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(Ink.DISABLED)
             this.max = max - min
             progress = value - min
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {

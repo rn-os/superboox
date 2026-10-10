@@ -1,11 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Plain black-on-white Material theme; no animations, e-ink friendly. -->
-    <style name="Theme.SuperBoox" parent="@android:style/Theme.DeviceDefault.Light">
-        <item name="android:colorPrimary">#000000</item>
-        <item name="android:colorPrimaryDark">#000000</item>
+    <!-- E-ink: white bars (no black action/status bar), black accents, no animations. -->
+    <style name="Theme.SuperBoox" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:colorPrimary">#FFFFFF</item>
+        <item name="android:colorPrimaryDark">#FFFFFF</item>
         <item name="android:colorAccent">#000000</item>
+        <item name="android:colorControlNormal">#000000</item>
+        <item name="android:colorControlActivated">#000000</item>
+        <item name="android:textColorPrimary">#000000</item>
+        <item name="android:textColorSecondary">#333333</item>
+        <item name="android:statusBarColor">#FFFFFF</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
         <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:alertDialogTheme">@style/Theme.SuperBoox.Dialog</item>
+    </style>
+
+    <style name="Theme.SuperBoox.Dialog" parent="@android:style/Theme.DeviceDefault.Light.Dialog.Alert">
+        <item name="android:colorAccent">#000000</item>
+        <item name="android:colorControlNormal">#000000</item>
+        <item name="android:colorControlActivated">#000000</item>
+        <item name="android:textColorPrimary">#000000</item>
         <item name="android:windowAnimationStyle">@null</item>
     </style>
 

@@ -18,33 +18,53 @@ import android.widget.TextView
 import kotlin.math.roundToInt
 
 /**
- * Tiny view-building helpers. The UI is built in code: it lives in an overlay
- * window owned by a service, and plain black-on-white views with no
+ * Tiny view-building helpers. The UI is built in code: the panel lives in an
+ * overlay window owned by a service, and plain black-on-white views with no
  * animation are what render best on e-ink.
+ *
+ * E-ink rules followed here: pure black and white, no light grays (they turn
+ * into mush at 16 gray levels), heavy weights, thick rules, outlined buttons,
+ * no shadows or ripples.
  */
 object Ink {
     const val INK = Color.BLACK
     const val PAPER = Color.WHITE
-    const val MUTED = 0xFF555555.toInt()
-    const val PRESSED = 0xFFCCCCCC.toInt()
+    /** Secondary text. Kept dark: lighter grays wash out on e-ink. */
+    const val MUTED = 0xFF333333.toInt()
+    const val PRESSED = 0xFFBBBBBB.toInt()
+    const val DISABLED = 0xFF888888.toInt()
+
+    val MEDIUM: Typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
 }
 
 fun Context.dp(v: Int): Int = (v * resources.displayMetrics.density).roundToInt()
+fun Context.dp(v: Float): Int = (v * resources.displayMetrics.density).roundToInt()
 fun View.dp(v: Int): Int = context.dp(v)
 
-fun Context.text(value: CharSequence, sizeSp: Float = 16f, bold: Boolean = false, color: Int = Ink.INK): TextView =
+fun Context.text(
+    value: CharSequence,
+    sizeSp: Float = 16f,
+    bold: Boolean = false,
+    color: Int = Ink.INK,
+    medium: Boolean = false,
+): TextView =
     TextView(this).apply {
         text = value
         setTextColor(color)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
-        if (bold) typeface = Typeface.DEFAULT_BOLD
+        typeface = when {
+            bold -> Typeface.DEFAULT_BOLD
+            medium -> Ink.MEDIUM
+            else -> Typeface.DEFAULT
+        }
     }
 
-fun Context.sectionTitle(value: String): TextView =
-    text(value.uppercase(), 13f, bold = true, color = Ink.MUTED).apply {
-        letterSpacing = 0.08f
-        setPadding(dp(16), dp(16), dp(16), dp(6))
-    }
+/** Bold black section label with a heavy rule underneath. */
+fun Context.sectionTitle(value: String, scale: Float = 1f): View = vbox().apply {
+    setPadding(dp(16 * scale), dp(18 * scale), dp(16 * scale), dp(6 * scale))
+    addView(text(value.uppercase(), 14f * scale, bold = true).apply { letterSpacing = 0.06f })
+    addView(View(context).apply { setBackgroundColor(Ink.INK) }, lp(MATCH, dp(2)).apply { topMargin = dp(4 * scale) })
+}
 
 fun Context.vbox(): LinearLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
@@ -81,6 +101,42 @@ fun View.pressable(normal: Drawable = ColorDrawable(Color.TRANSPARENT)) {
     isClickable = true
     isFocusable = true
 }
+
+/** Same, for outlined shapes: keeps the black border while pressed. */
+private fun Context.outlinedStates(radiusDp: Int): StateListDrawable = StateListDrawable().apply {
+    addState(intArrayOf(android.R.attr.state_pressed), outline(2, radiusDp, Ink.PRESSED))
+    addState(intArrayOf(-android.R.attr.state_enabled), outline(2, radiusDp, Ink.PAPER).apply { setStroke(dp(2), Ink.DISABLED) })
+    addState(intArrayOf(), outline(2, radiusDp, Ink.PAPER))
+}
+
+/** Outlined black-on-white text button (replaces the gray Material button). */
+fun Context.inkButton(label: String, sizeSp: Float = 15f, onClick: () -> Unit): TextView =
+    text(label, sizeSp, bold = true).apply {
+        gravity = Gravity.CENTER
+        minHeight = dp(44)
+        setPadding(dp(12), dp(8), dp(12), dp(8))
+        background = outlinedStates(6)
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { onClick() }
+    }
+
+/** Square outlined icon button, e.g. the ↑ ↓ 🗑 controls in edit mode. */
+fun Context.inkIconButton(iconRes: Int, label: String, sizeDp: Int = 44, enabled: Boolean = true, onClick: () -> Unit): View =
+    android.widget.FrameLayout(this).apply {
+        contentDescription = label
+        background = outlinedStates(6)
+        isEnabled = enabled
+        isClickable = true
+        isFocusable = true
+        val pad = sizeDp / 5
+        setPadding(dp(pad), dp(pad), dp(pad), dp(pad))
+        addView(icon(getDrawable(iconRes), sizeDp - 2 * pad).apply {
+            imageTintList = ColorStateList.valueOf(if (enabled) Ink.INK else Ink.DISABLED)
+        })
+        layoutParams = LinearLayout.LayoutParams(dp(sizeDp), dp(sizeDp)).apply { marginStart = dp(6) }
+        setOnClickListener { if (enabled) onClick() }
+    }
 
 fun lp(w: Int, h: Int, weight: Float = 0f): LinearLayout.LayoutParams = LinearLayout.LayoutParams(w, h, weight)
 

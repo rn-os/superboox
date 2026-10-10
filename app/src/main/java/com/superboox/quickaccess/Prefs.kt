@@ -6,6 +6,14 @@ import org.json.JSONArray
 
 enum class Edge { LEFT, RIGHT }
 
+/** Overall size of the panel's text, icons and touch targets. */
+enum class MenuSize(val title: String, val scale: Float) {
+    SMALL("Small", 0.85f),
+    STANDARD("Standard", 1.0f),
+    LARGE("Large", 1.2f),
+    XL("Extra large", 1.4f),
+}
+
 enum class Trigger(val title: String) {
     SWIPE_IN("Swipe in from the edge"),
     SWIPE_ALONG("Swipe up or down along the edge"),
@@ -22,7 +30,8 @@ class Prefs(context: Context) {
         set(v) = sp.edit().putString(K_EDGE, v.name).apply()
 
     var trigger: Trigger
-        get() = enumOr(sp.getString(K_TRIGGER, null), Trigger.SWIPE_IN)
+        // Swipe up/down along the edge, like the Supernote side bar.
+        get() = enumOr(sp.getString(K_TRIGGER, null), Trigger.SWIPE_ALONG)
         set(v) = sp.edit().putString(K_TRIGGER, v.name).apply()
 
     /** Width of the invisible touch strip at the screen edge. */
@@ -51,6 +60,10 @@ class Prefs(context: Context) {
     var panelWidthPct: Int
         get() = sp.getInt(K_PANEL_WIDTH, 45)
         set(v) = sp.edit().putInt(K_PANEL_WIDTH, v).apply()
+
+    var menuSize: MenuSize
+        get() = enumOr(sp.getString(K_MENU_SIZE, null), MenuSize.STANDARD)
+        set(v) = sp.edit().putString(K_MENU_SIZE, v.name).apply()
 
     var showSystemActions: Boolean
         get() = sp.getBoolean(K_SYSTEM_ACTIONS, true)
@@ -127,6 +140,7 @@ class Prefs(context: Context) {
         const val K_HANDLE_ENABLED = "handle_enabled"
         const val K_PANEL_WIDTH = "panel_width_pct"
         const val K_SYSTEM_ACTIONS = "system_actions"
+        const val K_MENU_SIZE = "menu_size"
         const val K_NOTES_PKG = "notes_package"
         const val K_RECENT_URI = "recent_uri"
         const val K_RECENT_COUNT = "recent_count"

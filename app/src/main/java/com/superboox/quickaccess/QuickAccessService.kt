@@ -181,8 +181,8 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         noteOpener.open(prefs.notesPackage, path)
     }
 
-    /** Text labels currently visible in BOOX Notes, for "pin a note from this screen". */
-    fun notesScreenLabels(): List<String> {
+    /** What BOOX Notes is showing (open note or library), for pinning from the panel. */
+    fun notesState(): NotesScreen.State? {
         val pkg = prefs.notesPackage
         val root = runCatching {
             windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
@@ -190,11 +190,16 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         }.getOrNull()
         if (root == null) {
             DebugLog.w("picker", "no $pkg window found; windows=${runCatching { windows.map { "${it.type}:${it.root?.packageName}" } }.getOrNull()}")
-            return emptyList()
+            return null
         }
-        val labels = NoteOpener.visibleLabels(root)
-        DebugLog.i("picker", "${labels.size} labels in $pkg\n" + DebugReport.describeTree(root))
-        return labels
+        val state = NotesScreen.read(root)
+        val summary = when (state) {
+            is NotesScreen.State.Editor -> "editor, title \"${state.title}\""
+            is NotesScreen.State.Library -> "library, ${state.cards.size} cards: ${state.cards.joinToString { it.label }.take(300)}"
+            NotesScreen.State.Unknown -> "unrecognised screen"
+        }
+        DebugLog.i("picker", "$pkg: $summary\n" + DebugReport.describeTree(root))
+        return state
     }
 
     // ---- Window helpers ----------------------------------------------------------------

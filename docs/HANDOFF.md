@@ -77,15 +77,12 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 ## Build 20 (latest): NeoReader documents
 - `ReaderLibrary` reads `content://com.onyx.content.database.ContentProvider/Metadata`. That's NeoReader (`com.onyx.kreader`), exported with no permission, 192 rows. Columns used: `title`, `name`, `nativeAbsolutePath`, `lastAccess`. The newest `lastAccess` is the document currently open.
 - Add while NeoReader is in front pins `PinType.DOCUMENT` (value = file path).
-- Opening uses `ACTION_VIEW` on `file://` + mime, aimed at the NeoReader package, with StrictMode `VmPolicy.LAX` for that one launch. **Not yet confirmed on device.**
+- Opening uses `ACTION_VIEW` on `file://` + mime, aimed at the NeoReader package, with StrictMode `VmPolicy.LAX` for that one launch. **Confirmed on device in build 20**: an EPUB opened in NeoReader about 0.3 s after tapping its pin.
 - Recents: NeoReader window events record the document 1.5 s later, with `path`. Last Opened Document and Recent Files open the path directly when they have it.
 - The debug report line `NeoReader last opened: "<title>" (.ext)` checks the lookup. The build 17/18 probes (`openHelpers`, `readers`, `deep`) no longer run, but their code is kept.
 
 ## Next step
-- Build 20 report:
-  - Check that `added open document` names the book that's open.
-  - Check that tapping the pin opens the book in NeoReader. Look for the `[launch]` line with `file://`, then a NeoReader foreground.
-  - If the file URI is refused, try a `content://` URI from MediaStore or NeoReader's own intent extras.
+- Core features all confirmed working as of build 20. Waiting on what the user wants next.
 - Possible: Last Opened Document skips the document currently open (like notes already do).
 
 ## Open ideas / backlog

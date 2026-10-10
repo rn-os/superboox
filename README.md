@@ -18,7 +18,8 @@ Swipe along the right edge of the screen on any page, and a panel slides in with
   - in the Notes library, Add opens a picker where you tick several notes at once;
   - anywhere else, Add pins the current app.
 - **Long-press** a pinned item to reorder or remove items.
-- **Apps** along the bottom, 4 per page.
+- **Quick Controls** (optional): a paged row of round toggles like the BOOX Control Center. Wi‑Fi, Bluetooth, Do Not Disturb, Auto-rotate, Full Refresh, Back/Home/Recents and more. Tap switches; hold opens its settings. **Front Light** switches on and off; hold it for Bright, Soft, Custom and Off, Custom's brightness and warmth, and your own presets.
+- **Apps** along the bottom, 4 per page, optionally with **Previous app**.
 
 It's black on white with no animations, so it draws cleanly on e-ink. Menu size, panel width, the screen edge and the gesture can all be changed in Settings.
 
@@ -52,6 +53,10 @@ No computer or adb needed.
 SuperBoox reads only names, IDs, file locations and when things were opened. It never reads the contents of your notes or books.
 
 Tested on a Note Air 6C (Android 16, firmware 4.3). Other BOOX models and firmware should work, but haven't been tested yet. Bug reports are welcome.
+
+## Backup & restore
+
+**Settings → Backup & restore** saves every SuperBoox setting (pins, Quick Controls, Front Light presets, apps, gesture and look) to one small file you keep wherever you like, and restores it later. Lists in Settings can be reordered by dragging ≡ or with the arrows.
 
 ## Privacy
 

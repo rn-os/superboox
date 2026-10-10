@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 37)
+# SuperBoox: handoff / status (as of build 38)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -153,10 +153,17 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 ## Build 37 (approved mockup 25)
 - `Prefs.frontLightCycle`: tap steps Bright → Soft → Custom → Off. The tile is labelled with the current preset. The Front Light card on the Quick Controls page (only when it's added) has a radio for the two modes.
 
+## Build 38 (approved mockups 26–28)
+- The stepping mode from 37 is removed at the user's request: Front Light tap is on/off only; hold opens the presets.
+- Front Light box (`QuickAccessPanel.frontLightMenu`): page 1 is BOOX's four; further pages hold your presets (`QuickControls.myPresets`, `K_FL_MINE`) and **+ New** (named "Preset N" from the current Custom levels; rename in Settings). Hold Custom, or one of yours, for the Light/Warm rows (`levelsEditor`, `LevelBar`). Changes are debounced 700 ms and go to `service.frontLightLevels`.
+- Custom levels: `QuickControls.readLevels` (only valid while Custom is selected) and `setLevels`. The latter uses `ACTION_SET_PROGRESS` on the SeekBars inside `#brightness_bright_panel` / `#warm_panel`; the cache is `K_FL_LEVELS`. The session `QcTask` gained `levels`/`read`. **Unverified on device**: whether BOOX's SeekBar honours `ACTION_SET_PROGRESS`. If not, fall back to clicking `#brightness_bright_up/_down` / `#brightness_temp_up/_down`.
+- Your presets work through Custom (they overwrite BOOX's Custom levels); the active one is `K_FL_MINE_ACTIVE`.
+- Settings: Front Light · your presets card on the Quick Controls page (edit dialog with live preview), ≡ drag handles on every reorderable list (`dragHandle`), and a **Backup & restore** page (`Backup.kt`: JSON of all prefs except live state, via `ACTION_CREATE_DOCUMENT` / `ACTION_OPEN_DOCUMENT`).
+
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.
 
 ## Open ideas / backlog
 - Store the note id in pins when pinning, so lookup by title isn't needed.
 - Last Opened Document only returns to the last reading app; titles depend on that app.
-- Mockups `docs/mockups/10–14` show the approved Supernote design, `15–16` the approved bordered Settings (`settings-borders.html`), `17` the approved icons (`panel-icons.html`), `18/20/21` Quick Controls (`quick-controls.html`), `22` Previous app (`previous-app.html`), `23` proposed Settings menus (`settings-menus.html`, approved, built in 36), `24` Front Light (`front-light.html`, built in 36), `25` tap modes (built in 37), `26–28` proposed Custom sliders, own presets, backup & restore, drag to reorder (`front-light-more.html`, awaiting approval); `01–09` show the older design.
+- Mockups `docs/mockups/10–14` show the approved Supernote design, `15–16` the approved bordered Settings (`settings-borders.html`), `17` the approved icons (`panel-icons.html`), `18/20/21` Quick Controls (`quick-controls.html`), `22` Previous app (`previous-app.html`), `23` proposed Settings menus (`settings-menus.html`, approved, built in 36), `24` Front Light (`front-light.html`, built in 36), `25` tap modes (built in 37), `26–28` proposed Custom sliders, own presets, backup & restore, drag to reorder (`front-light-more.html`, approved, built in 38); `01–09` show the older design.

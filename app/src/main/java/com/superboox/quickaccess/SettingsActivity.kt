@@ -52,7 +52,7 @@ class SettingsActivity : Activity() {
     private enum class Page(val title: String) {
         HOME("SuperBoox"), GESTURE("Gesture"), LOOK("Look & size"), ITEMS("Quick Access items"),
         CONTROLS("Quick Controls"), APPS("Apps at the bottom"), RECENT("Recent files"),
-        TROUBLESHOOTING("Troubleshooting"), ADVANCED("Advanced"),
+        TROUBLESHOOTING("Troubleshooting"), BACKUP("Backup & restore"), ADVANCED("Advanced"),
     }
 
     private var page = Page.HOME
@@ -74,6 +74,7 @@ class SettingsActivity : Activity() {
                 Page.APPS -> dockSection()
                 Page.RECENT -> recentSection()
                 Page.TROUBLESHOOTING -> troubleshootingSection()
+                Page.BACKUP -> backupSection()
                 Page.ADVANCED -> advancedSection()
                 Page.HOME -> Unit
             }
@@ -138,9 +139,197 @@ class SettingsActivity : Activity() {
         list.addView(heading("Help"))
         list.addView(card(listOf(
             menuRow(R.drawable.ic_bug, Page.TROUBLESHOOTING, "Copy or share a debug report"),
+            menuRow(R.drawable.ic_save, Page.BACKUP, lastBackup()?.let { "Last backup: $it" } ?: "Save your settings to a file"),
             menuRow(R.drawable.ic_settings, Page.ADVANCED, "BOOX Notes package"),
         )))
         list.addView(View(this), lp(MATCH, dp(24)))
+    }
+
+    // ---- Drag to reorder ------------------------------------------------------------------
+
+    /**
+     * ≡ handle for a reorderable [row]: press and drag it up or down; the row
+     * follows the finger, lifted on a bordered card, and is moved when let go.
+     * The list only redraws on drop, to keep e-ink ghosting down.
+     */
+    private fun dragHandle(row: View, index: Int, count: Int, onMove: (Int, Int) -> Unit): View =
+        icon(getDrawable(R.drawable.ic_drag), 26).apply {
+            contentDescription = "Drag to move"
+            setPadding(dp(8), dp(10), dp(8), dp(10))
+            var startY = 0f
+            setOnTouchListener { v, e ->
+                when (e.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        startY = e.rawY
+                        v.parent?.requestDisallowInterceptTouchEvent(true)
+                        row.background = outline(2, 8)
+                        // Above its neighbours without reordering them (bringToFront would).
+                        row.translationZ = dp(6).toFloat()
+                    }
+                    android.view.MotionEvent.ACTION_MOVE -> row.translationY = e.rawY - startY
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                        val step = (row.height + dp(1)).coerceAtLeast(1)
+                        val to = (index + Math.round(row.translationY / step)).coerceIn(0, count - 1)
+                        row.translationY = 0f
+                        row.translationZ = 0f
+                        if (e.actionMasked == android.view.MotionEvent.ACTION_UP && to != index) onMove(index, to)
+                        render()
+                    }
+                }
+                true
+            }
+        }
+
+    // ---- Front Light: your presets --------------------------------------------------------
+
+    private fun myLightPresets() {
+        list.addView(heading("Front Light · your presets"))
+        val mine = QuickControls.myPresets(prefs)
+        val rows = mutableListOf<View>()
+        if (mine.isEmpty()) rows += cardText("None yet. Add one here, or with + New on page 2 of the Front Light presets in the panel.")
+        mine.forEachIndexed { i, p ->
+            rows += hbox().apply {
+                setPadding(dp(6), dp(8), dp(12), dp(8))
+                gravity = Gravity.CENTER_VERTICAL
+                addView(dragHandle(this, i, mine.size) { from, to -> QuickControls.saveMyPresets(prefs, mine.move(from, to)) })
+                addView(android.widget.FrameLayout(context).apply {
+                    background = outline(2, 20)
+                    addView(icon(getDrawable(R.drawable.ic_qc_light), 20), android.widget.FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+                }, lp(dp(38), dp(38)))
+                addView(vbox().apply {
+                    setPadding(dp(12), 0, 0, 0)
+                    addView(text(p.name, 17f, medium = true))
+                    addView(text("Brightness ${p.levels.brightness} · Warmth ${p.levels.warmth}", 13f, color = Ink.MUTED))
+                }, lp(0, WRAP, 1f))
+                addView(inkIconButton(R.drawable.ic_edit, "Edit", 44) { editLightPreset(p) })
+                addView(inkIconButton(R.drawable.ic_arrow_up, "Move up", 44, i > 0) { QuickControls.saveMyPresets(prefs, mine.move(i, i - 1)); render() })
+                addView(inkIconButton(R.drawable.ic_arrow_down, "Move down", 44, i < mine.size - 1) { QuickControls.saveMyPresets(prefs, mine.move(i, i + 1)); render() })
+                addView(inkIconButton(R.drawable.ic_delete, "Remove", 44) { QuickControls.saveMyPresets(prefs, mine.filterNot { it.id == p.id }); render() })
+            }
+        }
+        rows += buttonRow("+ New preset" to { editLightPreset(null) })
+        list.addView(card(rows))
+        list.addView(note("Shown on page 2 of the Front Light presets in the panel. Choosing one switches BOOX to Custom at its levels, so BOOX's own Custom shows them too."))
+    }
+
+    /** Name and levels; the light follows the sliders while the dialog is open, and goes back on Cancel. */
+    private fun editLightPreset(existing: QuickControls.LightPreset?) {
+        val service = QuickAccessService.instance
+        val before = QuickControls.savedLevels(prefs)
+        var levels = existing?.levels ?: before ?: QuickControls.Levels(16, 0)
+        val name = field("Name", existing?.name ?: "Preset ${QuickControls.myPresets(prefs).size + 1}")
+        val preview = Runnable { service?.frontLightLevels(levels) }
+        fun bar(label: String, value: Int, onChange: (Int) -> Unit): View = vbox().apply {
+            val title = text("$label: $value", 15f, bold = true).apply { setPadding(dp(4), dp(12), 0, 0) }
+            addView(title)
+            addView(SeekBar(context).apply {
+                max = QuickControls.LEVEL_MAX
+                progress = value
+                progressTintList = android.content.res.ColorStateList.valueOf(Ink.INK)
+                thumbTintList = android.content.res.ColorStateList.valueOf(Ink.INK)
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
+                        title.text = "$label: $p"
+                        onChange(p)
+                        list.removeCallbacks(preview)
+                        list.postDelayed(preview, 800)
+                    }
+                    override fun onStartTrackingTouch(sb: SeekBar) = Unit
+                    override fun onStopTrackingTouch(sb: SeekBar) = Unit
+                })
+            })
+        }
+        val body = vbox().apply {
+            setPadding(dp(20), dp(8), dp(20), 0)
+            addView(name)
+            addView(bar("Brightness", levels.brightness) { levels = levels.copy(brightness = it) })
+            addView(bar("Warmth", levels.warmth) { levels = levels.copy(warmth = it) })
+            addView(text(if (service != null) "Try it: the light changes as you slide." else "Turn the service on to try it out.", 13f, color = Ink.MUTED)
+                .apply { setPadding(dp(4), dp(8), 0, 0) })
+        }
+        AlertDialog.Builder(this)
+            .setTitle(if (existing == null) "New preset" else "Edit preset")
+            .setView(body)
+            .setNegativeButton("Cancel") { _, _ ->
+                list.removeCallbacks(preview)
+                if (before != null && levels != before) service?.frontLightLevels(before)
+            }
+            .setPositiveButton("Save") { _, _ ->
+                list.removeCallbacks(preview)
+                val label = name.text.toString().trim().ifEmpty { existing?.name ?: "Preset" }
+                val mine = QuickControls.myPresets(prefs)
+                QuickControls.saveMyPresets(prefs,
+                    if (existing == null) mine + QuickControls.LightPreset(QuickControls.newPresetId(), label, levels)
+                    else mine.map { if (it.id == existing.id) it.copy(name = label, levels = levels) else it })
+                render()
+            }
+            .show()
+    }
+
+    // ---- Backup & restore -----------------------------------------------------------------
+
+    private fun lastBackup(): String? = prefs.sp.getString(Prefs.K_LAST_BACKUP, null)
+
+    private fun backupSection() {
+        list.addView(heading("Back up"))
+        list.addView(card(listOf(
+            cardText("Saves all your SuperBoox settings to one small file you choose where to keep: Downloads, a cloud folder or a USB drive."),
+            buttonRow("Back up now" to {
+                val name = "superboox-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())}.json"
+                startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                    .setType("application/json").putExtra(Intent.EXTRA_TITLE, name), REQ_BACKUP)
+            }),
+        ) + listOfNotNull(lastBackup()?.let { cardText("Last backup: $it") })))
+        list.addView(heading("Restore"))
+        list.addView(card(listOf(
+            cardText("Pick a backup file. It replaces your current settings, after asking first."),
+            buttonRow("Restore from file…" to {
+                startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"), REQ_RESTORE)
+            }),
+        )))
+        list.addView(heading("What's included"))
+        list.addView(card(listOf(cardText(
+            "✓ Gesture, look & size\n✓ Quick Access items (notes, books, apps, links)\n✓ Quick Controls and Front Light presets\n✓ Apps at the bottom\n\n" +
+                "Not included: the troubleshooting log, recents, and file or folder access. Files and folders pinned with the file " +
+                "picker need picking again after a reinstall; notes and NeoReader books work straight away.",
+        ))))
+    }
+
+    private fun writeBackup(uri: Uri) {
+        val version = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: "?"
+        runCatching {
+            contentResolver.openOutputStream(uri, "wt")!!.use { it.write(Backup.export(prefs, version).toByteArray()) }
+        }.onSuccess {
+            val stamp = "${Launcher.displayName(this, uri)} · ${java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date())}"
+            prefs.sp.edit().putString(Prefs.K_LAST_BACKUP, stamp).apply()
+            DebugLog.i("backup", "saved")
+            toast("Backup saved")
+        }.onFailure {
+            DebugLog.e("backup", "save failed", it)
+            toast("Couldn't save the backup: ${it.message}")
+        }
+    }
+
+    private fun readBackup(uri: Uri) {
+        val snapshot = runCatching {
+            val text = contentResolver.openInputStream(uri)!!.use { it.readBytes().toString(Charsets.UTF_8) }
+            Backup.parse(text)
+        }.getOrElse {
+            toast(it.message ?: "Couldn't read that file")
+            return
+        }
+        val made = if (snapshot.created > 0) java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT)
+            .format(java.util.Date(snapshot.created)) else "an unknown date"
+        AlertDialog.Builder(this)
+            .setTitle("Restore this backup?")
+            .setMessage("Made $made${if (snapshot.app.isNotEmpty()) " with ${snapshot.app}" else ""}.\n\n${snapshot.summary}.\n\nYour current settings will be replaced.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Restore") { _, _ ->
+                Backup.restore(prefs, snapshot)
+                toast("Settings restored")
+                open(Page.HOME)
+            }
+            .show()
     }
 
     /** One choice of several: a round radio, a title and what it does. */
@@ -286,18 +475,7 @@ class SettingsActivity : Activity() {
         list.addView(card(listOf(
             check("Show Quick Controls in the panel", prefs.showSystemActions) { prefs.showSystemActions = it },
         )))
-        if (controls.any { it.id == QuickControls.FRONT_LIGHT }) {
-            list.addView(heading("Front Light"))
-            list.addView(card(listOf(
-                text("Tapping Front Light", 15f, bold = true).apply { setPadding(dp(16), dp(10), dp(16), 0) },
-                radioRow("Switches it on and off", "Off, then back to the preset you last used. Hold for Bright · Soft · Custom · Off in the panel.", !prefs.frontLightCycle) {
-                    prefs.frontLightCycle = false; render()
-                },
-                radioRow("Steps through the presets", "Bright → Soft → Custom → Off → Bright. The name under the tile shows where you are. Hold still shows all four.", prefs.frontLightCycle) {
-                    prefs.frontLightCycle = true; render()
-                },
-            )))
-        }
+        if (controls.any { it.id == QuickControls.FRONT_LIGHT }) myLightPresets()
         list.addView(heading("Controls · ${QuickAccessPanel.QC_PER_PAGE} per page"))
         val rows = mutableListOf<View>()
         controls.forEachIndexed { i, c ->
@@ -315,7 +493,9 @@ class SettingsActivity : Activity() {
     }
 
     private fun controlRow(c: QuickControls.Control, index: Int, count: Int, onMove: (Int, Int) -> Unit, onRemove: () -> Unit): View = hbox().apply {
-        setPadding(dp(14), dp(8), dp(12), dp(8))
+        setPadding(dp(6), dp(8), dp(12), dp(8))
+        gravity = Gravity.CENTER_VERTICAL
+        addView(dragHandle(this, index, count, onMove))
         addView(android.widget.FrameLayout(context).apply {
             background = outline(2, 20)
             addView(icon(getDrawable(c.icon), 20), android.widget.FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
@@ -334,7 +514,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun describe(c: QuickControls.Control): String = when {
-        c.id == QuickControls.FRONT_LIGHT -> "Tap: ${if (prefs.frontLightCycle) "next preset" else "on/off"} · hold: Bright, Soft, Custom, Off"
+        c.id == QuickControls.FRONT_LIGHT -> "Tap: on/off · hold: Bright, Soft, Custom, Off"
         c.id == "rotate" -> "Tap: on/off · hold: rotation menu"
         c.momentary -> "Tap: ${c.label.lowercase()} · hold: its settings"
         else -> describeKind(c)
@@ -572,6 +752,8 @@ class SettingsActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         val uri = data?.data
         if (resultCode != RESULT_OK || uri == null) return
+        if (requestCode == REQ_BACKUP) return writeBackup(uri)
+        if (requestCode == REQ_RESTORE) return readBackup(uri)
         val granted = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         runCatching { contentResolver.takePersistableUriPermission(uri, granted) }
             .recoverCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -636,7 +818,9 @@ class SettingsActivity : Activity() {
         onEdit: (() -> Unit)?,
         onRemove: () -> Unit,
     ): View = hbox().apply {
-        setPadding(dp(16), dp(8), dp(12), dp(8))
+        setPadding(dp(6), dp(8), dp(12), dp(8))
+        gravity = Gravity.CENTER_VERTICAL
+        addView(dragHandle(this, index, count, onMove))
         val texts = vbox().apply {
             addView(text(pin.label, 17f, medium = true))
             addView(text(describe(pin), 13f, color = Ink.MUTED).apply {
@@ -779,6 +963,8 @@ class SettingsActivity : Activity() {
         const val REQ_FILE = 1
         const val REQ_FOLDER = 2
         const val REQ_RECENT = 3
+        const val REQ_BACKUP = 4
+        const val REQ_RESTORE = 5
         val io = Executors.newSingleThreadExecutor()
     }
 }

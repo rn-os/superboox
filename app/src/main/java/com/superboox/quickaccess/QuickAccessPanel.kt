@@ -244,9 +244,33 @@ class QuickAccessPanel(
         box
     }
 
-    /** Bright · Soft · Custom · Off, like BOOX's Front Light card; the one in use is black. */
+    /** Page of the Front Light box: 0 is BOOX's presets, then yours. */
+    private var lightPage = 0
+
+    /** Levels being edited under the presets: "custom" (BOOX's Custom) or one of your presets' ids. */
+    private var lightEdit: String? = null
+    private var editLevels: QuickControls.Levels? = null
+    private val commitLevels = Runnable { applyEditLevels() }
+
+    /**
+     * Bright · Soft · Custom · Off like BOOX's Front Light card (the one in use
+     * is black), then pages of your own presets and + New. Holding Custom or
+     * one of yours drops down its brightness and warmth.
+     */
     private fun frontLightMenu(): View = with(ctx) {
         val current = service.frontLightPreset()
+        val mine = QuickControls.myPresets(prefs)
+        val active = QuickControls.activeMine(prefs)?.takeIf { current == "Custom" && mine.any { p -> p.id == it } }
+        // Page 0: BOOX's four. Then yours, four to a page, ending with + New.
+        val extra: List<QuickControls.LightPreset?> = mine + listOf(null)
+        val pages = 1 + (extra.size + LIGHT_PER_PAGE - 1) / LIGHT_PER_PAGE
+        lightPage = lightPage.coerceIn(0, pages - 1)
+        fun go(to: Int) {
+            if (to in 0 until pages && to != lightPage) {
+                lightPage = to
+                show(mode)
+            }
+        }
         vbox().apply {
             background = outline(2, 10)
             setPadding(s(6), s(8), s(6), s(10))
@@ -258,21 +282,60 @@ class QuickAccessPanel(
                     contentDescription = "Close Front Light presets"
                     setPadding(s(6), s(6), s(6), s(6))
                     pressable()
-                    setOnClickListener { lightMenu = false; show(mode) }
+                    setOnClickListener { closeLightMenu() }
                 })
             }, lp(MATCH, WRAP))
-            addView(hbox().apply {
+            val row = SwipeRow(ctx, s(40)) { go(lightPage + it) }
+            if (lightPage == 0) {
                 val icons = mapOf("Bright" to R.drawable.ic_qc_light, "Soft" to R.drawable.ic_qc_dnd,
                     "Custom" to R.drawable.ic_settings, "Off" to R.drawable.ic_qc_light_off)
                 QuickControls.PRESETS.forEach { preset ->
-                    val tile = roundTile(preset, icons.getValue(preset), lit = preset == current, description = "Front Light $preset")
+                    val lit = preset == current && !(preset == "Custom" && active != null)
+                    val tile = roundTile(preset, icons.getValue(preset), lit, description = "Front Light $preset")
                     tile.setOnClickListener { service.frontLight(preset) }
-                    addView(tile, lp(0, WRAP, 1f))
+                    if (preset == "Custom") tile.setOnLongClickListener {
+                        if (lightEdit == "custom") lightEdit = null else {
+                            lightEdit = "custom"
+                            service.frontLightReadCustom()
+                        }
+                        editLevels = null
+                        show(mode)
+                        true
+                    }
+                    row.addView(tile, lp(0, WRAP, 1f))
                 }
-            }, lp(MATCH, WRAP))
-            addView(text("Tap a preset to switch to it. Custom uses your own BOOX setting.", sp(12.5f), color = Ink.MUTED).apply {
+            } else {
+                val items = extra.drop((lightPage - 1) * LIGHT_PER_PAGE).take(LIGHT_PER_PAGE)
+                items.forEach { p ->
+                    val tile = if (p == null) {
+                        roundTile("New", R.drawable.ic_add, lit = false, description = "New Front Light preset", dashed = true).apply {
+                            setOnClickListener { newLightPreset() }
+                        }
+                    } else {
+                        roundTile(p.name, R.drawable.ic_qc_light, lit = p.id == active, description = "Front Light ${p.name}").apply {
+                            setOnClickListener { service.frontLightLevels(p.levels, p.id) }
+                            setOnLongClickListener {
+                                if (lightEdit == p.id) lightEdit = null else {
+                                    lightEdit = p.id
+                                    service.frontLightLevels(p.levels, p.id)
+                                }
+                                editLevels = null
+                                show(mode)
+                                true
+                            }
+                        }
+                    }
+                    row.addView(tile, lp(0, WRAP, 1f))
+                }
+                repeat(LIGHT_PER_PAGE - items.size) { row.addView(View(ctx), lp(0, 1, 1f)) }
+            }
+            addView(row, lp(MATCH, WRAP))
+            levelsEditor(mine)?.let { addView(it, lp(MATCH, WRAP)) }
+            addView(hbox().apply {
                 gravity = Gravity.CENTER
-                setPadding(s(4), s(8), s(4), 0)
+                addView(pagerButton(R.drawable.ic_chevron_left, "Previous presets", lightPage > 0) { go(lightPage - 1) })
+                addView(text("${lightPage + 1} / $pages", sp(13f), bold = true).apply { setPadding(s(12), 0, s(12), 0) })
+                addView(pagerButton(R.drawable.ic_chevron_right, "More presets", lightPage < pages - 1) { go(lightPage + 1) })
             }, lp(MATCH, WRAP))
         }.let { menu ->
             FrameLayout(ctx).apply {
@@ -282,8 +345,116 @@ class QuickAccessPanel(
         }
     }
 
+    private fun closeLightMenu() {
+        commitNow()
+        lightMenu = false
+        lightEdit = null
+        show(mode)
+    }
+
+    /** Brightness and warmth for [lightEdit], under a dashed rule. */
+    private fun levelsEditor(mine: List<QuickControls.LightPreset>): View? = with(ctx) {
+        val target = lightEdit ?: return@with null
+        val preset = mine.firstOrNull { it.id == target }
+        if (target != "custom" && preset == null) return@with null
+        val known = editLevels ?: if (preset != null) preset.levels else service.customLevels()
+        val levels = known ?: QuickControls.Levels(16, 0)
+        vbox().apply {
+            background = dashedTop()
+            setPadding(s(4), s(10), s(4), s(2))
+            addView(text(
+                if (preset != null) "${preset.name.uppercase()} · YOUR PRESET" else "CUSTOM · SAME AS BOOX'S CUSTOM" + if (known == null) " (READING…)" else "",
+                sp(12.5f), bold = true,
+            ).apply { setPadding(s(6), 0, s(6), s(4)) })
+            addView(levelRow("Light", levels.brightness) { editLevel(levels.copy(brightness = it)) })
+            addView(levelRow("Warm", levels.warmth) { editLevel(levels.copy(warmth = it)) })
+        }
+    }
+
+    private fun levelRow(label: String, value: Int, onChange: (Int) -> Unit): View = with(ctx) {
+        hbox().apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(s(4), s(4), s(4), s(4))
+            addView(text(label, sp(13f), bold = true), lp(s(44), WRAP))
+            fun step(sign: String, by: Int) = FrameLayout(ctx).apply {
+                contentDescription = "$label ${if (by < 0) "down" else "up"}"
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(Ink.PAPER)
+                    setStroke(dp(2), Ink.INK)
+                }
+                addView(text(sign, sp(20f), bold = true).apply { gravity = Gravity.CENTER }, FrameLayout.LayoutParams(MATCH, MATCH))
+                pressable()
+                setOnClickListener { onChange((value + by).coerceIn(0, QuickControls.LEVEL_MAX)) }
+            }
+            addView(step("−", -1), lp(s(34), s(34)))
+            addView(LevelBar(ctx, QuickControls.LEVEL_MAX, value, dp(2)) { onChange(it) }.apply {
+                contentDescription = "$label $value of ${QuickControls.LEVEL_MAX}"
+            }, lp(0, s(18), 1f).apply { marginStart = s(8); marginEnd = s(8) })
+            addView(step("+", 1), lp(s(34), s(34)))
+            addView(text("$value", sp(16f), bold = true).apply { gravity = Gravity.END }, lp(s(34), WRAP))
+        }
+    }
+
+    private fun editLevel(levels: QuickControls.Levels) {
+        editLevels = levels.clamp()
+        show(mode)
+        // Send it once the taps stop, not on every step.
+        root.removeCallbacks(commitLevels)
+        root.postDelayed(commitLevels, 700)
+    }
+
+    private fun commitNow() {
+        if (editLevels == null) return
+        root.removeCallbacks(commitLevels)
+        applyEditLevels()
+    }
+
+    private fun applyEditLevels() {
+        val levels = editLevels ?: return
+        val target = lightEdit ?: return
+        if (target == "custom") {
+            service.frontLightLevels(levels)
+        } else {
+            val mine = QuickControls.myPresets(prefs)
+            QuickControls.saveMyPresets(prefs, mine.map { if (it.id == target) it.copy(levels = levels) else it })
+            service.frontLightLevels(levels, target)
+        }
+    }
+
+    /** + New: a preset from the light's current Custom levels, opened for adjusting. */
+    private fun newLightPreset() {
+        val mine = QuickControls.myPresets(prefs)
+        var n = mine.size + 1
+        while (mine.any { it.name == "Preset $n" }) n++
+        val p = QuickControls.LightPreset(QuickControls.newPresetId(), "Preset $n", service.customLevels() ?: QuickControls.Levels(16, 0))
+        QuickControls.saveMyPresets(prefs, mine + p)
+        lightEdit = p.id
+        editLevels = null
+        lightPage = 1 + mine.size / LIGHT_PER_PAGE
+        service.frontLightLevels(p.levels, p.id)
+        show(mode)
+    }
+
+    private fun dashedTop(): android.graphics.drawable.Drawable = object : android.graphics.drawable.Drawable() {
+        private val paint = android.graphics.Paint().apply {
+            color = Ink.INK
+            strokeWidth = ctx.dp(1.5f).toFloat()
+            style = android.graphics.Paint.Style.STROKE
+            pathEffect = android.graphics.DashPathEffect(floatArrayOf(ctx.dp(5).toFloat(), ctx.dp(4).toFloat()), 0f)
+        }
+        override fun draw(canvas: android.graphics.Canvas) {
+            val y = bounds.top + paint.strokeWidth
+            canvas.drawLine(bounds.left.toFloat() + ctx.dp(6), y, bounds.right.toFloat() - ctx.dp(6), y, paint)
+        }
+        override fun setAlpha(alpha: Int) = Unit
+        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) = Unit
+        @Deprecated("Drawable API")
+        override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
+    }
+
     /** Round tile with a label under it: black when [lit]. */
-    private fun roundTile(label: String, iconRes: Int, lit: Boolean, description: String): ViewGroup = with(ctx) {
+    private fun roundTile(label: String, iconRes: Int, lit: Boolean, description: String, dashed: Boolean = false): ViewGroup = with(ctx) {
         vbox().apply {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, 0, 0, s(6))
@@ -293,7 +464,7 @@ class QuickAccessPanel(
                 background = android.graphics.drawable.GradientDrawable().apply {
                     shape = android.graphics.drawable.GradientDrawable.OVAL
                     setColor(if (lit) Ink.INK else Ink.PAPER)
-                    setStroke(dp(2), Ink.INK)
+                    if (dashed) setStroke(dp(2), Ink.INK, dp(6).toFloat(), dp(4).toFloat()) else setStroke(dp(2), Ink.INK)
                 }
                 addView(icon(getDrawable(iconRes), iconPx(26)).apply {
                     imageTintList = ColorStateList.valueOf(if (lit) Ink.PAPER else Ink.INK)
@@ -312,9 +483,7 @@ class QuickAccessPanel(
     private fun controlTile(control: QuickControls.Control, on: Boolean): View = with(ctx) {
         val lit = on && control.kind == QuickControls.Kind.TOGGLE && !control.momentary
         val description = "${control.label}${if (control.kind == QuickControls.Kind.TOGGLE) if (on) ", on" else ", off" else ""}"
-        // Stepping through presets: the tile is named after the one in use.
-        val label = if (control.id == QuickControls.FRONT_LIGHT && prefs.frontLightCycle) service.frontLightPreset() ?: control.label else control.label
-        roundTile(label, control.icon, lit, description).apply {
+        roundTile(control.label, control.icon, lit, description).apply {
             setOnClickListener {
                 // One-shot controls (Full Refresh) give a quick spin of the icon instead of filling.
                 if (control.momentary) (getChildAt(0) as? ViewGroup)?.getChildAt(0)?.animate()?.rotationBy(360f)?.setDuration(500)?.start()
@@ -322,8 +491,10 @@ class QuickAccessPanel(
             }
             setOnLongClickListener {
                 if (control.id == QuickControls.FRONT_LIGHT) {
-                    lightMenu = !lightMenu
-                    show(mode)
+                    if (lightMenu) closeLightMenu() else {
+                        lightMenu = true
+                        show(mode)
+                    }
                 } else {
                     service.quickControl(control, hold = true)
                 }
@@ -883,6 +1054,7 @@ class QuickAccessPanel(
         // Two rows of two, like the Supernote photo; more pages with ‹ ›.
         const val DOCK_PER_PAGE = 4
         const val QC_PER_PAGE = 5
+        const val LIGHT_PER_PAGE = 4
         private val io = Executors.newSingleThreadExecutor()
     }
 }
@@ -922,6 +1094,46 @@ private class SwipeRow(
         if (e.actionMasked == android.view.MotionEvent.ACTION_UP) {
             val dx = e.x - downX
             if (kotlin.math.abs(dx) > threshold) onSwipe(if (dx < 0) 1 else -1)
+        }
+        return true
+    }
+}
+
+/** Front Light level bar: outlined, filled to [value]; tap or drag along it to pick. */
+private class LevelBar(
+    context: android.content.Context,
+    private val max: Int,
+    private var value: Int,
+    private val stroke: Int,
+    private val onPick: (Int) -> Unit,
+) : View(context) {
+    private val line = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = stroke.toFloat()
+        color = Ink.INK
+    }
+    private val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = Ink.INK }
+    private val rect = android.graphics.RectF()
+
+    override fun onDraw(canvas: android.graphics.Canvas) {
+        val r = height / 2f
+        rect.set(stroke / 2f, stroke / 2f, width - stroke / 2f, height - stroke / 2f)
+        canvas.save()
+        val clip = android.graphics.Path().apply { addRoundRect(rect, r, r, android.graphics.Path.Direction.CW) }
+        canvas.clipPath(clip)
+        canvas.drawRect(0f, 0f, width * value / max.toFloat(), height.toFloat(), fill)
+        canvas.restore()
+        canvas.drawRoundRect(rect, r, r, line)
+    }
+
+    override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
+        when (e.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN -> parent?.requestDisallowInterceptTouchEvent(true)
+            android.view.MotionEvent.ACTION_UP -> {
+                value = (e.x / width * max).roundToInt().coerceIn(0, max)
+                invalidate()
+                onPick(value)
+            }
         }
         return true
     }

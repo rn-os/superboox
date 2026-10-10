@@ -12,6 +12,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.roundToInt
 
 /**
  * Quick Controls: round toggle tiles in the panel, like the BOOX Control Center.
@@ -361,6 +362,94 @@ object QuickControls {
         val now = runCatching { selectedPreset(presetButtons(service)) }.getOrNull()
         savePreset(prefs, now ?: preset)
         DebugLog.i("controls", "front light is now ${now ?: "$preset (assumed)"}")
+    }
+
+    /** BOOX's Custom front light: brightness and warmth, each 0–[LEVEL_MAX]. */
+    data class Levels(val brightness: Int, val warmth: Int) {
+        fun clamp() = Levels(brightness.coerceIn(0, LEVEL_MAX), warmth.coerceIn(0, LEVEL_MAX))
+        override fun toString() = "brightness $brightness, warmth $warmth"
+    }
+
+    const val LEVEL_MAX = 32
+
+    /** Custom's levels as last read from (or set in) the Control Center. */
+    fun savedLevels(prefs: Prefs): Levels? = prefs.sp.getString(Prefs.K_FL_LEVELS, null)?.split(",")
+        ?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 }?.let { Levels(it[0], it[1]) }
+
+    private fun saveLevels(prefs: Prefs, l: Levels) {
+        prefs.sp.edit().putString(Prefs.K_FL_LEVELS, "${l.brightness},${l.warmth}").apply()
+    }
+
+    /**
+     * Reads Custom's sliders. Only meaningful while Custom is selected: BOOX
+     * shows the selected preset's levels in them.
+     */
+    fun readLevels(service: AccessibilityService, prefs: Prefs): Levels? {
+        val buttons = runCatching { presetButtons(service) }.getOrDefault(emptyMap())
+        if (selectedPreset(buttons) != "Custom") return null
+        val (b, w) = levelNodes(service) ?: return null
+        val levels = Levels(b.rangeInfo?.current?.roundToInt() ?: return null, w.rangeInfo?.current?.roundToInt() ?: return null)
+        saveLevels(prefs, levels)
+        DebugLog.i("controls", "front light Custom: $levels")
+        return levels
+    }
+
+    /** Sets Custom's sliders (Custom must already be selected). */
+    fun setLevels(service: AccessibilityService, prefs: Prefs, target: Levels): Boolean {
+        val nodes = levelNodes(service) ?: return false.also { DebugLog.w("controls", "front light sliders not found") }
+        val ok = listOf(nodes.first to target.brightness, nodes.second to target.warmth).all { (bar, v) -> setSlider(bar, v) }
+        DebugLog.i("controls", "front light Custom -> $target: $ok")
+        if (ok) saveLevels(prefs, target)
+        return ok
+    }
+
+    private fun setSlider(bar: AccessibilityNodeInfo, value: Int): Boolean {
+        val args = android.os.Bundle().apply {
+            putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, value.toFloat())
+        }
+        return bar.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id, args)
+    }
+
+    /** Custom's brightness and warmth sliders (SeekBars inside BOOX's two level rows). */
+    private fun levelNodes(service: AccessibilityService): Pair<AccessibilityNodeInfo, AccessibilityNodeInfo>? {
+        for (w in service.windows) {
+            val root = w.root ?: continue
+            val pkg = root.packageName?.toString() ?: continue
+            if (!pkg.contains("systemui")) continue
+            fun slider(panel: String) = root.findAccessibilityNodeInfosByViewId("$pkg:id/$panel").firstOrNull()
+                ?.findAccessibilityNodeInfosByViewId("$pkg:id/slider")?.firstOrNull { it.rangeInfo != null }
+            val b = slider("brightness_bright_panel") ?: continue
+            val t = slider("warm_panel") ?: continue
+            return b to t
+        }
+        return null
+    }
+
+    // ---- Your own Front Light presets (applied through Custom) ----------------------------
+
+    data class LightPreset(val id: String, val name: String, val levels: Levels)
+
+    fun myPresets(prefs: Prefs): List<LightPreset> = runCatching {
+        val arr = JSONArray(prefs.sp.getString(Prefs.K_FL_MINE, "[]"))
+        (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            LightPreset(o.getString("id"), o.getString("name"), Levels(o.getInt("b"), o.getInt("w")).clamp())
+        }
+    }.getOrDefault(emptyList())
+
+    fun saveMyPresets(prefs: Prefs, list: List<LightPreset>) {
+        val arr = JSONArray()
+        list.forEach { arr.put(JSONObject().put("id", it.id).put("name", it.name).put("b", it.levels.brightness).put("w", it.levels.warmth)) }
+        prefs.sp.edit().putString(Prefs.K_FL_MINE, arr.toString()).apply()
+    }
+
+    fun newPresetId(): String = "fl" + System.currentTimeMillis().toString(36)
+
+    /** Your preset in use (only while the light is on Custom). */
+    fun activeMine(prefs: Prefs): String? = prefs.sp.getString(Prefs.K_FL_MINE_ACTIVE, null)
+
+    fun setActiveMine(prefs: Prefs, id: String?) {
+        prefs.sp.edit().apply { if (id == null) remove(Prefs.K_FL_MINE_ACTIVE) else putString(Prefs.K_FL_MINE_ACTIVE, id) }.apply()
     }
 
     /** Scrolls the Control Center down, to bring the Front Light presets into view. */

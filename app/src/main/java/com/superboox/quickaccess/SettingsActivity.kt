@@ -81,7 +81,7 @@ class SettingsActivity : Activity() {
     /** The settings pages: Home lists the others. */
     private enum class Page(val title: String) {
         HOME("SuperBoox"), GESTURE("Gesture"), LOOK("Look & size"), ITEMS("Quick Access items"),
-        CONTROLS("Quick Controls"), APPS("Apps at the bottom"), RECENT("Recent files"),
+        CONTROLS("Quick Controls"), APPS("Apps at the bottom"), RECENT("Recent files"), CLIPBOARD("Clipboard"),
         TROUBLESHOOTING("Troubleshooting"), BACKUP("Backup & restore"), ADVANCED_ACCESS("Advanced access"), ADVANCED("Advanced"),
     }
 
@@ -103,6 +103,7 @@ class SettingsActivity : Activity() {
                 Page.CONTROLS -> quickControlsSection()
                 Page.APPS -> dockSection()
                 Page.RECENT -> recentSection()
+                Page.CLIPBOARD -> clipboardSection()
                 Page.TROUBLESHOOTING -> troubleshootingSection()
                 Page.BACKUP -> backupSection()
                 Page.ADVANCED_ACCESS -> advancedAccessSection()
@@ -166,6 +167,8 @@ class SettingsActivity : Activity() {
             menuRow(R.drawable.ic_star, Page.ITEMS, prefs.pins.size.let { if (it == 1) "1 item" else "$it items" }),
             menuRow(R.drawable.ic_apps, Page.APPS,
                 (if (apps == 1) "1 app" else "$apps apps") + if (prefs.previousAppInDock) " · Previous app included" else ""),
+            menuRow(R.drawable.ic_clipboard, Page.CLIPBOARD, if (!prefs.clipShowButton) "Off" else
+                "On · ${ClipHistory.list(this).size} clips · " + if (prefs.clipCatchMode == Prefs.CLIP_EVERY) "every copy" else "saved when the panel opens"),
         )))
         list.addView(heading("Help"))
         list.addView(card(listOf(
@@ -804,6 +807,85 @@ class SettingsActivity : Activity() {
             ).toTypedArray(),
         )
         list.addView(card(rows))
+    }
+
+    private fun clipboardSection() {
+        list.addView(heading("In the panel"))
+        list.addView(card(listOf(
+            check("Show the Clipboard button", prefs.clipShowButton) { prefs.clipShowButton = it },
+            check("Clipboard covers the apps too", prefs.clipCoversApps) { prefs.clipCoversApps = it },
+        )))
+        list.addView(note("The Clipboard button sits at the top left of the panel; Recent Files moves to the left end of the Quick Access bar. Off: Recent Files stays at the top."))
+        list.addView(heading("History"))
+        val ignored = ignoredApps()
+        list.addView(card(listOf(
+            choiceRow("Keep the last", "${prefs.clipLimit} clips") {
+                val options = listOf(25, 50, 100, 200, 500)
+                pick("Keep the last", options.map { "$it clips" }, options.indexOf(prefs.clipLimit).coerceAtLeast(0)) { prefs.clipLimit = options[it] }
+            },
+            check("Keep images (screenshots, copied pictures)", prefs.clipKeepImages) { prefs.clipKeepImages = it },
+            check("Keep history after a restart", prefs.clipKeepAfterRestart) { prefs.clipKeepAfterRestart = it },
+            choiceRow("Ignore copies from", if (ignored.isEmpty()) "Password managers" else "${ignored.size} ${if (ignored.size == 1) "app" else "apps"}") { editIgnoredApps() },
+        )))
+        list.addView(note("Pinned clips are always kept. History stays on this tablet and isn't part of backups."))
+        list.addView(heading("Catching copies"))
+        val connected = AdvancedAccess.allowed()
+        val every = prefs.clipCatchMode == Prefs.CLIP_EVERY
+        list.addView(card(listOf(
+            radioRow("When the panel opens", "No setup. Saves what's on the clipboard each time you open the panel, so a copy replaced before then is missed.", !every) {
+                prefs.clipCatchMode = Prefs.CLIP_PANEL
+                render()
+            },
+            radioRow("Every copy, as it happens",
+                if (connected) "Uses Advanced access to read the clipboard in the background."
+                else "Needs Advanced access (Shizuku), which isn't connected right now. Until it is, copies are saved when the panel opens.",
+                every) {
+                prefs.clipCatchMode = Prefs.CLIP_EVERY
+                if (!AdvancedAccess.allowed()) toast("Set up Advanced access to catch every copy")
+                render()
+            },
+        )))
+        ClipHistory.backgroundProblem()?.takeIf { every }?.let { list.addView(note("Background reading failed last time: $it")) }
+        list.addView(card(listOf(
+            buttonRow("Clear history (keeps pinned)" to {
+                AlertDialog.Builder(this)
+                    .setTitle("Clear clipboard history?")
+                    .setMessage("Every clip that isn't pinned is removed.")
+                    .setPositiveButton("Clear") { _, _ -> ClipHistory.clear(this); toast("Clipboard history cleared"); render() }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }),
+        )).apply { (layoutParams as ViewGroup.MarginLayoutParams).topMargin = dp(20) })
+        list.addView(View(this), lp(MATCH, dp(24)))
+    }
+
+    /** Ignored apps that are installed (the built-in password manager list stays ignored even when not shown). */
+    private fun ignoredApps(): List<String> = prefs.clipIgnored.filter { pkg ->
+        runCatching { packageManager.getPackageInfo(pkg, 0) }.isSuccess
+    }.sortedBy { Launcher.appLabel(this, it).lowercase() }
+
+    private fun editIgnoredApps() {
+        val apps = ignoredApps()
+        val keep = BooleanArray(apps.size) { true }
+        AlertDialog.Builder(this)
+            .setTitle("Ignore copies from")
+            .apply {
+                if (apps.isEmpty()) setMessage("Copies from password managers are never kept. Add other apps whose copies shouldn't be kept.")
+                else setMultiChoiceItems(apps.map { Launcher.appLabel(this@SettingsActivity, it) }.toTypedArray(), keep) { _, i, on -> keep[i] = on }
+            }
+            .setPositiveButton("Done") { _, _ ->
+                val dropped = apps.filterIndexed { i, _ -> !keep[i] }.toSet()
+                if (dropped.isNotEmpty()) prefs.clipIgnored = prefs.clipIgnored - dropped
+                render()
+            }
+            .setNeutralButton("Add app…") { _, _ ->
+                pickApp { pin ->
+                    val pkg = pin.value.substringBefore('/')
+                    prefs.clipIgnored = prefs.clipIgnored + pkg
+                    render()
+                }
+            }
+            .show()
     }
 
     private fun advancedSection() {

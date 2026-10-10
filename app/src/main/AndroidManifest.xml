@@ -92,6 +92,13 @@
             android:multiprocess="false"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
+        <!-- Clipboard images kept by SuperBoox, for pasting and sharing them again. -->
+        <provider
+            android:name=".ClipProvider"
+            android:authorities="com.superboox.quickaccess.clips"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <service
             android:name=".PanelTileService"
             android:exported="true"

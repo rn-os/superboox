@@ -47,8 +47,10 @@ android {
 }
 
 dependencies {
-    // Shizuku: optional on-device ADB (Settings → Advanced access). The app's only library.
+    // Shizuku: optional on-device ADB (Settings → Advanced access).
     val shizuku = "13.1.5"
     implementation("dev.rikka.shizuku:api:$shizuku")
     implementation("dev.rikka.shizuku:provider:$shizuku")
+    // Lets the Clipboard reach Android's clipboard service as the shell (through Shizuku).
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
 }

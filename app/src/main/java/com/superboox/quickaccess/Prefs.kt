@@ -70,6 +70,41 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(K_REMEMBER_PAGES, false)
         set(v) = sp.edit().putBoolean(K_REMEMBER_PAGES, v).apply()
 
+    // ---- Clipboard hub ----
+
+    /** The Clipboard button in the panel's top bar. */
+    var clipShowButton: Boolean
+        get() = sp.getBoolean(K_CLIP_SHOW, true)
+        set(v) = sp.edit().putBoolean(K_CLIP_SHOW, v).apply()
+
+    /** The open clipboard also covers the apps at the bottom. */
+    var clipCoversApps: Boolean
+        get() = sp.getBoolean(K_CLIP_COVERS_APPS, true)
+        set(v) = sp.edit().putBoolean(K_CLIP_COVERS_APPS, v).apply()
+
+    /** How many unpinned clips to keep. */
+    var clipLimit: Int
+        get() = sp.getInt(K_CLIP_LIMIT, 100)
+        set(v) = sp.edit().putInt(K_CLIP_LIMIT, v).apply()
+
+    var clipKeepImages: Boolean
+        get() = sp.getBoolean(K_CLIP_IMAGES, true)
+        set(v) = sp.edit().putBoolean(K_CLIP_IMAGES, v).apply()
+
+    var clipKeepAfterRestart: Boolean
+        get() = sp.getBoolean(K_CLIP_KEEP_RESTART, true)
+        set(v) = sp.edit().putBoolean(K_CLIP_KEEP_RESTART, v).apply()
+
+    /** Apps whose copies are never kept (package names). */
+    var clipIgnored: Set<String>
+        get() = sp.getStringSet(K_CLIP_IGNORED, null) ?: ClipHistory.DEFAULT_IGNORED
+        set(v) = sp.edit().putStringSet(K_CLIP_IGNORED, v).apply()
+
+    /** [CLIP_PANEL]: save the clipboard when the panel opens; [CLIP_EVERY]: every copy (Advanced access). */
+    var clipCatchMode: String
+        get() = sp.getString(K_CLIP_MODE, CLIP_PANEL) ?: CLIP_PANEL
+        set(v) = sp.edit().putString(K_CLIP_MODE, v).apply()
+
     /** Advanced access: SuperBoox presets set the light directly instead of borrowing Custom. */
     var independentPresets: Boolean
         get() = sp.getBoolean(K_ADV_INDEPENDENT, false)
@@ -212,6 +247,15 @@ class Prefs(context: Context) {
         const val K_ADV_METHOD = "adv_light_method"
         const val K_FL_DIRECT_BEFORE = "front_light_direct_before"
         const val K_FL_LAST_ON = "front_light_last_on"
+        const val K_CLIP_SHOW = "clip_show"
+        const val K_CLIP_COVERS_APPS = "clip_covers_apps"
+        const val K_CLIP_LIMIT = "clip_limit"
+        const val K_CLIP_IMAGES = "clip_images"
+        const val K_CLIP_KEEP_RESTART = "clip_keep_restart"
+        const val K_CLIP_IGNORED = "clip_ignored"
+        const val K_CLIP_MODE = "clip_mode"
+        const val CLIP_PANEL = "panel"
+        const val CLIP_EVERY = "every"
 
         /** Keys whose change requires the edge handle window to be rebuilt. */
         val HANDLE_KEYS = setOf(K_EDGE, K_TRIGGER, K_HANDLE_WIDTH, K_HANDLE_HEIGHT, K_HANDLE_TOP, K_SHOW_HANDLE, K_HANDLE_ENABLED)

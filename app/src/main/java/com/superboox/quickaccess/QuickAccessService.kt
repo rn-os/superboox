@@ -57,6 +57,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         attachHandle()
         instance = this
         NoteIds.capture(this, prefs)
+        ClipHistory.onStart(this, prefs)
         val filter = android.content.IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
@@ -89,6 +90,12 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        // A tap or a toast ("Copied") may have been a copy: with Advanced access, check the clipboard.
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED || event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
+            val from = event.packageName?.toString()
+            if (from != packageName && ::prefs.isInitialized) ClipHistory.checkInBackground(this, prefs, from ?: foregroundPackage)
+            return
+        }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
         if (pkg == packageName || pkg in IGNORED_PACKAGES || pkg.contains("inputmethod")) return
@@ -100,6 +107,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             val isActivity = cls != null && !cls.startsWith("android.widget.") && !cls.startsWith("android.view.")
             val newApp = pkg != foregroundPackage
             if (newApp || (isActivity && cls != foregroundActivity)) {
+                if (newApp) foregroundPackage?.let { ClipHistory.checkInBackground(this, prefs, it) }
                 foregroundPackage = pkg
                 if (isActivity) foregroundActivity = cls else if (newApp) foregroundActivity = null
                 DebugLog.i("foreground", "$pkg ($cls)")
@@ -255,6 +263,16 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 DebugLog.e("panel", "show failed", it)
                 Toast.makeText(this, "Couldn't open panel: ${it.message}", Toast.LENGTH_LONG).show()
             }
+    }
+
+    /** After the panel closes: pastes the clipboard into the text box that has focus in the app. */
+    fun pasteIntoApp() {
+        handler.postDelayed({
+            val target = runCatching { rootInActiveWindow?.findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull()
+            val ok = target != null && target.isEditable && target.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_PASTE)
+            DebugLog.i("clipboard", "paste in ${foregroundPackage}: ${if (ok) "done" else if (target == null) "no text box has focus" else "refused"}")
+            if (!ok) Toast.makeText(this, "Copied. Tap a text box and paste.", Toast.LENGTH_SHORT).show()
+        }, 450L)
     }
 
     fun hidePanel() {
@@ -658,8 +676,9 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         PixelFormat.TRANSLUCENT,
     ).apply {
         windowAnimations = 0
-        // Typing in the panel (renaming a Front Light preset): slide it up if the keyboard would cover the field.
-        if (focusable) softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN
+        // Typing in the panel (renaming, searching the clipboard): slide it up if the keyboard would cover the
+        // field, and don't bring the keyboard up until a field is tapped.
+        if (focusable) softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN or WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }

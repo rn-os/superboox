@@ -65,6 +65,14 @@ object DebugReport {
         line("light test: ${if (!prefs.lightTestRun) "not run" else if (prefs.lightTestPassed) "passed" else "failed"}; independent presets: ${prefs.independentPresets}; restarted since use: ${AdvancedAccess.restartedSinceUse(prefs)}")
         runCatching { AdvancedAccess.lightProbe() }.getOrElse { listOf("probe failed: ${it.message}") }.forEach { line(it) }
 
+        section("Clipboard")
+        line("button: ${prefs.clipShowButton} coversApps: ${prefs.clipCoversApps} mode: ${prefs.clipCatchMode} limit: ${prefs.clipLimit} images: ${prefs.clipKeepImages} keepAfterRestart: ${prefs.clipKeepAfterRestart}")
+        ClipHistory.list(context).let { clips ->
+            // Counts only: what was copied stays private.
+            line("clips: ${clips.size} (${clips.count { it.pinned }} pinned, ${clips.count { it.kind == ClipHistory.Kind.IMAGE }} images, ${clips.count { it.kind == ClipHistory.Kind.LINK }} links)")
+        }
+        line("background read problem: ${ClipHistory.backgroundProblem() ?: "none"}")
+
         section("Front light: system settings")
         lightSettings(context).forEach { line(it) }
 

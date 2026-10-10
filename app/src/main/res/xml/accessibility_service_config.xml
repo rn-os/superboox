@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Only window-state events: we just need to know which app is in front.
+<!-- Window-state events: which app is in front. Clicks and toasts: a copy may
+     have just happened (Clipboard, with Advanced access).
      Window content is read on demand (note opener / "pin from screen").
      Screenshots: a still of the current screen covers the BOOX home screen
      while a note opens behind it. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeViewClicked|typeNotificationStateChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagRetrieveInteractiveWindows|flagIncludeNotImportantViews|flagReportViewIds"
     android:canPerformGestures="true"

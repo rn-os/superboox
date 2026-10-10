@@ -19,6 +19,7 @@ Swipe along the right edge of the screen on any page, and a panel slides in with
   - anywhere else, Add pins the current app.
 - **Long-press** a pinned item to reorder or remove items.
 - **Quick Controls** (optional): a paged row of round toggles like the BOOX Control Center. Wi‑Fi, Bluetooth, Do Not Disturb, Auto-rotate, Full Refresh, Back/Home/Recents and more. Tap switches; hold opens its settings. **Front Light** switches on and off; hold it for Bright, Soft, Custom and Off, Custom's brightness and warmth, and your own presets.
+- **Clipboard**: the button at the top left swaps the panel for your clipboard history (text, links, images), newest first with pinned clips on top. Search or filter it, tap ⧉ to copy a clip again, or tap/hold a clip for Copy, Paste in app, Open (links), Share…, Pin and Delete. Copies are saved when the panel opens; with Advanced access, every copy as it happens. Recent Files moves to the left of the Quick Access bar.
 - **Apps** along the bottom, 4 per page, optionally with **Previous app**.
 
 It's black on white with no animations, so it draws cleanly on e-ink. Menu size, panel width, the screen edge and the gesture can all be changed in Settings.

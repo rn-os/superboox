@@ -28,7 +28,7 @@ import kotlin.math.roundToInt
 /**
  * The Quick Access panel, laid out like the Supernote sidebar:
  *
- *   [ Recent Files | New Note | ⚙ ]
+ *   [ Clipboard | New Note | ⚙ ]   (Recent Files here when the Clipboard button is off)
  *   Last Opened Note
  *   Last Opened Document
  *   ── Quick Access ──────── Add
@@ -44,7 +44,7 @@ class QuickAccessPanel(
     private val prefs: Prefs,
     private val foregroundPackage: String?,
 ) {
-    private enum class Mode { MAIN, RECENT, EDIT, PICK }
+    private enum class Mode { MAIN, RECENT, EDIT, PICK, CLIPBOARD }
 
     private val ctx: Context = ContextThemeWrapper(service, R.style.Theme_SuperBoox)
     private val main = Handler(Looper.getMainLooper())
@@ -85,6 +85,7 @@ class QuickAccessPanel(
             if (event.keyCode == KeyEvent.KEYCODE_BACK) {
                 if (event.action == KeyEvent.ACTION_UP) {
                     if (renaming != null) endRename(save = false)
+                    else if (mode == Mode.CLIPBOARD && clipOpen != null) { clipOpen = null; fillClips() }
                     else if (mode != Mode.MAIN) show(Mode.MAIN) else service.hidePanel()
                 }
                 return true
@@ -111,6 +112,15 @@ class QuickAccessPanel(
             sheet.addView(line, lp(ctx.dp(3), MATCH))
         }
         root.addView(sheet)
+        // The panel has focus once its window does: the moment Android lets SuperBoox read the clipboard.
+        root.viewTreeObserver.addOnWindowFocusChangeListener { has ->
+            if (has && root.isAttachedToWindow) {
+                val before = ClipHistory.list(service).firstOrNull()?.let { it.id to it.time }
+                ClipHistory.checkInForeground(service, prefs, foregroundPackage)
+                val after = ClipHistory.list(service).firstOrNull()?.let { it.id to it.time }
+                if (mode == Mode.CLIPBOARD && before != after) fillClips()
+            }
+        }
         show(Mode.MAIN)
     }
 
@@ -134,6 +144,14 @@ class QuickAccessPanel(
         }
         content.addView(topRow(), lp(MATCH, WRAP))
         content.addView(rule(2))
+        if (mode == Mode.CLIPBOARD) {
+            content.addView(clipboardHub(), lp(MATCH, 0, 1f))
+            if (!prefs.clipCoversApps) {
+                content.addView(rule(3))
+                content.addView(dock(), lp(MATCH, WRAP))
+            }
+            return
+        }
         if (prefs.showSystemActions) {
             content.addView(quickControlsRow(), lp(MATCH, WRAP))
             content.addView(rule(2))
@@ -157,7 +175,11 @@ class QuickAccessPanel(
     private fun topRow(): View = with(ctx) {
         hbox().apply {
             gravity = Gravity.NO_GRAVITY
-            addView(topCell(R.drawable.ic_clock, "Recent Files") { show(if (mode == Mode.RECENT) Mode.MAIN else Mode.RECENT) }, lp(0, WRAP, 1f))
+            if (prefs.clipShowButton) {
+                addView(topCell(R.drawable.ic_clipboard, "Clipboard", lit = mode == Mode.CLIPBOARD) { toggleClipboard() }, lp(0, WRAP, 1f))
+            } else {
+                addView(topCell(R.drawable.ic_clock, "Recent Files") { show(if (mode == Mode.RECENT) Mode.MAIN else Mode.RECENT) }, lp(0, WRAP, 1f))
+            }
             addView(vRule(), lp(dp(2), MATCH))
             addView(topCell(R.drawable.ic_note_add, "New Note") { newNote() }, lp(0, WRAP, 1f))
             addView(vRule(), lp(dp(2), MATCH))
@@ -170,18 +192,18 @@ class QuickAccessPanel(
         }
     }
 
-    private fun topCell(iconRes: Int, label: String, onClick: () -> Unit): View = with(ctx) {
+    private fun topCell(iconRes: Int, label: String, lit: Boolean = false, onClick: () -> Unit): View = with(ctx) {
         vbox().apply {
             gravity = Gravity.CENTER
             setPadding(0, s(12), 0, s(10))
-            contentDescription = label
-            addView(icon(getDrawable(iconRes), iconPx(32)))
+            contentDescription = if (lit) "$label, open" else label
+            addView(icon(getDrawable(iconRes), iconPx(32)).apply { if (lit) imageTintList = ColorStateList.valueOf(Ink.PAPER) })
             // Text views in a vertical LinearLayout default to full width: centre the text itself.
-            addView(text(label, sp(15f), medium = true).apply {
+            addView(text(label, sp(15f), medium = true, color = if (lit) Ink.PAPER else Ink.INK).apply {
                 gravity = Gravity.CENTER
                 setPadding(0, s(4), 0, 0)
             })
-            pressable()
+            if (lit) pressable(android.graphics.drawable.ColorDrawable(Ink.INK)) else pressable()
             setOnClickListener { onClick() }
         }
     }
@@ -685,8 +707,18 @@ class QuickAccessPanel(
     private fun quickAccessList(): View = with(ctx) {
         val box = vbox()
         box.addView(FrameLayout(ctx).apply {
-            setPadding(s(16), s(12), s(8), s(12))
+            setPadding(if (prefs.clipShowButton) s(8) else s(16), s(12), s(8), s(12))
             addView(text("Quick Access", sp(17f), bold = true), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+            // Recent Files moves here when the top bar has the Clipboard button.
+            if (prefs.clipShowButton) addView(vbox().apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(s(6), 0, s(6), 0)
+                contentDescription = "Recent Files"
+                addView(icon(getDrawable(R.drawable.ic_clock), iconPx(24)))
+                addView(text("Recent", sp(11f)).apply { gravity = Gravity.CENTER })
+                pressable()
+                setOnClickListener { show(Mode.RECENT) }
+            }, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.START or Gravity.CENTER_VERTICAL))
             addView(vbox().apply {
                 gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(s(6), 0, s(6), 0)
@@ -836,6 +868,315 @@ class QuickAccessPanel(
 
     private fun isNotePinned(title: String) =
         prefs.pins.any { it.type == PinType.BOOX_NOTE && NotesScreen.matches(title, BooxNotes.splitPath(it.value).lastOrNull() ?: it.value) }
+
+    // ---- Clipboard hub ---------------------------------------------------------------------
+
+    private enum class ClipFilter(val label: String) { ALL("All"), TEXT("Text"), LINKS("Links"), IMAGES("Images"), PINNED("Pinned") }
+
+    private var clipFilter = ClipFilter.ALL
+    private var clipQuery = ""
+    private var clipPage = 0
+
+    /** The clip whose actions are showing (it was tapped or held). */
+    private var clipOpen: String? = null
+    private var clipSearch: android.widget.EditText? = null
+    private var clipBody: LinearLayout? = null
+    private var clipCount: TextView? = null
+
+    private fun toggleClipboard() {
+        if (mode == Mode.CLIPBOARD) return show(Mode.MAIN)
+        ClipHistory.checkInForeground(service, prefs, foregroundPackage)
+        clipPage = 0
+        clipOpen = null
+        show(Mode.CLIPBOARD)
+    }
+
+    private fun clipboardHub(): View = with(ctx) {
+        vbox().apply {
+            addView(hbox().apply {
+                setPadding(s(14), s(10), s(6), s(4))
+                addView(icon(getDrawable(R.drawable.ic_clipboard), iconPx(24)))
+                addView(text("Clipboard", sp(18f), bold = true).apply { setPadding(s(8), 0, 0, 0) })
+                addView(text("", sp(13f), color = Ink.MUTED).apply { setPadding(s(6), 0, 0, 0); clipCount = this }, lp(0, WRAP, 1f))
+                addView(icon(getDrawable(R.drawable.ic_close), iconPx(24)).apply {
+                    contentDescription = "Close the clipboard"
+                    setPadding(s(8), s(8), s(8), s(8))
+                    pressable()
+                    setOnClickListener { show(Mode.MAIN) }
+                })
+            }, lp(MATCH, WRAP))
+            // The search field is kept across redraws so typing (and the keyboard) isn't interrupted.
+            val search = clipSearch ?: android.widget.EditText(ctx).apply {
+                hint = "Search clipboard"
+                textSize = sp(15f)
+                setTextColor(Ink.INK)
+                setHintTextColor(Ink.MUTED)
+                isSingleLine = true
+                imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                background = outline(2, 8)
+                setPadding(s(10), s(7), s(10), s(7))
+                setCompoundDrawablesRelativeWithIntrinsicBounds(getDrawable(R.drawable.ic_search)?.mutate()?.apply {
+                    setTint(Ink.MUTED)
+                    setBounds(0, 0, s(20), s(20))
+                }, null, null, null)
+                compoundDrawablePadding = s(8)
+                addTextChangedListener(object : android.text.TextWatcher {
+                    override fun beforeTextChanged(t: CharSequence?, a: Int, b: Int, c: Int) = Unit
+                    override fun onTextChanged(t: CharSequence?, a: Int, b: Int, c: Int) = Unit
+                    override fun afterTextChanged(e: android.text.Editable?) {
+                        clipQuery = e?.toString().orEmpty()
+                        clipPage = 0
+                        clipOpen = null
+                        fillClips()
+                    }
+                })
+                setOnEditorActionListener { v, _, _ ->
+                    (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                        .hideSoftInputFromWindow(v.windowToken, 0)
+                    true
+                }
+                clipSearch = this
+            }
+            (search.parent as? ViewGroup)?.removeView(search)
+            addView(search, lp(MATCH, WRAP).apply { setMargins(s(12), s(4), s(12), s(8)) })
+            addView(vbox().also { clipBody = it }, lp(MATCH, 0, 1f))
+            fillClips()
+        }
+    }
+
+    private fun clipMatches(c: ClipHistory.Clip): Boolean {
+        val kindOk = when (clipFilter) {
+            ClipFilter.ALL -> true
+            ClipFilter.TEXT -> c.kind == ClipHistory.Kind.TEXT
+            ClipFilter.LINKS -> c.kind == ClipHistory.Kind.LINK
+            ClipFilter.IMAGES -> c.kind == ClipHistory.Kind.IMAGE
+            ClipFilter.PINNED -> c.pinned
+        }
+        val q = clipQuery.trim()
+        return kindOk && (q.isEmpty() || c.text.contains(q, ignoreCase = true) ||
+            (c.source != null && Launcher.appLabel(service, c.source).contains(q, ignoreCase = true)))
+    }
+
+    /** Filter chips, the clips on this page (pinned first) and the pager. */
+    private fun fillClips() {
+        val body = clipBody ?: return
+        body.removeAllViews()
+        val all = ClipHistory.list(service)
+        clipCount?.text = "· ${all.size} ${if (all.size == 1) "item" else "items"}"
+        with(ctx) {
+            body.addView(hbox().apply {
+                setPadding(s(12), 0, s(8), s(6))
+                ClipFilter.entries.forEach { f ->
+                    val on = f == clipFilter
+                    addView(text(f.label, sp(13.5f), bold = true, color = if (on) Ink.PAPER else Ink.INK).apply {
+                        gravity = Gravity.CENTER
+                        setPadding(s(10), s(4), s(10), s(4))
+                        pressable(outline(2, 16, if (on) Ink.INK else Ink.PAPER))
+                        setOnClickListener {
+                            clipFilter = f
+                            clipPage = 0
+                            clipOpen = null
+                            fillClips()
+                        }
+                    }, lp(WRAP, WRAP).apply { marginEnd = s(6) })
+                }
+            }, lp(MATCH, WRAP))
+        }
+        val shown = all.filter(::clipMatches).sortedByDescending { it.pinned }
+        val per = if (prefs.clipCoversApps) CLIPS_PER_PAGE_FULL else CLIPS_PER_PAGE
+        val pages = maxOf(1, (shown.size + per - 1) / per)
+        clipPage = clipPage.coerceIn(0, pages - 1)
+        val list = ctx.vbox()
+        if (shown.isEmpty()) {
+            list.addView(hint(when {
+                all.isEmpty() -> if (prefs.clipCatchMode == Prefs.CLIP_EVERY && AdvancedAccess.allowed())
+                    "Nothing copied yet. Copies show up here as you make them."
+                else "Nothing copied yet. Copy something, then open the panel: what's on the clipboard is saved each time it opens."
+                clipQuery.isNotBlank() -> "No clips match “${clipQuery.trim()}”."
+                else -> "No ${clipFilter.label.lowercase()} clips."
+            }))
+        }
+        val current = ClipHistory.currentId(service)
+        var lastPinned: Boolean? = null
+        shown.drop(clipPage * per).take(per).forEach { c ->
+            if (clipFilter == ClipFilter.ALL && c.pinned != lastPinned && shown.any { it.pinned } ) {
+                list.addView(ctx.text(if (c.pinned) "PINNED" else "RECENT", sp(12f), bold = true).apply {
+                    letterSpacing = 0.06f
+                    setPadding(s(16), s(6), s(16), s(2))
+                })
+            }
+            lastPinned = c.pinned
+            list.addView(clipRow(c, c.id == current), lp(MATCH, WRAP).apply { setMargins(s(10), s(4), s(10), s(4)) })
+        }
+        // Pages, like the rest of the panel; scrolls only if an opened clip makes the page too tall.
+        val swipe = SwipeRow(ctx, s(40), vertical = true) { dir ->
+            val to = clipPage + dir
+            if (to in 0 until pages) { clipPage = to; clipOpen = null; fillClips() }
+        }
+        swipe.addView(list, lp(MATCH, WRAP))
+        body.addView(scrolling(swipe), lp(MATCH, 0, 1f))
+        if (pages > 1) {
+            body.addView(ctx.hbox().apply {
+                gravity = Gravity.CENTER
+                setPadding(0, s(2), 0, s(6))
+                addView(pagerButton(R.drawable.ic_chevron_left, "Newer clips", clipPage > 0) { clipPage--; clipOpen = null; fillClips() })
+                addView(ctx.text("${clipPage + 1} / $pages", sp(13f), bold = true).apply { setPadding(s(12), 0, s(12), 0) })
+                addView(pagerButton(R.drawable.ic_chevron_right, "Older clips", clipPage < pages - 1) { clipPage++; clipOpen = null; fillClips() })
+            }, lp(MATCH, WRAP))
+        }
+    }
+
+    private fun clipRow(c: ClipHistory.Clip, current: Boolean): View = with(ctx) {
+        val open = clipOpen == c.id
+        hbox().apply {
+            gravity = Gravity.TOP
+            background = outline(if (current) 3 else 2, 8)
+            setPadding(s(10), s(9), s(10), s(9))
+            val kindIcon = when (c.kind) {
+                ClipHistory.Kind.TEXT -> R.drawable.ic_text
+                ClipHistory.Kind.LINK -> R.drawable.ic_link
+                ClipHistory.Kind.IMAGE -> R.drawable.ic_image
+            }
+            addView(FrameLayout(ctx).apply {
+                background = outline(1, 6)
+                addView(icon(getDrawable(kindIcon), iconPx(18)), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+            }, lp(s(30), s(30)))
+            addView(vbox().apply {
+                setPadding(s(10), 0, s(6), 0)
+                if (c.kind == ClipHistory.Kind.IMAGE) {
+                    addView(clipThumb(c, if (open) 160 else 64))
+                } else {
+                    addView(text(c.text.trim(), sp(15f)).apply {
+                        maxLines = if (open) 8 else 2
+                        ellipsize = TextUtils.TruncateAt.END
+                    })
+                }
+                addView(hbox().apply {
+                    setPadding(0, s(3), 0, 0)
+                    if (current) addView(text("ON CLIPBOARD", sp(10.5f), bold = true).apply {
+                        background = outline(1, 4)
+                        setPadding(s(4), 0, s(4), 0)
+                    }, lp(WRAP, WRAP).apply { marginEnd = s(6) })
+                    if (c.pinned) addView(icon(getDrawable(R.drawable.ic_pin), iconPx(13)), lp(s(14), s(14)).apply { marginEnd = s(3) })
+                    val from = c.source?.let { Launcher.appLabel(service, it) }
+                    addView(oneLine(text(listOfNotNull(if (c.pinned) "Pinned" else null, from, ago(c.time)).joinToString(" · "), sp(12f), color = Ink.MUTED)))
+                })
+                if (open) addView(clipActions(c), lp(MATCH, WRAP))
+                pressable()
+                // Tap or hold: show or hide this clip's actions.
+                val toggle = { clipOpen = if (open) null else c.id; fillClips() }
+                setOnClickListener { toggle() }
+                setOnLongClickListener { toggle(); true }
+            }, lp(0, WRAP, 1f))
+            if (!open) addView(FrameLayout(ctx).apply {
+                contentDescription = "Copy"
+                addView(icon(getDrawable(R.drawable.ic_copy), iconPx(20)), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+                pressable()
+                background = ovalButton()
+                setOnClickListener { copyClip(c) }
+            }, lp(s(38), s(38)))
+        }
+    }
+
+    private fun clipThumb(c: ClipHistory.Clip, heightDp: Int): View = with(ctx) {
+        val f = ClipHistory.imageFile(service, c)
+        val bmp = f?.takeIf { it.exists() }?.let { file ->
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(file.path, bounds)
+            var sample = 1
+            while (bounds.outHeight / sample > s(heightDp) * 2) sample *= 2
+            android.graphics.BitmapFactory.decodeFile(file.path, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+        }
+        if (bmp == null) return@with text("Image no longer available", sp(14f), color = Ink.MUTED)
+        ImageView(ctx).apply {
+            setImageBitmap(bmp)
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_START
+            maxHeight = s(heightDp)
+            background = outline(1, 4)
+            setPadding(s(2), s(2), s(2), s(2))
+            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
+        }
+    }
+
+    /** Copy · Paste in app · Share… / Pin · Delete (· Open, for links), in place under the clip. */
+    private fun clipActions(c: ClipHistory.Clip): View = with(ctx) {
+        val actions = listOfNotNull(
+            Triple(R.drawable.ic_copy, "Copy") { copyClip(c) },
+            Triple(R.drawable.ic_paste, "Paste in app") { pasteClip(c) },
+            if (c.kind == ClipHistory.Kind.LINK) Triple(R.drawable.ic_open, "Open") { openLink(c) } else null,
+            Triple(R.drawable.ic_share, "Share…") { shareClip(c) },
+            Triple(R.drawable.ic_pin, if (c.pinned) "Unpin" else "Pin") {
+                ClipHistory.setPinned(service, c.id, !c.pinned)
+                fillClips()
+            },
+            Triple(R.drawable.ic_delete, "Delete") {
+                ClipHistory.delete(service, c.id)
+                clipOpen = null
+                fillClips()
+            },
+        )
+        vbox().apply {
+            setPadding(0, s(8), 0, 0)
+            actions.chunked(3).forEach { row ->
+                addView(hbox().apply {
+                    row.forEachIndexed { i, (res, label, action) ->
+                        val dark = i == 0 && label == "Copy"
+                        addView(hbox().apply {
+                            gravity = Gravity.CENTER
+                            minimumHeight = s(38)
+                            setPadding(s(4), s(4), s(4), s(4))
+                            addView(icon(getDrawable(res), iconPx(17)).apply { if (dark) imageTintList = ColorStateList.valueOf(Ink.PAPER) })
+                            addView(oneLine(text(label, sp(13.5f), bold = true, color = if (dark) Ink.PAPER else Ink.INK)).apply { setPadding(s(5), 0, 0, 0) })
+                            contentDescription = label
+                            pressable(outline(2, 6, if (dark) Ink.INK else Ink.PAPER))
+                            setOnClickListener { action() }
+                        }, lp(0, WRAP, 1f).apply { if (i < 2) marginEnd = s(6) })
+                    }
+                    repeat(3 - row.size) { addView(View(ctx), lp(0, 1, 1f).apply { marginEnd = s(6) }) }
+                }, lp(MATCH, WRAP).apply { bottomMargin = s(6) })
+            }
+        }
+    }
+
+    private fun copyClip(c: ClipHistory.Clip) {
+        if (ClipHistory.putBack(service, c)) {
+            toast(if (c.kind == ClipHistory.Kind.IMAGE) "Image copied" else "Copied")
+            clipOpen = null
+            fillClips()
+        } else {
+            toast("Couldn't copy that")
+        }
+    }
+
+    private fun pasteClip(c: ClipHistory.Clip) {
+        if (!ClipHistory.putBack(service, c)) return toast("Couldn't copy that")
+        service.hidePanel()
+        service.pasteIntoApp()
+    }
+
+    private fun openLink(c: ClipHistory.Clip) {
+        val t = c.text.trim()
+        val uri = Uri.parse(if (t.startsWith("www.")) "https://$t" else t)
+        if (Launcher.tryStart(service, Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))) service.hidePanel()
+        else toast("No app can open this link")
+    }
+
+    private fun shareClip(c: ClipHistory.Clip) {
+        val send = Intent(Intent.ACTION_SEND)
+        if (c.kind == ClipHistory.Kind.IMAGE) {
+            val uri = ClipHistory.contentUri(c) ?: return toast("Image no longer available")
+            send.type = "image/png"
+            send.putExtra(Intent.EXTRA_STREAM, uri)
+            send.clipData = android.content.ClipData.newRawUri("Image", uri)
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } else {
+            send.type = "text/plain"
+            send.putExtra(Intent.EXTRA_TEXT, c.text)
+        }
+        val chooser = Intent.createChooser(send, "Share clip").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (Launcher.tryStart(service, chooser)) service.hidePanel()
+    }
 
     // ---- Recent Files ----------------------------------------------------------------------
 
@@ -1197,6 +1538,8 @@ class QuickAccessPanel(
         const val DOCK_PER_PAGE = 4
         const val QC_PER_PAGE = 5
         const val LIGHT_PER_PAGE = 4
+        const val CLIPS_PER_PAGE = 4
+        const val CLIPS_PER_PAGE_FULL = 7
         private val io = Executors.newSingleThreadExecutor()
     }
 }

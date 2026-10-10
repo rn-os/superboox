@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 50)
+# SuperBoox: handoff / status (as of build 51)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -215,6 +215,13 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 ## Build 50
 - Rename field puts the cursor at the end of the name when it gets focus (it had started at the beginning).
 - Mockups 31–33 (`clipboard.html`): clipboard hub replacing Quick Controls / Last Opened / Quick Access, Recent Files moved to the left of the Quick Access bar, option to cover the apps, held-clip actions, Settings → Clipboard. Awaiting decisions (cover apps or not; which actions).
+
+## Build 51: Clipboard hub
+- Approved from mockups 31–33 with "covers the apps" as the default (setting: Clipboard covers the apps too). The user liked tap/hold for a clip's actions. "Note it" left out (BOOX Notes has no text box to paste into); links get Open instead.
+- `ClipHistory.kt`: history in its own prefs file `clipboard` (not in backups), images copied to `filesDir/clips` and served by `ClipProvider` (authority `com.superboox.quickaccess.clips`). Dedupe by text (moves to top), limit applies to unpinned clips, password managers ignored by default (`DEFAULT_IGNORED`), clips marked `IS_SENSITIVE` skipped.
+- Capture: `checkInForeground` when the panel window gains focus (Android only lets the focused app read), skipping unchanged clips by `ClipDescription.timestamp`. `checkInBackground` (mode `every`, Shizuku allowed): on clicks, toasts and app switches (debounced 700 ms) calls IClipboard as `com.android.shell` through `ShizukuBinderWrapper`, with `HiddenApiBypass` (dependency `org.lsposed.hiddenapibypass:hiddenapibypass:6.1`). Failures are recorded in the debug report ("Clipboard" section, counts only, never clip contents). Accessibility config now also takes `typeViewClicked|typeNotificationStateChanged`.
+- Panel: `Mode.CLIPBOARD`; top bar Clipboard (lit while open) | New Note | ⚙, or Recent Files when the button is off; "Recent" at the left of the Quick Access bar. Hub: search field kept across redraws (`clipSearch`), chips, `CLIPS_PER_PAGE` 4 / `CLIPS_PER_PAGE_FULL` 7, swipe or ‹ › to page. Paste in app: `QuickAccessService.pasteIntoApp` (ACTION_PASTE on the focused input). Focusable panel windows use `SOFT_INPUT_STATE_HIDDEN`.
+- Settings → Clipboard (`clipboardSection`): button, covers apps, keep last N, images, keep after restart, ignored apps, catching mode, clear history.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

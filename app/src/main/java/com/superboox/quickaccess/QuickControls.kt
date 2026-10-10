@@ -58,6 +58,7 @@ object QuickControls {
             keys.any { normalized.startsWith(it) } && not.none { normalized.startsWith(it) }
     }
 
+    const val FRONT_LIGHT = "frontlight"
     private const val SWITCHES = "Switches"
     private const val BOOX = "BOOX"
     private const val ACTIONS = "Actions"
@@ -73,6 +74,8 @@ object QuickControls {
         Control("mute", "Mute", R.drawable.ic_qc_mute, Kind.TOGGLE, listOf("mute"), group = SWITCHES),
         Control("location", "Location", R.drawable.ic_qc_location, Kind.TOGGLE, listOf("location"), group = SWITCHES),
         Control("einkwise", "EinkWise", R.drawable.ic_settings, Kind.TOGGLE, listOf("einkwise", "eink wise"), group = BOOX),
+        // Not a tile: BOOX's Front Light presets under the tiles (see pressPreset).
+        Control(FRONT_LIGHT, "Front Light", R.drawable.ic_qc_light, Kind.TOGGLE, group = BOOX),
         Control("refresh", "Full Refresh", R.drawable.ic_qc_refresh, Kind.TOGGLE, listOf("full refresh"), group = BOOX, momentary = true),
         Control("handtouch", "Hand Touch", R.drawable.ic_qc_touch, Kind.TOGGLE, listOf("hand touch"), group = BOOX),
         Control("naviball", "NaviBall", R.drawable.ic_qc_naviball, Kind.TILE, listOf("naviball", "navi ball"), group = BOOX),
@@ -313,6 +316,107 @@ object QuickControls {
         val ok = runCatching { Settings.System.putInt(cr, Settings.System.ACCELEROMETER_ROTATION, if (on) 0 else 1) }.getOrDefault(false)
         DebugLog.i("controls", "auto-rotate set directly: ${if (on) "off" else "on"} -> $ok")
         return if (ok) !on else on
+    }
+
+    // ---- Front Light presets ---------------------------------------------------------------
+
+    /** BOOX's Front Light presets, in its order. */
+    val PRESETS = listOf("Bright", "Soft", "Custom", "Off")
+    const val PRESET_OFF = "Off"
+
+    /** The preset last seen or chosen (null: never seen). */
+    fun savedPreset(prefs: Prefs): String? = prefs.sp.getString(Prefs.K_FL_PRESET, null)
+
+    /** The preset to go back to when the light is switched on again. */
+    fun lastOnPreset(prefs: Prefs): String = prefs.sp.getString(Prefs.K_FL_LAST_ON, null) ?: "Bright"
+
+    private fun savePreset(prefs: Prefs, preset: String) {
+        val edit = prefs.sp.edit().putString(Prefs.K_FL_PRESET, preset)
+        if (preset != PRESET_OFF) edit.putString(Prefs.K_FL_LAST_ON, preset)
+        edit.apply()
+        saveStates(prefs, mapOf(FRONT_LIGHT to (preset != PRESET_OFF)))
+    }
+
+    /**
+     * Taps BOOX's [preset] button in the open Control Center. Returns whether
+     * the light was on before (from the selected preset), or [Press.found] false
+     * when the presets can't be seen (they may be scrolled out of view).
+     */
+    fun pressPreset(service: AccessibilityService, prefs: Prefs, preset: String): Press {
+        val buttons = runCatching { presetButtons(service) }.getOrDefault(emptyMap())
+        val before = selectedPreset(buttons)
+        before?.let { savePreset(prefs, it) }
+        val button = buttons[preset]
+        if (button == null) {
+            DebugLog.w("controls", "Front Light presets not found (${buttons.keys.joinToString().ifEmpty { "none" }})")
+            return Press(found = false, pressed = false, before = null)
+        }
+        val pressed = button.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        DebugLog.i("controls", "front light: tap \"$preset\" (was ${before ?: "?"}) -> $pressed")
+        return Press(found = true, pressed = pressed, before = before?.let { it != PRESET_OFF })
+    }
+
+    /** After [pressPreset]: records the preset now selected (taken as [preset] if it can't be read). */
+    fun settlePreset(service: AccessibilityService, prefs: Prefs, preset: String) {
+        val now = runCatching { selectedPreset(presetButtons(service)) }.getOrNull()
+        savePreset(prefs, now ?: preset)
+        DebugLog.i("controls", "front light is now ${now ?: "$preset (assumed)"}")
+    }
+
+    /** Scrolls the Control Center down, to bring the Front Light presets into view. */
+    fun scrollShade(service: AccessibilityService): Boolean {
+        for (w in service.windows) {
+            val root = w.root ?: continue
+            if (root.packageName?.toString()?.contains("systemui") != true) continue
+            val scroll = root.findAccessibilityNodeInfosByViewId("${root.packageName}:id/expanded_qs_scroll_view").firstOrNull() ?: continue
+            return scroll.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+        }
+        return false
+    }
+
+    /** Preset name to its button, found from the "Soft" label up to the row that holds all four. */
+    private fun presetButtons(service: AccessibilityService): Map<String, AccessibilityNodeInfo> {
+        for (w in service.windows) {
+            val root = w.root ?: continue
+            if (root.packageName?.toString()?.contains("systemui") != true) continue
+            val soft = labelled(root, setOf("soft"))["soft"]?.firstOrNull() ?: continue
+            var area: AccessibilityNodeInfo? = soft.parent
+            repeat(6) {
+                val a = area ?: return@repeat
+                val found = labelled(a, PRESETS.map { it.lowercase() }.toSet())
+                if (found.size == PRESETS.size) {
+                    val labels = PRESETS.associateWith { found.getValue(it.lowercase()).first() }
+                    val buttons = labels.mapValues { (_, n) -> pressable(n, false) ?: n }
+                    // One clickable around all four would be the row, not a button: tap the labels.
+                    return if (buttons.values.toSet().size == PRESETS.size) buttons else labels
+                }
+                area = a.parent
+            }
+        }
+        return emptyMap()
+    }
+
+    /** Nodes under [root] whose whole label is one of [names] (lowercase). */
+    private fun labelled(root: AccessibilityNodeInfo, names: Set<String>): Map<String, List<AccessibilityNodeInfo>> {
+        val out = HashMap<String, MutableList<AccessibilityNodeInfo>>()
+        fun walk(n: AccessibilityNodeInfo, depth: Int) {
+            if (depth > 40) return
+            val label = (n.text ?: n.contentDescription)?.toString()?.trim()?.lowercase()
+            if (label != null && label in names) out.getOrPut(label) { ArrayList() } += n
+            for (i in 0 until n.childCount) n.getChild(i)?.let { walk(it, depth + 1) }
+        }
+        walk(root, 0)
+        return out
+    }
+
+    /** The preset whose button (or anything in it) is selected or checked. */
+    private fun selectedPreset(buttons: Map<String, AccessibilityNodeInfo>): String? =
+        buttons.entries.firstOrNull { (_, b) -> anySelected(b, 0) }?.key
+
+    private fun anySelected(n: AccessibilityNodeInfo, depth: Int): Boolean {
+        if (n.isSelected || (n.isCheckable && n.isChecked)) return true
+        if (depth > 4) return false
+        return (0 until n.childCount).any { i -> n.getChild(i)?.let { anySelected(it, depth + 1) } == true }
     }
 
     private class Tile(val node: AccessibilityNodeInfo, val label: String, val normalized: String, val on: Boolean?)

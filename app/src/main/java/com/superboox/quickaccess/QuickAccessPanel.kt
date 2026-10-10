@@ -205,6 +205,9 @@ class QuickAccessPanel(
 
     // ---- Quick Controls: one row of round tiles, paged ----------------------------------
 
+    /** Front Light's presets are showing under the Quick Controls (it was held). */
+    private var lightMenu = false
+
     /** Redraws in place (Quick Controls after a tap). */
     fun refresh() = show(mode)
 
@@ -237,16 +240,54 @@ class QuickAccessPanel(
                 addView(pagerButton(R.drawable.ic_chevron_right, "More controls", page < pages.size - 1) { go(page + 1) })
             }, lp(MATCH, WRAP))
         }
+        if (lightMenu && controls.any { it.id == QuickControls.FRONT_LIGHT }) box.addView(frontLightMenu(), lp(MATCH, WRAP))
         box
     }
 
-    /** Round tile like the BOOX Control Center: black when on, outlined when off. */
-    private fun controlTile(control: QuickControls.Control, on: Boolean): View = with(ctx) {
-        val lit = on && control.kind == QuickControls.Kind.TOGGLE && !control.momentary
+    /** Bright · Soft · Custom · Off, like BOOX's Front Light card; the one in use is black. */
+    private fun frontLightMenu(): View = with(ctx) {
+        val current = service.frontLightPreset()
+        vbox().apply {
+            background = outline(2, 10)
+            setPadding(s(6), s(8), s(6), s(10))
+            addView(hbox().apply {
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(s(8), 0, s(2), s(6))
+                addView(text("Front Light", sp(16f), bold = true), lp(0, WRAP, 1f))
+                addView(icon(getDrawable(R.drawable.ic_close), iconPx(22)).apply {
+                    contentDescription = "Close Front Light presets"
+                    setPadding(s(6), s(6), s(6), s(6))
+                    pressable()
+                    setOnClickListener { lightMenu = false; show(mode) }
+                })
+            }, lp(MATCH, WRAP))
+            addView(hbox().apply {
+                val icons = mapOf("Bright" to R.drawable.ic_qc_light, "Soft" to R.drawable.ic_qc_dnd,
+                    "Custom" to R.drawable.ic_settings, "Off" to R.drawable.ic_qc_light_off)
+                QuickControls.PRESETS.forEach { preset ->
+                    val tile = roundTile(preset, icons.getValue(preset), lit = preset == current, description = "Front Light $preset")
+                    tile.setOnClickListener { service.frontLight(preset) }
+                    addView(tile, lp(0, WRAP, 1f))
+                }
+            }, lp(MATCH, WRAP))
+            addView(text("Tap a preset to switch to it. Custom uses your own BOOX setting.", sp(12.5f), color = Ink.MUTED).apply {
+                gravity = Gravity.CENTER
+                setPadding(s(4), s(8), s(4), 0)
+            }, lp(MATCH, WRAP))
+        }.let { menu ->
+            FrameLayout(ctx).apply {
+                setPadding(s(6), s(6), s(6), s(8))
+                addView(menu, FrameLayout.LayoutParams(MATCH, WRAP))
+            }
+        }
+    }
+
+    /** Round tile with a label under it: black when [lit]. */
+    private fun roundTile(label: String, iconRes: Int, lit: Boolean, description: String): ViewGroup = with(ctx) {
         vbox().apply {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, 0, 0, s(6))
-            contentDescription = "${control.label}${if (control.kind == QuickControls.Kind.TOGGLE) if (on) ", on" else ", off" else ""}"
+            contentDescription = description
             val size = s(52)
             addView(FrameLayout(ctx).apply {
                 background = android.graphics.drawable.GradientDrawable().apply {
@@ -254,23 +295,36 @@ class QuickAccessPanel(
                     setColor(if (lit) Ink.INK else Ink.PAPER)
                     setStroke(dp(2), Ink.INK)
                 }
-                addView(icon(getDrawable(control.icon), iconPx(26)).apply {
+                addView(icon(getDrawable(iconRes), iconPx(26)).apply {
                     imageTintList = ColorStateList.valueOf(if (lit) Ink.PAPER else Ink.INK)
                 }, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
             }, lp(size, size))
-            addView(text(control.label, sp(12f)).apply {
+            addView(text(label, sp(12f)).apply {
                 gravity = Gravity.CENTER
                 maxLines = 2
                 setPadding(s(2), s(5), s(2), 0)
             }, lp(MATCH, WRAP))
             pressable()
+        }
+    }
+
+    /** Round tile like the BOOX Control Center: black when on, outlined when off. */
+    private fun controlTile(control: QuickControls.Control, on: Boolean): View = with(ctx) {
+        val lit = on && control.kind == QuickControls.Kind.TOGGLE && !control.momentary
+        val description = "${control.label}${if (control.kind == QuickControls.Kind.TOGGLE) if (on) ", on" else ", off" else ""}"
+        roundTile(control.label, control.icon, lit, description).apply {
             setOnClickListener {
                 // One-shot controls (Full Refresh) give a quick spin of the icon instead of filling.
                 if (control.momentary) (getChildAt(0) as? ViewGroup)?.getChildAt(0)?.animate()?.rotationBy(360f)?.setDuration(500)?.start()
                 service.quickControl(control, hold = false)
             }
             setOnLongClickListener {
-                service.quickControl(control, hold = true)
+                if (control.id == QuickControls.FRONT_LIGHT) {
+                    lightMenu = !lightMenu
+                    show(mode)
+                } else {
+                    service.quickControl(control, hold = true)
+                }
                 true
             }
         }
@@ -823,11 +877,11 @@ class QuickAccessPanel(
 
     private fun toast(msg: String) = Toast.makeText(service, msg, Toast.LENGTH_SHORT).show()
 
-    private companion object {
+    companion object {
         // Two rows of two, like the Supernote photo; more pages with ‹ ›.
         const val DOCK_PER_PAGE = 4
         const val QC_PER_PAGE = 5
-        val io = Executors.newSingleThreadExecutor()
+        private val io = Executors.newSingleThreadExecutor()
     }
 }
 

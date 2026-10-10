@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 35)
+# SuperBoox: handoff / status (as of build 36)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -141,7 +141,13 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - `Prefs.rememberPages` (default off) keeps the last page instead. It has no Settings UI yet: it's in the proposed Settings menus mockup (`docs/mockups/settings-menus.html`, `23-settings-menus.png`), awaiting approval.
 
 ## Build 35
-- The debug report's Control Center section now lists BOOX's Front Light area (`front light area:`, with selected/checked states). Read it to build the proposed Front Light Quick Control (`docs/mockups/front-light.html`, `24-front-light.png`: tap = off / back to the last preset; hold = Bright · Soft · Custom · Off inside the panel). Awaiting approval.
+- The debug report's Control Center section now lists BOOX's Front Light area (`front light area:`, with selected/checked states). Read it to build the proposed Front Light Quick Control (`docs/mockups/front-light.html`, `24-front-light.png`: tap = off / back to the last preset; hold = Bright · Soft · Custom · Off inside the panel). Approved; built in 36.
+
+## Build 36 (approved mockups 23 and 24)
+- Settings is split into pages (`SettingsActivity.Page`). Home has the status card and menu rows with summaries, in the groups Opening the panel / In the panel / Help. Each page has a ‹ title bar; Back returns to Home. Gesture keeps only the edge settings. **Look & size** has panel width, menu size, app icons and **Remember last page** (`Prefs.rememberPages`).
+- **Front Light** Quick Control (`QuickControls.FRONT_LIGHT`, BOOX group, not in the default set). Tap goes to BOOX's Off preset, or back to the last preset that wasn't Off (`K_FL_LAST_ON`, Bright if never seen). Hold toggles a Bright · Soft · Custom · Off box under the Quick Controls row (`QuickAccessPanel.lightMenu`); tapping a preset calls `service.frontLight(preset)`.
+- Presses go through the session queue (`QcTask.preset`). `QuickControls.pressPreset` finds the row from the exact "Soft" label up to the ancestor holding all four labels. The selected preset is any selected/checked node in a button. If the row isn't found, it scrolls `expanded_qs_scroll_view` once and retries. **Not yet confirmed on device**: check the build 35/36 report's `front light area:` and the `front light: tap` log lines.
+- Quick Controls descriptions: Full Refresh now says "Tap: full refresh".
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.
@@ -149,4 +155,4 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 ## Open ideas / backlog
 - Store the note id in pins when pinning, so lookup by title isn't needed.
 - Last Opened Document only returns to the last reading app; titles depend on that app.
-- Mockups `docs/mockups/10–14` show the approved Supernote design, `15–16` the approved bordered Settings (`settings-borders.html`), `17` the approved icons (`panel-icons.html`), `18/20/21` Quick Controls (`quick-controls.html`), `22` Previous app (`previous-app.html`), `23` proposed Settings menus (`settings-menus.html`, not yet approved), `24` proposed Front Light (`front-light.html`, not yet approved); `01–09` show the older design.
+- Mockups `docs/mockups/10–14` show the approved Supernote design, `15–16` the approved bordered Settings (`settings-borders.html`), `17` the approved icons (`panel-icons.html`), `18/20/21` Quick Controls (`quick-controls.html`), `22` Previous app (`previous-app.html`), `23` proposed Settings menus (`settings-menus.html`, approved, built in 36), `24` proposed Front Light (`front-light.html`, approved, built in 36); `01–09` show the older design.

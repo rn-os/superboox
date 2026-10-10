@@ -188,6 +188,8 @@ class Prefs(context: Context) {
         const val K_PINS = "pins"
         const val K_DOCK = "dock"
         const val K_REMEMBER_PAGES = "remember_pages"
+        const val K_FL_PRESET = "front_light_preset"
+        const val K_FL_LAST_ON = "front_light_last_on"
 
         /** Keys whose change requires the edge handle window to be rebuilt. */
         val HANDLE_KEYS = setOf(K_EDGE, K_TRIGGER, K_HANDLE_WIDTH, K_HANDLE_HEIGHT, K_HANDLE_TOP, K_SHOW_HANDLE, K_HANDLE_ENABLED)

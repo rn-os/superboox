@@ -48,18 +48,121 @@ class SettingsActivity : Activity() {
         render()
     }
 
+    /** The settings pages: Home lists the others. */
+    private enum class Page(val title: String) {
+        HOME("SuperBoox"), GESTURE("Gesture"), LOOK("Look & size"), ITEMS("Quick Access items"),
+        CONTROLS("Quick Controls"), APPS("Apps at the bottom"), RECENT("Recent files"),
+        TROUBLESHOOTING("Troubleshooting"), ADVANCED("Advanced"),
+    }
+
+    private var page = Page.HOME
+
     private fun render() {
         val y = scroll.scrollY
         list.removeAllViews()
-        statusSection()
-        gestureSection()
-        quickControlsSection()
-        pinsSection()
-        dockSection()
-        recentSection()
-        advancedSection()
-        troubleshootingSection()
+        if (page == Page.HOME) {
+            statusSection()
+            homeMenu()
+        } else {
+            pageTitle(page.title)
+            list.addView(View(this), lp(MATCH, dp(4)))
+            when (page) {
+                Page.GESTURE -> gestureSection()
+                Page.LOOK -> lookSection()
+                Page.ITEMS -> pinsSection()
+                Page.CONTROLS -> quickControlsSection()
+                Page.APPS -> dockSection()
+                Page.RECENT -> recentSection()
+                Page.TROUBLESHOOTING -> troubleshootingSection()
+                Page.ADVANCED -> advancedSection()
+                Page.HOME -> Unit
+            }
+        }
         scroll.post { scroll.scrollTo(0, y) }
+    }
+
+    private fun open(to: Page) {
+        page = to
+        render()
+        scroll.post { scroll.scrollTo(0, 0) }
+    }
+
+    @Deprecated("Platform Activity API; fine without AndroidX.")
+    override fun onBackPressed() {
+        if (page != Page.HOME) open(Page.HOME) else super.onBackPressed()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(K_PAGE, page.name)
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        page = savedInstanceState.getString(K_PAGE)?.let { runCatching { Page.valueOf(it) }.getOrNull() } ?: Page.HOME
+    }
+
+    /** A section page's title bar: ‹ back to Home, then the name, over a heavy rule. */
+    private fun pageTitle(title: String) {
+        list.addView(hbox().apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(18), dp(16), dp(10))
+            addView(inkIconButton(R.drawable.ic_chevron_left, "Back", 44) { open(Page.HOME) })
+            addView(text(title, 28f, bold = true).apply { setPadding(dp(14), 0, 0, 0) }, lp(0, WRAP, 1f))
+        })
+        list.addView(divider(3))
+    }
+
+    private fun homeMenu() {
+        val controls = QuickControls.selected(prefs)
+        val dock = prefs.dock
+        val apps = dock.count { it.id != Prefs.PREVIOUS_APP }
+        val folder = prefs.recentFolderUri
+        list.addView(heading("Opening the panel"))
+        list.addView(card(listOf(
+            menuRow(R.drawable.ic_qc_touch, Page.GESTURE,
+                if (prefs.handleEnabled) "${prefs.edge.name.lowercase().replaceFirstChar { it.uppercase() }} edge · ${prefs.trigger.title}" else "Edge gesture off"),
+            menuRow(R.drawable.ic_panel, Page.LOOK,
+                "${prefs.panelWidthPct}% wide · ${prefs.menuSize.title} menu · ${if (prefs.rememberPages) "Remembers last page" else "Starts on page 1"}"),
+        )))
+        list.addView(heading("In the panel"))
+        list.addView(card(listOf(
+            menuRow(R.drawable.ic_star, Page.ITEMS, prefs.pins.size.let { if (it == 1) "1 item" else "$it items" }),
+            menuRow(R.drawable.ic_toggle, Page.CONTROLS,
+                if (prefs.showSystemActions) "On · ${controls.size} controls" else "Off"),
+            menuRow(R.drawable.ic_apps, Page.APPS,
+                (if (apps == 1) "1 app" else "$apps apps") + if (prefs.previousAppInDock) " · Previous app included" else ""),
+            menuRow(R.drawable.ic_clock, Page.RECENT,
+                if (folder == null) "Off" else "Folder: ${Launcher.displayName(this, Uri.parse(folder))}"),
+        )))
+        list.addView(heading("Help"))
+        list.addView(card(listOf(
+            menuRow(R.drawable.ic_bug, Page.TROUBLESHOOTING, "Copy or share a debug report"),
+            menuRow(R.drawable.ic_settings, Page.ADVANCED, "BOOX Notes package"),
+        )))
+        list.addView(View(this), lp(MATCH, dp(24)))
+    }
+
+    /** Home row: round icon, the page's name with what's set under it, and ›. */
+    private fun menuRow(iconRes: Int, to: Page, summary: String): View = hbox().apply {
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(14), dp(12), dp(14), dp(12))
+        contentDescription = "${to.title}: $summary"
+        addView(android.widget.FrameLayout(context).apply {
+            background = outline(2, 20)
+            addView(icon(getDrawable(iconRes), 22), android.widget.FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+        }, lp(dp(40), dp(40)))
+        addView(vbox().apply {
+            setPadding(dp(14), 0, dp(8), 0)
+            addView(text(to.title, 18f, medium = true))
+            addView(text(summary, 13f, color = Ink.MUTED).apply {
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            })
+        }, lp(0, WRAP, 1f))
+        addView(text("›", 26f, bold = true))
+        pressable()
+        setOnClickListener { open(to) }
     }
 
     // ---- Sections -------------------------------------------------------------------------
@@ -93,7 +196,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun gestureSection() {
-        list.addView(heading("Gesture"))
+        list.addView(heading("Edge gesture"))
         list.addView(card(listOf(
             choiceRow("Screen edge", prefs.edge.name.lowercase().replaceFirstChar { it.uppercase() }) {
                 pick("Screen edge", Edge.entries.map { it.name.lowercase().replaceFirstChar { c -> c.uppercase() } }, prefs.edge.ordinal) {
@@ -108,11 +211,6 @@ class SettingsActivity : Activity() {
             slider("Touch strip width", prefs.handleWidthDp, 6, 48, "dp") { prefs.handleWidthDp = it },
             slider("Touch strip height", prefs.handleHeightPct, 10, 100, "% of screen") { prefs.handleHeightPct = it },
             slider("Touch strip position from top", prefs.handleTopPct, 0, 90, "%") { prefs.handleTopPct = it },
-            slider("Panel width", prefs.panelWidthPct, 25, 100, "% of screen") { prefs.panelWidthPct = it },
-            choiceRow("Menu size", prefs.menuSize.title) {
-                pick("Menu size", MenuSize.entries.map { it.title }, prefs.menuSize.ordinal) { prefs.menuSize = MenuSize.entries[it] }
-            },
-            check("Use apps' own icons for pinned apps", prefs.appOwnIcons) { prefs.appOwnIcons = it },
         )))
         list.addView(
             note(
@@ -122,8 +220,28 @@ class SettingsActivity : Activity() {
         )
     }
 
+    private fun lookSection() {
+        list.addView(heading("Size"))
+        list.addView(card(listOf(
+            slider("Panel width", prefs.panelWidthPct, 25, 100, "% of screen") { prefs.panelWidthPct = it },
+            choiceRow("Menu size", prefs.menuSize.title) {
+                pick("Menu size", MenuSize.entries.map { it.title }, prefs.menuSize.ordinal) { prefs.menuSize = MenuSize.entries[it] }
+            },
+        )))
+        list.addView(heading("Icons"))
+        list.addView(card(listOf(
+            check("Use apps' own icons for pinned apps", prefs.appOwnIcons) { prefs.appOwnIcons = it },
+        )))
+        list.addView(note("Off: every app gets the same black app icon, to match the rest of the panel."))
+        list.addView(heading("Pages"))
+        list.addView(card(listOf(
+            check("Remember last page", prefs.rememberPages) { prefs.rememberPages = it },
+        )))
+        list.addView(note("Quick Controls and apps reopen on the page you left them on. Off: they start on page 1 each time the panel opens."))
+    }
+
     private fun pinsSection() {
-        list.addView(heading("Quick Access items"))
+        list.addView(View(this), lp(MATCH, dp(12)))
         val pins = prefs.pins
         val rows = mutableListOf<View>()
         if (pins.isEmpty()) rows += cardText("No items yet.")
@@ -145,11 +263,13 @@ class SettingsActivity : Activity() {
     }
 
     private fun quickControlsSection() {
-        list.addView(heading("Quick Controls"))
         val controls = QuickControls.selected(prefs)
-        val rows = mutableListOf<View>(
+        list.addView(View(this), lp(MATCH, dp(12)))
+        list.addView(card(listOf(
             check("Show Quick Controls in the panel", prefs.showSystemActions) { prefs.showSystemActions = it },
-        )
+        )))
+        list.addView(heading("Controls · ${QuickAccessPanel.QC_PER_PAGE} per page"))
+        val rows = mutableListOf<View>()
         controls.forEachIndexed { i, c ->
             rows += controlRow(c, i, controls.size,
                 onMove = { from, to -> QuickControls.save(prefs, controls.move(from, to)) },
@@ -161,7 +281,7 @@ class SettingsActivity : Activity() {
             "Reset to default" to { QuickControls.reset(prefs); render() },
         )
         list.addView(card(rows))
-        list.addView(note("Tap a control to switch it; hold it to open its settings. Swipe sideways or use ‹ › for more. Wi‑Fi, Bluetooth and the BOOX tiles work through the BOOX Control Center."))
+        list.addView(note("Tap a control to switch it; hold it to open its settings (Front Light: hold for its presets). Swipe sideways or use ‹ › for more. Wi‑Fi, Bluetooth, Front Light and the BOOX tiles work through the BOOX Control Center."))
     }
 
     private fun controlRow(c: QuickControls.Control, index: Int, count: Int, onMove: (Int, Int) -> Unit, onRemove: () -> Unit): View = hbox().apply {
@@ -183,8 +303,15 @@ class SettingsActivity : Activity() {
         small(R.drawable.ic_delete, "Remove") { onRemove() }
     }
 
-    private fun describe(c: QuickControls.Control): String = when (c.kind) {
-        QuickControls.Kind.TOGGLE -> if (c.id == "rotate") "Tap: on/off · hold: rotation menu" else "Tap: on/off · hold: its settings"
+    private fun describe(c: QuickControls.Control): String = when {
+        c.id == QuickControls.FRONT_LIGHT -> "Tap: on/off · hold: Bright, Soft, Custom, Off"
+        c.id == "rotate" -> "Tap: on/off · hold: rotation menu"
+        c.momentary -> "Tap: ${c.label.lowercase()} · hold: its settings"
+        else -> describeKind(c)
+    }
+
+    private fun describeKind(c: QuickControls.Control): String = when (c.kind) {
+        QuickControls.Kind.TOGGLE -> "Tap: on/off · hold: its settings"
         QuickControls.Kind.TILE -> "Tap: open · hold: its settings"
         QuickControls.Kind.ACTION -> "Tap: ${c.label.lowercase()}"
     }
@@ -225,7 +352,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun dockSection() {
-        list.addView(heading("Apps at the bottom"))
+        list.addView(View(this), lp(MATCH, dp(12)))
         val dock = prefs.dock
         val rows = mutableListOf<View>(
             check("Show \"Previous app\": the app you were in before this one", prefs.previousAppInDock) { prefs.previousAppInDock = it; render() },
@@ -241,7 +368,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun recentSection() {
-        list.addView(heading("Recent files"))
+        list.addView(View(this), lp(MATCH, dp(12)))
         val uri = prefs.recentFolderUri
         val rows = mutableListOf<View>(
             cardText(
@@ -262,7 +389,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun advancedSection() {
-        list.addView(heading("Advanced"))
+        list.addView(View(this), lp(MATCH, dp(12)))
         val pkg = prefs.notesPackage
         val installed = BooxNotes.isInstalled(this, pkg)
         list.addView(card(listOf(
@@ -273,7 +400,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun troubleshootingSection() {
-        list.addView(heading("Troubleshooting"))
+        list.addView(View(this), lp(MATCH, dp(12)))
         list.addView(card(listOf(
             cardText(
                 "SuperBoox keeps a log of what it does on this device (${DebugLog.entries().size} entries): gestures, " +
@@ -618,6 +745,7 @@ class SettingsActivity : Activity() {
     }
 
     private companion object {
+        const val K_PAGE = "page"
         const val REQ_FILE = 1
         const val REQ_FOLDER = 2
         const val REQ_RECENT = 3

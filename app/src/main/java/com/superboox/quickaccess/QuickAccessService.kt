@@ -322,14 +322,41 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             }
             return
         }
+        // Front Light: hold shows the presets in the panel; tap goes off, or back to the last preset.
+        if (control.id == QuickControls.FRONT_LIGHT) {
+            if (hold) return
+            val on = quickControlStates()[control.id] ?: true
+            frontLight(if (on) QuickControls.PRESET_OFF else QuickControls.lastOnPreset(prefs))
+            return
+        }
         if (control.kind == QuickControls.Kind.TOGGLE && !hold && !control.momentary) {
             val now = quickControlStates()[control.id] ?: false
             optimistic[control.id] = !now to SystemClock.uptimeMillis() + OPTIMISTIC_MS
             panel?.refresh()
         }
-        qcQueue.addLast(control to hold)
+        qcQueue.addLast(QcTask(control, hold))
         if (!qcBusy) startSession()
     }
+
+    /** Switches BOOX's front light to [preset] (Bright, Soft, Custom or Off). */
+    fun frontLight(preset: String) {
+        val control = QuickControls.byId(QuickControls.FRONT_LIGHT) ?: return
+        optimistic[control.id] = (preset != QuickControls.PRESET_OFF) to SystemClock.uptimeMillis() + OPTIMISTIC_MS
+        optimisticPreset = preset to SystemClock.uptimeMillis() + OPTIMISTIC_MS
+        panel?.refresh()
+        qcQueue.addLast(QcTask(control, hold = false, preset = preset))
+        if (!qcBusy) startSession()
+    }
+
+    /** The Front Light preset to show as selected (null: not known yet). */
+    fun frontLightPreset(): String? {
+        optimisticPreset?.let { (p, until) -> if (until >= SystemClock.uptimeMillis()) return p }
+        return QuickControls.savedPreset(prefs)
+    }
+
+    private var optimisticPreset: Pair<String, Long>? = null
+
+    private class QcTask(val control: QuickControls.Control, val hold: Boolean, val preset: String? = null, val scrolled: Boolean = false)
 
     /** States to show: the last known ones, with taps still being applied on top. */
     fun quickControlStates(): Map<String, Boolean> {
@@ -340,7 +367,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         return out
     }
 
-    private val qcQueue = ArrayDeque<Pair<QuickControls.Control, Boolean>>()
+    private val qcQueue = ArrayDeque<QcTask>()
     private val afterSession = ArrayDeque<QuickControls.Control>()
     private val optimistic = HashMap<String, Pair<Boolean, Long>>()
     private var qcBusy = false
@@ -360,7 +387,10 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     }
 
     private fun nextControl() {
-        val (control, hold) = qcQueue.removeFirstOrNull() ?: return finishSession(closeShade = true, keepPanel = true)
+        val task = qcQueue.removeFirstOrNull() ?: return finishSession(closeShade = true, keepPanel = true)
+        task.preset?.let { return nextPreset(task, it) }
+        val control = task.control
+        val hold = task.hold
         val press = QuickControls.press(this, prefs, control, hold)
         if (!press.found || !press.pressed) {
             optimistic.remove(control.id)
@@ -383,6 +413,29 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 qcQueue.clear()
                 finishSession(closeShade = !hold, keepPanel = false)
             }
+        }, QuickControls.AFTER_TAP_MS)
+    }
+
+    private fun nextPreset(task: QcTask, preset: String) {
+        val press = QuickControls.pressPreset(this, prefs, preset)
+        if (!press.found && !task.scrolled) {
+            // The presets sit under the tiles: scroll the Control Center down and look again.
+            QuickControls.scrollShade(this)
+            qcQueue.addFirst(QcTask(task.control, false, preset, scrolled = true))
+            handler.postDelayed({ nextControl() }, 400)
+            return
+        }
+        if (!press.found || !press.pressed) {
+            optimistic.remove(task.control.id)
+            optimisticPreset = null
+            panel?.refresh()
+            Toast.makeText(this, "Couldn't find the Front Light presets in the Control Center", Toast.LENGTH_SHORT).show()
+            return nextControl()
+        }
+        handler.postDelayed({
+            QuickControls.settlePreset(this, prefs, preset)
+            panel?.refresh()
+            nextControl()
         }, QuickControls.AFTER_TAP_MS)
     }
 

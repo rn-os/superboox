@@ -17,7 +17,7 @@ import android.view.accessibility.AccessibilityNodeInfo
  */
 object NotesScreen {
 
-    class Card(val label: String, val node: AccessibilityNodeInfo)
+    class Card(val label: String, val node: AccessibilityNodeInfo, val bounds: Rect = Rect().also(node::getBoundsInScreen))
 
     sealed class State {
         /** An open note. [title] is the note's name as shown in the top bar. */
@@ -39,6 +39,13 @@ object NotesScreen {
         // of it is the right move anyway.
         editorTitle(root, screen)?.let { return State.Editor(it) }
         return if (list != null) State.Library(emptyList(), list) else State.Unknown
+    }
+
+    /** Identifies what's on screen, to tell whether a tap or page flip changed anything. */
+    fun signature(state: State): String = when (state) {
+        is State.Editor -> "editor:" + norm(state.title)
+        is State.Library -> "library:" + state.cards.joinToString("|") { norm(it.label) }
+        State.Unknown -> "unknown"
     }
 
     /**
@@ -66,13 +73,18 @@ object NotesScreen {
 
     /**
      * Note/folder cards: a tappable block that is big (grid tile or full-width
-     * row), inside a scrolling container. Its name is the first text in it that
-     * isn't a date, page count or size. Tabs, toolbars and sort buttons are
-     * either not inside a list or far too small, so they drop out.
+     * row) and below the top bar. Its name is the first text in it that isn't a
+     * date, page count or size. Tabs, toolbars and sort buttons are far too
+     * small, so they drop out.
+     *
+     * Deliberately no "must be inside a scrolling list" rule: BOOX's own apps
+     * flip pages instead of scrolling, so their lists often aren't scrollable.
      */
     private fun cards(root: AccessibilityNodeInfo, screen: Rect): List<Card> {
         val minTall = screen.height() * 9 / 100
         val minWide = screen.width() * 40 / 100
+        val maxTall = screen.height() * 60 / 100
+        val topBar = screen.top + screen.height() * 12 / 100
         val out = LinkedHashMap<String, Card>()
         val seenCards = HashSet<String>()
         for (n in all(root)) {
@@ -81,10 +93,11 @@ object NotesScreen {
             val card = clickableAncestor(n) ?: continue
             val r = Rect().also(card::getBoundsInScreen)
             if (r.height() < minTall && r.width() < minWide) continue
-            if (!hasScrollableAncestor(card)) continue
+            if (r.height() > maxTall) continue // the whole page, not a card
+            if (r.centerY() < topBar) continue
             val key = r.flattenToString()
             if (!seenCards.add(key)) continue // one name per card
-            out.putIfAbsent(norm(text), Card(text, n))
+            out.putIfAbsent(norm(text), Card(text, n, r))
         }
         return out.values.toList()
     }
@@ -139,18 +152,6 @@ object NotesScreen {
             cur = c.parent
         }
         return null
-    }
-
-    private fun hasScrollableAncestor(n: AccessibilityNodeInfo): Boolean {
-        var cur = n.parent
-        repeat(12) {
-            val c = cur ?: return false
-            if (c.isScrollable) return true
-            val cls = c.className?.toString().orEmpty()
-            if (cls.endsWith("RecyclerView") || cls.endsWith("ListView") || cls.endsWith("GridView")) return true
-            cur = c.parent
-        }
-        return false
     }
 
     private fun all(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {

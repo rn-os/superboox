@@ -18,12 +18,16 @@ import android.widget.Toast
  * step per tick of a polling loop (independent of how Notes reports events):
  *  - bring Notes to the front;
  *  - if a note is already open: done if it's the one we want, otherwise press
- *    Back until we're in the library (this is what lets you jump from one open
- *    note straight to another);
- *  - in the library: scroll the list to the top, then look for the next path
- *    segment ("Work / Standup" = tap "Work", then "Standup"), paging down;
+ *    Back until we're in the library (so you can jump from one note to another);
+ *  - in the library: look for the next path segment ("Work / Standup" = open
+ *    "Work", then "Standup"), turning pages forward and then backward;
+ *  - tap it and **confirm the screen changed**; if an accessibility click did
+ *    nothing (some BOOX views only react to real touches), tap it with a touch
+ *    gesture instead;
  *  - not in this folder: Back up a level and look again.
- * See [NotesScreen] for how the editor and library are told apart.
+ * BOOX apps often flip pages instead of scrolling, so page turns fall back to
+ * swipe gestures when the list isn't scrollable. See [NotesScreen] for how
+ * the editor and library are told apart.
  */
 class NoteOpener(private val service: AccessibilityService) {
 
@@ -32,13 +36,31 @@ class NoteOpener(private val service: AccessibilityService) {
 
     private class Job(val pkg: String, val steps: List<String>, val deadline: Long) {
         var index = 0
-        var scrolls = 0
         var backs = 0
         var relaunches = 0
-        var rewound = false
         var notBefore = 0L
         var missingSince = 0L
         var lastState = ""
+
+        // Page turning within the current folder.
+        var rewound = false
+        var pageTurns = 0
+        var direction = 1 // 1 = forward, -1 = backward
+        var pageMethod = 0 // 0 = scroll action, 1 = vertical swipe, 2 = horizontal swipe
+        var signatureBeforeTurn: String? = null
+
+        // A tap waiting to be confirmed.
+        var tapSignature: String? = null
+        var tapBounds: Rect? = null
+        var tapAttempts = 0
+
+        fun resetFolder() {
+            rewound = false
+            pageTurns = 0
+            direction = 1
+            pageMethod = 0
+            signatureBeforeTurn = null
+        }
     }
 
     fun open(pkg: String, path: String) {
@@ -54,6 +76,7 @@ class NoteOpener(private val service: AccessibilityService) {
             return
         }
         if (!Launcher.start(service, intent) || steps.isEmpty()) return
+        toast("Opening \"${steps.last()}\"…")
         val now = SystemClock.uptimeMillis()
         job = Job(pkg, steps, now + TIMEOUT_MS).also { it.notBefore = now + FIRST_DELAY_MS }
         handler.postDelayed(::tick, FIRST_DELAY_MS)
@@ -67,7 +90,7 @@ class NoteOpener(private val service: AccessibilityService) {
     private fun tick() {
         val j = job ?: return
         val now = SystemClock.uptimeMillis()
-        if (now > j.deadline) return fail(j)
+        if (now > j.deadline) return fail(j, "timed out")
         if (now < j.notBefore) return later(j.notBefore - now)
 
         val root = notesRoot(j.pkg)
@@ -77,7 +100,7 @@ class NoteOpener(private val service: AccessibilityService) {
             if (now - j.missingSince > MISSING_MS && j.relaunches < MAX_RELAUNCHES) {
                 j.relaunches++
                 j.missingSince = 0L
-                j.rewound = false
+                j.resetFolder()
                 DebugLog.i("note", "Notes not in front; relaunching (${j.relaunches})")
                 BooxNotes.launchIntent(service, j.pkg, fresh = false)?.let { Launcher.start(service, it) }
                 return wait(j, now, AFTER_BACK_MS)
@@ -86,75 +109,144 @@ class NoteOpener(private val service: AccessibilityService) {
         }
         j.missingSince = 0L
 
+        val state = NotesScreen.read(root)
+        val signature = NotesScreen.signature(state)
+        logState(j, state)
+
+        // 1. Confirm the last tap did something before moving on.
+        j.tapSignature?.let { before ->
+            if (signature != before) {
+                DebugLog.i("note", "tap on \"${j.steps[j.index]}\" worked")
+                j.tapSignature = null
+                j.index++
+                j.resetFolder()
+                if (j.index >= j.steps.size) return succeed(j)
+                // fall through and handle the new screen
+            } else if (j.tapAttempts < MAX_TAP_ATTEMPTS) {
+                val bounds = (state as? NotesScreen.State.Library)?.cards
+                    ?.firstOrNull { NotesScreen.matches(it.label, j.steps[j.index]) }?.bounds ?: j.tapBounds
+                    ?: return fail(j, "the note disappeared after tapping it")
+                j.tapAttempts++
+                DebugLog.i("note", "tap didn't change the screen; touching ${bounds.toShortString()} (attempt ${j.tapAttempts})")
+                touch(bounds)
+                return wait(j, now, AFTER_TAP_MS)
+            } else {
+                return fail(j, "tapping \"${j.steps[j.index]}\" didn't open it")
+            }
+        }
+
         val target = j.steps[j.index]
-        val last = j.steps.last()
-        when (val state = NotesScreen.read(root)) {
+        when (state) {
             is NotesScreen.State.Editor -> {
-                logState(j, "editor \"${state.title}\"")
-                if (NotesScreen.matches(state.title, last)) {
-                    DebugLog.i("note", "\"$last\" is open")
-                    job = null
-                    return
-                }
-                back(j, now, "another note is open")
+                if (NotesScreen.matches(state.title, j.steps.last())) return succeed(j)
+                back(j, now, "another note is open (\"${state.title}\")")
             }
 
             is NotesScreen.State.Library -> {
-                logState(j, "library: ${state.cards.joinToString { it.label }.take(300)}")
                 val list = state.list
                 if (!j.rewound) {
-                    // Start every folder from the top so paging down sees everything.
+                    // Start each folder from the top when the list scrolls; paged
+                    // lists are searched forward, then backward, instead.
                     j.rewound = true
                     if (list != null) {
                         var n = 0
-                        while (n < MAX_SCROLLS && list.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)) n++
+                        while (n < MAX_PAGE_TURNS && list.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)) n++
                         if (n > 0) {
                             DebugLog.i("note", "scrolled list to top ($n)")
-                            return wait(j, now, AFTER_SCROLL_MS)
+                            return wait(j, now, AFTER_PAGE_MS)
                         }
                     }
                 }
+
                 val card = state.cards.firstOrNull { NotesScreen.matches(it.label, target) }
-                    ?: findLabel(root, target)?.let { NotesScreen.Card(target, it) }
-                if (card != null) {
-                    DebugLog.i("note", "found \"$target\" (${card.node.className}) step ${j.index + 1}/${j.steps.size}")
-                    tap(card.node)
-                    j.index++
-                    j.scrolls = 0
-                    j.rewound = false
-                    if (j.index >= j.steps.size) {
-                        job = null
-                        return
-                    }
+                val node = card?.node ?: findLabel(root, target)
+                if (node != null) {
+                    DebugLog.i("note", "found \"$target\" (${node.className}) step ${j.index + 1}/${j.steps.size}")
+                    j.tapSignature = signature
+                    j.tapBounds = card?.bounds ?: Rect().also(node::getBoundsInScreen)
+                    j.tapAttempts = 0
+                    click(node, card?.bounds)
                     return wait(j, now, AFTER_TAP_MS)
                 }
-                if (now < j.notBefore + LOAD_GRACE_MS) return later(POLL_MS) // let the list finish loading
-                if (list != null && j.scrolls < MAX_SCROLLS && list.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) {
-                    j.scrolls++
-                    DebugLog.i("note", "\"$target\" not visible; page ${j.scrolls}")
-                    return wait(j, now, AFTER_SCROLL_MS)
-                }
+                if (now < j.notBefore + LOAD_GRACE_MS) return later(POLL_MS) // let the page finish loading
+
+                if (turnPage(j, state, signature)) return wait(j, now, AFTER_PAGE_MS)
                 // Not in this folder. Only the first segment is searched from wherever
                 // we are; later segments must be inside the folder we just opened.
-                if (j.index == 0) back(j, now, "\"$target\" not in this folder") else fail(j)
+                if (j.index == 0) back(j, now, "\"$target\" not in this folder") else fail(j, "\"$target\" isn't in that folder")
             }
 
             NotesScreen.State.Unknown -> {
-                logState(j, "unknown screen")
                 if (now < j.notBefore + LOAD_GRACE_MS) return later(POLL_MS)
                 back(j, now, "unrecognised Notes screen")
             }
         }
     }
 
+    /**
+     * Shows the next (or previous) page of the library. Tries the list's scroll
+     * action, then a vertical swipe, then a horizontal one, and notices when a
+     * method stops changing the page: that's the end in this direction.
+     */
+    private fun turnPage(j: Job, state: NotesScreen.State.Library, signature: String): Boolean {
+        if (j.signatureBeforeTurn == signature) {
+            // The last turn did nothing: try the next method, then the other direction.
+            j.pageMethod++
+            if (j.pageMethod > 2) {
+                if (j.direction == -1) return false
+                DebugLog.i("note", "end of list; searching backwards")
+                j.direction = -1
+                j.pageMethod = 0
+            }
+        }
+        if (j.pageTurns >= MAX_PAGE_TURNS) return false
+        j.signatureBeforeTurn = signature
+        j.pageTurns++
+
+        val list = state.list
+        if (j.pageMethod == 0) {
+            if (list == null) {
+                j.pageMethod = 1
+            } else {
+                val action = if (j.direction > 0) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+                val ok = list.performAction(action)
+                DebugLog.i("note", "page ${if (j.direction > 0) "forward" else "back"} (scroll) -> $ok")
+                if (ok) return true
+                j.pageMethod = 1
+            }
+        }
+        val area = Rect()
+        if (list != null) list.getBoundsInScreen(area) else state.cards.forEach { area.union(it.bounds) }
+        if (area.isEmpty) return false
+        val vertical = j.pageMethod == 1
+        DebugLog.i("note", "page ${if (j.direction > 0) "forward" else "back"} (${if (vertical) "vertical" else "horizontal"} swipe) in ${area.toShortString()}")
+        swipe(area, vertical, forward = j.direction > 0)
+        return true
+    }
+
     private fun back(j: Job, now: Long, why: String) {
-        if (j.backs >= MAX_BACKS) return fail(j)
+        if (j.backs >= MAX_BACKS) return fail(j, "pressed Back $MAX_BACKS times without finding it")
         j.backs++
-        j.scrolls = 0
-        j.rewound = false
+        j.resetFolder()
         DebugLog.i("note", "Back ($why) ${j.backs}/$MAX_BACKS")
         service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
         wait(j, now, AFTER_BACK_MS)
+    }
+
+    private fun succeed(j: Job) {
+        job = null
+        DebugLog.i("note", "opened \"${j.steps.joinToString(" / ")}\"")
+    }
+
+    private fun fail(j: Job, why: String) {
+        job = null
+        val root = notesRoot(j.pkg)
+        DebugLog.w(
+            "note",
+            "gave up on \"${j.steps.getOrNull(j.index)}\" (step ${j.index + 1}/${j.steps.size}): $why. " +
+                if (root == null) "Notes window not found." else "Screen:\n" + DebugReport.describeTree(root),
+        )
+        toast("Couldn't open \"${j.steps.last()}\": $why")
     }
 
     private fun wait(j: Job, now: Long, ms: Long) {
@@ -166,20 +258,15 @@ class NoteOpener(private val service: AccessibilityService) {
         handler.postDelayed(::tick, ms)
     }
 
-    private fun logState(j: Job, state: String) {
-        if (state != j.lastState) DebugLog.i("note", "screen: $state")
-        j.lastState = state
-    }
-
-    private fun fail(j: Job) {
-        job = null
-        val root = notesRoot(j.pkg)
-        DebugLog.w(
-            "note",
-            "gave up on \"${j.steps.getOrNull(j.index)}\" (step ${j.index + 1}/${j.steps.size}, scrolls ${j.scrolls}). " +
-                if (root == null) "Notes window not found." else "Screen:\n" + DebugReport.describeTree(root),
-        )
-        toast("Couldn't find \"${j.steps.getOrNull(j.index) ?: ""}\" in BOOX Notes")
+    private fun logState(j: Job, state: NotesScreen.State) {
+        val text = when (state) {
+            is NotesScreen.State.Editor -> "editor \"${state.title}\""
+            is NotesScreen.State.Library -> "library (${if (state.list != null) "scrollable" else "not scrollable"}): " +
+                state.cards.joinToString { it.label }.take(300)
+            NotesScreen.State.Unknown -> "unknown screen"
+        }
+        if (text != j.lastState) DebugLog.i("note", "screen: $text")
+        j.lastState = text
     }
 
     private fun notesRoot(pkg: String): AccessibilityNodeInfo? {
@@ -198,7 +285,8 @@ class NoteOpener(private val service: AccessibilityService) {
             ?: findFirst(root) { NotesScreen.matches(NotesScreen.textOf(it), label) }
     }
 
-    private fun tap(node: AccessibilityNodeInfo) {
+    /** Accessibility click on the item (or its clickable parent); a touch if nothing is clickable. */
+    private fun click(node: AccessibilityNodeInfo, bounds: Rect?) {
         var n: AccessibilityNodeInfo? = node
         var depth = 0
         while (n != null && depth < 8) {
@@ -206,32 +294,53 @@ class NoteOpener(private val service: AccessibilityService) {
             n = n.parent
             depth++
         }
-        DebugLog.i("note", "no clickable ancestor; tapping bounds instead")
-        // Nothing clickable in the hierarchy (custom-drawn list): tap its center instead.
-        val r = Rect()
-        node.getBoundsInScreen(r)
+        DebugLog.i("note", "no clickable parent; touching instead")
+        touch(bounds ?: Rect().also(node::getBoundsInScreen))
+    }
+
+    /** A real tap at the centre of [r], for views that ignore accessibility clicks. */
+    private fun touch(r: Rect) {
         val path = Path().apply { moveTo(r.exactCenterX(), r.exactCenterY()) }
-        val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0, 60))
-            .build()
-        service.dispatchGesture(gesture, null, null)
+        gesture(path, 80)
+    }
+
+    private fun swipe(area: Rect, vertical: Boolean, forward: Boolean) {
+        val path = Path()
+        if (vertical) {
+            val x = area.exactCenterX()
+            val (from, to) = area.top + area.height() * 0.8f to area.top + area.height() * 0.2f
+            path.moveTo(x, if (forward) from else to)
+            path.lineTo(x, if (forward) to else from)
+        } else {
+            val y = area.exactCenterY()
+            val (from, to) = area.left + area.width() * 0.85f to area.left + area.width() * 0.15f
+            path.moveTo(if (forward) from else to, y)
+            path.lineTo(if (forward) to else from, y)
+        }
+        gesture(path, 250)
+    }
+
+    private fun gesture(path: Path, durationMs: Long) {
+        val g = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, durationMs)).build()
+        if (!service.dispatchGesture(g, null, null)) DebugLog.w("note", "gesture was rejected")
     }
 
     private fun toast(msg: String) = Toast.makeText(service, msg, Toast.LENGTH_SHORT).show()
 
     companion object {
         // E-ink redraws are slow; these are deliberately generous.
-        private const val TIMEOUT_MS = 25_000L
+        private const val TIMEOUT_MS = 30_000L
         private const val FIRST_DELAY_MS = 900L
         private const val POLL_MS = 350L
-        private const val AFTER_TAP_MS = 1_200L
+        private const val AFTER_TAP_MS = 1_500L
         private const val AFTER_BACK_MS = 1_200L
-        private const val AFTER_SCROLL_MS = 700L
+        private const val AFTER_PAGE_MS = 1_000L
         private const val LOAD_GRACE_MS = 800L
         private const val MISSING_MS = 2_000L
-        private const val MAX_SCROLLS = 25
+        private const val MAX_PAGE_TURNS = 25
         private const val MAX_BACKS = 5
         private const val MAX_RELAUNCHES = 2
+        private const val MAX_TAP_ATTEMPTS = 2
 
         fun findFirst(root: AccessibilityNodeInfo, predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
             val queue = ArrayDeque<AccessibilityNodeInfo>()

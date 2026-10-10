@@ -260,6 +260,59 @@ const P = {
     "Password managers are ignored by default, and history stays on the tablet. Backup & restore leaves it out.",
   ]),
 };
+// ---- Round 2 (after build 51): what to keep, and how much of the panel the clipboard covers ----
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .keep { display: flex; gap: 14px; padding: 11px 16px 11px 18px; align-items: flex-start; }
+  .keep .box { margin-top: 3px; }
+  .keep .t1 { font-size: 17px; font-weight: 500; } .keep .t2 { font-size: 13px; color: #333; line-height: 1.35; padding-top: 2px; }
+  .badge { display: inline-block; margin-top: 5px; border: 1.5px solid #000; border-radius: 4px; padding: 1px 6px; font-size: 11.5px; font-weight: 700; }
+  .badge.adv { background: #000; color: #fff; }
+  .keep.locked .t1, .keep.locked .t2 { color: #666; } .keep.locked .box { border-color: #999; background: #999; }
+  .mini { display: flex; gap: 10px; padding: 12px 16px 14px; justify-content: center; }
+  .mp { width: 74px; border: 2px solid #000; border-radius: 4px; display: flex; flex-direction: column; font-size: 9px; font-weight: 700; text-align: center; overflow: hidden; }
+  .mp div { border-top: 1px solid #000; padding: 3px 0; } .mp div:first-child { border-top: 0; }
+  .mp .cv { background: #000; color: #fff; flex: 1; display: flex; align-items: center; justify-content: center; }
+  .mpw { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; }
+</style>`);
+const keepRow = (on, t1, t2, badge, adv, locked) => `<div class="keep ${locked ? "locked" : ""}"><div class="box ${on ? "on" : ""}"></div><div><div class="t1">${t1}</div><div class="t2">${t2}</div>${badge ? `<span class="badge ${adv ? "adv" : ""}">${badge}</span>` : ""}</div></div>`;
+const miniPanel = (keepQc, keepLast, keepApps) => `<div class="mp" style="height:118px"><div>Top bar</div>${keepQc ? "<div>Quick Controls</div>" : ""}${keepLast ? "<div>Last Opened</div>" : ""}<div class="cv">Clipboard</div>${keepApps ? "<div>Apps</div>" : ""}</div>`;
+const set2 = `<div class="set" style="width:600px;height:1180px">${head("Clipboard")}
+  <div class="sec">WHAT TO KEEP</div><div class="card new">
+    ${keepRow(true, "Text", "Words and passages you copy: from notes, books, web pages, messages.", "Every copy with Advanced access", true)}
+    ${keepRow(true, "Links", "Web addresses. Kept as links, so you can open them again from the clipboard.", "Every copy with Advanced access", true)}
+    ${keepRow(true, "Images", "Pictures an app copies, like “Copy image” in the browser or gallery. Large images are kept at a reduced size.", "Only when the panel opens", false)}
+    ${keepRow(false, "Codes", "Short codes on their own, like a 6-digit sign-in code. Off by default; they're usually only needed once.", "Every copy with Advanced access", true)}
+    ${keepRow(true, "Passwords and private copies", "Never kept: copies from password managers and anything an app marks as private.", "", false, true)}
+  </div>
+  <div class="para"><b>Every copy with Advanced access:</b> caught as you copy when Advanced access is on; otherwise saved when you open the panel (only the latest copy). <b>Only when the panel opens:</b> Android doesn't let SuperBoox fetch images in the background, even with Advanced access.</div>
+  <div class="sec">WHILE THE CLIPBOARD IS OPEN, STILL SHOW</div><div class="card new">
+    <div class="check"><div class="box"></div>Quick Controls</div>
+    <div class="check"><div class="box"></div>Last Opened Note &amp; Document</div>
+    <div class="check"><div class="box"></div>Apps at the bottom</div>
+    <div class="mini">
+      <div class="mpw">${miniPanel(0, 0, 0)}Now (all off)</div>
+      <div class="mpw">${miniPanel(1, 0, 1)}Controls + apps</div>
+      <div class="mpw">${miniPanel(1, 1, 1)}All on</div>
+    </div>
+  </div>
+  <div class="para">Quick Access is always replaced, since the clipboard takes its place. Fewer clips fit on a page when more is shown.</div>
+</div>`;
+const listSmall = `<div class="lab"><span>PINNED</span></div>${clip(CLIPS.wifi)}<div class="lab"><span>RECENT</span></div>${clip(CLIPS.addr)}${clip(CLIPS.link)}`;
+const hub2 = (items, page, pages) => hub(items, page, pages).replace('<div class="hub">', '<div class="hub" style="flex:1">');
+const P2 = {
+  settings: () => set2 + notes("F · Settings → Clipboard, round 2", [
+    "<b>What to keep</b>: a tick box per kind of clip, each saying what it covers. Text, Links and Images are on; Codes are off.",
+    "Each one is labelled with how it's caught: <b>Every copy with Advanced access</b> (black) or <b>Only when the panel opens</b>.",
+    "Passwords and private copies are never kept and can't be turned on (greyed).",
+    "<b>While the clipboard is open, still show</b> replaces “Clipboard covers the apps too”. All off (covers everything) stays the default. The little panels preview the result.",
+    "Unticking a kind doesn't delete clips already saved; Clear history does.",
+  ]),
+  partial: () => shell(topBar(true) + qc + hub2(listSmall, 1, 8) + apps) + notes("G · Example: Quick Controls and apps still showing", [
+    "With <b>Quick Controls</b> and <b>Apps</b> ticked, the clipboard takes only the middle of the panel.",
+    "Fewer clips fit (3 per page here), so there are more pages.",
+    "Quick Controls keep working while the clipboard is open, e.g. to change the Front Light.",
+  ]),
+};
 const h = location.hash;
-document.getElementById("stage").innerHTML = h === "#2" ? P.full() + P.held() : h === "#3" ? P.settings() : P.closed() + P.open();
+document.getElementById("stage").innerHTML = h === "#2" ? P.full() + P.held() : h === "#3" ? P.settings() : h === "#4" ? P2.settings() : h === "#5" ? P2.partial() : P.closed() + P.open();
 </script></body></html>

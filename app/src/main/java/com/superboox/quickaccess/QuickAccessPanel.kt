@@ -443,6 +443,7 @@ class QuickAccessPanel(
                 background = outline(2, 6)
                 setPadding(s(10), s(8), s(10), s(8))
                 setOnEditorActionListener { _, _, _ -> endRename(save = true); true }
+                setOnFocusChangeListener { _, has -> if (has) post { setSelection(text.length) } }
                 renameField = this
             }
             (field.parent as? ViewGroup)?.removeView(field)
@@ -460,6 +461,8 @@ class QuickAccessPanel(
                 }, lp(MATCH, WRAP))
                 field.post {
                     field.requestFocus()
+                    // Focus can put the cursor back at the start; typing usually adds to the end.
+                    field.setSelection(field.text.length)
                     (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
                         .showSoftInput(field, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
                 }

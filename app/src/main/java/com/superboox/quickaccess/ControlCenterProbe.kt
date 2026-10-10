@@ -53,7 +53,47 @@ object ControlCenterProbe {
             }
             walk(root, 0)
             out += "  tiles (${tiles.size}): " + tiles.joinToString(" | ").ifEmpty { "none readable" }
+            frontLight(root, out)
         }
+    }
+
+    /**
+     * BOOX's Front Light presets (Bright / Soft / Custom / Off) sit under the
+     * tiles. Lists the area around them, with which one is selected, to see
+     * whether Quick Controls can switch presets.
+     */
+    private fun frontLight(root: AccessibilityNodeInfo, out: MutableList<String>) {
+        val anchor = root.findAccessibilityNodeInfosByText("Soft").firstOrNull()
+            ?: root.findAccessibilityNodeInfosByText("Front Light").firstOrNull()
+        if (anchor == null) {
+            out += "  front light: not visible (may need scrolling)"
+            return
+        }
+        var area: AccessibilityNodeInfo = anchor
+        repeat(4) { area = area.parent ?: return@repeat }
+        out += "  front light area:"
+        var count = 0
+        fun walk(n: AccessibilityNodeInfo, depth: Int) {
+            if (depth > 10 || count >= 60) return
+            count++
+            val flags = buildList {
+                if (n.isClickable) add("click")
+                if (n.isLongClickable) add("hold")
+                if (n.isSelected) add("selected")
+                if (n.isCheckable) add(if (n.isChecked) "checked" else "unchecked")
+                if (n.isScrollable) add("scroll")
+                if (!n.isVisibleToUser) add("hidden")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) n.stateDescription?.let { add("\"$it\"") }
+                n.rangeInfo?.let { add("range ${it.current} of ${it.min}-${it.max}") }
+            }
+            val label = (n.text ?: n.contentDescription)?.toString()?.replace("\n", " ")?.take(30)
+            out += "    " + "  ".repeat(depth) + (n.className?.toString()?.substringAfterLast('.') ?: "?") +
+                (n.viewIdResourceName?.substringAfter(":id/")?.let { " #$it" } ?: "") +
+                (if (label.isNullOrBlank()) "" else " \"$label\"") +
+                (if (flags.isEmpty()) "" else " [${flags.joinToString()}]")
+            for (i in 0 until n.childCount) n.getChild(i)?.let { walk(it, depth + 1) }
+        }
+        walk(area, 0)
     }
 
     private fun typeName(t: Int) = when (t) {

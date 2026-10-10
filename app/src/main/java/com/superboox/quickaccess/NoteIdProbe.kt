@@ -37,8 +37,40 @@ object NoteIdProbe {
         val out = ArrayList<String>()
         runCatching { providers(context, notesPackage, deadline, out) }
             .onFailure { out += "providers: ${it.javaClass.simpleName} ${it.message}" }
-        runCatching { out += dexKeys(context, notesPackage, deadline) }
-            .onFailure { out += "apk scan: ${it.javaClass.simpleName} ${it.message}" }
+        // dexKeys() (id-like names across the whole Notes app) already did its job in
+        // build 14's report; the targeted activityStrings() below replaces it.
+        runCatching { out += activityStrings(context, notesPackage) }
+            .onFailure { out += "activity strings: ${it.javaClass.simpleName} ${it.message}" }
+        return out
+    }
+
+    /**
+     * Text constants used by the code of BOOX's note-opening screens: the
+     * extra names they read and the actions they expect. Read from the APKs
+     * on the device; nothing is executed.
+     */
+    private fun activityStrings(context: Context, notesPackage: String): List<String> {
+        val targets = listOf(
+            notesPackage to listOf(
+                "Lcom/onyx/android/note/note/ui/OpenNote",
+                "Lcom/onyx/android/note/note/ui/ScribbleActivity;",
+                "Lcom/onyx/android/note/note/ui/CreateQuickNoteActivity",
+            ),
+            BooxNotes.BOOX_HOME_PACKAGE to listOf("Lcom/onyx/common/common/base/MiddlewareActivity"),
+        )
+        val out = ArrayList<String>()
+        for ((pkg, prefixes) in targets) {
+            val apk = runCatching { context.packageManager.getApplicationInfo(pkg, 0).sourceDir }.getOrNull()
+            if (apk == null) {
+                out += "code strings ($pkg): apk not found"
+                continue
+            }
+            val found = DexProbe.classStrings(apk, prefixes, SystemClock.uptimeMillis() + 12_000)
+            if (found.isEmpty()) out += "code strings ($pkg): no matching classes"
+            found.filterValues { it.isNotEmpty() }.forEach { (cls, strings) ->
+                out += "code strings $cls: ${strings.joinToString(" | ") { it.replace("\n", " ").take(80) }}"
+            }
+        }
         return out
     }
 

@@ -48,7 +48,10 @@ object NotesScreen {
         // No cards: an open note (its tall tool column may scroll, so a list alone
         // doesn't mean library). An empty folder also lands here, and backing out
         // of it is the right move anyway.
-        editorTitle(root, screen)?.let { return State.Editor(it) }
+        editorTitle(root, screen)
+            // Screen headings, not note names (seen: the library read as a note called "Library").
+            ?.takeUnless { norm(it) in NOT_NOTE_TITLES }
+            ?.let { return State.Editor(it) }
         return if (list != null) State.Library(emptyList(), list) else State.Unknown
     }
 
@@ -201,6 +204,8 @@ object NotesScreen {
         if (head.isEmpty() && tail.isEmpty()) return false
         return full.startsWith(head) && full.endsWith(tail) && full.length >= head.length + tail.length
     }
+
+    private val NOT_NOTE_TITLES = setOf("library", "notes", "note", "home", "recent", "all")
 
     private const val MAX_NODES = 3_000
 }

@@ -82,6 +82,7 @@ class NoteOpener(private val service: AccessibilityService) {
         val steps = BooxNotes.splitPath(path)
         if (steps.isEmpty()) return
         toast("Opening \"${steps.last()}\"…")
+        if (!DIRECT_OPEN) return start(notesPackage, steps, inNotes, null)
         // Look the note's id up off the main thread, then try opening it directly.
         val token = Any()
         pending = token
@@ -445,6 +446,12 @@ class NoteOpener(private val service: AccessibilityService) {
         private const val MAX_RELAUNCHES = 2
         private const val MAX_TAP_ATTEMPTS = 2
         private const val DIRECT_WAIT_MS = 3_500L
+
+        /**
+         * Open-by-id is off until we know the extra OpenNoteByDocIdActivity reads:
+         * with guessed extras (build 15) BOOX accepted the launch but opened nothing.
+         */
+        private const val DIRECT_OPEN = false
         private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
 
         fun findFirst(root: AccessibilityNodeInfo, predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {

@@ -54,6 +54,12 @@ class QuickAccessPanel(
     /** What BOOX Notes is showing, if it's the app behind the panel. */
     private val notesState: NotesScreen.State? = if (service.isNotesInFront) service.notesState() else null
 
+    /** The note open behind the panel, if any: "last opened" means the one before it. */
+    private val currentNote: String? = (notesState as? NotesScreen.State.Editor)?.title
+
+    private fun isCurrentNote(item: RecentItem) =
+        item.kind == RecentItem.Kind.NOTE && currentNote != null && NotesScreen.matches(item.title, currentNote)
+
     /** Library cards offered by the Add picker, and which are ticked. */
     private var pickChoices: List<NotesScreen.Card> = emptyList()
     private val picked = LinkedHashSet<String>()
@@ -206,7 +212,7 @@ class QuickAccessPanel(
     // ---- Last Opened Note / Document ------------------------------------------------------
 
     private fun lastNoteRow(): View {
-        val note = Recents.lastNote(prefs)
+        val note = Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.NOTE && !isCurrentNote(it) }
         return lastRow("Last Opened Note", note?.title, enabled = note != null) {
             note?.let { service.openBooxNote(it.title) }
         }
@@ -364,7 +370,7 @@ class QuickAccessPanel(
         val list = vbox()
         box.addView(list)
 
-        val remembered = Recents.list(prefs).map { item ->
+        val remembered = Recents.list(prefs).filterNot(::isCurrentNote).map { item ->
             val ago = ago(item.time)
             when (item.kind) {
                 RecentItem.Kind.NOTE -> RecentRow(R.drawable.ic_note, item.title, "Note · $ago", item.time) { service.openBooxNote(item.title) }

@@ -213,8 +213,15 @@ class SettingsActivity : Activity() {
     private fun withReport(then: (String) -> Unit) {
         toast("Building debug report…")
         io.execute {
-            val report = DebugReport.build(this)
-            runOnUiThread { if (!isFinishing) then(report) }
+            // Never leave the user waiting: any failure still produces a (smaller) report.
+            val report = try {
+                DebugReport.build(this)
+            } catch (t: Throwable) {
+                DebugLog.e("report", "build failed", t)
+                "SuperBoox debug report (partial: ${t.javaClass.simpleName} ${t.message})\n\n" +
+                    DebugLog.entries().takeLast(300).joinToString("\n")
+            }
+            runOnUiThread { then(report) }
         }
     }
 

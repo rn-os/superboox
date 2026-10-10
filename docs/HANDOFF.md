@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 25)
+# SuperBoox: handoff / status (as of build 27)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -106,8 +106,20 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - Previous app: `Prefs.previousAppInDock` (off by default). The service keeps `recentApps` (no launchers, quickstep, keyboard or system screens). `previousApp` is the newest one that isn't in front. `openPreviousApp()` reopens the last note or book for Notes and NeoReader, and otherwise uses `launchApp`. In the panel, `previousCell()` comes first in the dock.
 - The debug report still runs `ControlCenterProbe` (useful for tile names on other firmware).
 
+## Builds 26–27
+- Build 25 log: Wi-Fi, Bluetooth and DND toggles worked through the Control Center. Wi-Fi reads "off" for about 1 s after switching on.
+- Build 26:
+  - Quick Control taps are **queued in one Control Center session** (`QuickAccessService.quickControl/startSession/nextControl/finishSession`).
+  - The panel is re-added **above** the screen hold (`raisePanel`), non-focusable during the session, so it stays usable. The hold is touchable (`OpeningCover.show(touchable = true)`), so outside taps can't reach the Control Center.
+  - Each tap flips the tile at once (`optimistic` states, 8 s). `QuickControls.settle()` treats an unchanged state right after a tap as "still switching".
+  - Actions tapped mid-session run afterwards.
+  - Previous app is a dock item (`Prefs.PREVIOUS_APP = "@previous"`) that can be moved with ↑ ↓; the switch adds or removes it.
+- Build 27: BOOX's Auto-rotate tile always opens its rotation menu.
+  - Tap now flips `Settings.System.ACCELEROMETER_ROTATION` directly. This needs `WRITE_SETTINGS`; the first tap opens `ACTION_MANAGE_WRITE_SETTINGS`, and no adb is needed.
+  - Hold taps the tile (`Control.holdTaps`), which shows the menu, and the shade is left open.
+
 ## Next step
-- The user tests build 25. Check the `[controls]` lines in the log: tap/hold → result, "is now on/off".
+- The user tests builds 26/27: quick repeated taps, the Auto-rotate permission flow, and moving Previous app.
 
 ## Open ideas / backlog
 - Store the note id in pins when pinning, so lookup by title isn't needed.

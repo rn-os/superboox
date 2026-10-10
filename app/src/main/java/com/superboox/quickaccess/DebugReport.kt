@@ -66,10 +66,10 @@ object DebugReport {
         runCatching { AdvancedAccess.lightProbe() }.getOrElse { listOf("probe failed: ${it.message}") }.forEach { line(it) }
 
         section("Clipboard")
-        line("button: ${prefs.clipShowButton} coversApps: ${prefs.clipCoversApps} mode: ${prefs.clipCatchMode} limit: ${prefs.clipLimit} images: ${prefs.clipKeepImages} keepAfterRestart: ${prefs.clipKeepAfterRestart}")
+        line("button: ${prefs.clipShowButton} stillShows: qc=${prefs.clipShowControls} last=${prefs.clipShowLast} apps=${prefs.clipShowApps} keep: text=${prefs.clipKeepText} links=${prefs.clipKeepLinks} codes=${prefs.clipKeepCodes} handwriting=${prefs.clipKeepHandwriting} mode: ${prefs.clipCatchMode} limit: ${prefs.clipLimit} images: ${prefs.clipKeepImages} keepAfterRestart: ${prefs.clipKeepAfterRestart}")
         ClipHistory.list(context).let { clips ->
             // Counts only: what was copied stays private.
-            line("clips: ${clips.size} (${clips.count { it.pinned }} pinned, ${clips.count { it.kind == ClipHistory.Kind.IMAGE }} images, ${clips.count { it.kind == ClipHistory.Kind.LINK }} links)")
+            line("clips: ${clips.size} (${clips.count { it.pinned }} pinned, ${clips.count { it.kind == ClipHistory.Kind.IMAGE }} images, ${clips.count { it.kind == ClipHistory.Kind.LINK }} links, ${clips.count { it.kind == ClipHistory.Kind.HANDWRITING }} handwriting)")
         }
         line("background read problem: ${ClipHistory.backgroundProblem() ?: "none"}")
 

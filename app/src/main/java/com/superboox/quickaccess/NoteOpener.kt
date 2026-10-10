@@ -138,6 +138,78 @@ class NoteOpener(private val service: AccessibilityService) {
         return false
     }
 
+    // ---- BOOX's new-note screen (hold New Note) --------------------------------------------
+
+    private var setupUntil = 0L
+    private var setupBacks = 0
+    private var setupTabTapped = false
+
+    /**
+     * Opens the Notes library and taps its own "new note" button, which brings up
+     * BOOX's new-note screen (name, template). That screen can't be started directly.
+     */
+    fun openNewNoteSetup(notesPackage: String, inEditor: Boolean) {
+        cancel()
+        setupBacks = 0
+        setupTabTapped = false
+        setupUntil = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
+        if (inEditor) {
+            // Back out of the open note (BOOX saves it) to its library.
+            service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+            setupBacks++
+        } else {
+            val how = BooxNotes.launchCandidates(service, notesPackage).firstOrNull { Launcher.tryStart(service, it.second) }?.first
+                ?: return toast("Couldn't open BOOX Notes on this device")
+            DebugLog.i("note", "new-note setup: opened Notes via $how")
+            setupTabTapped = how != "BOOX launcher"
+        }
+        handler.postDelayed({ setupTick(notesPackage) }, AFTER_BACK_MS)
+    }
+
+    private fun setupTick(notesPackage: String) {
+        val now = SystemClock.uptimeMillis()
+        val packages = BooxNotes.packages(notesPackage)
+        val root = notesRoot(packages)
+        if (now > setupUntil) {
+            DebugLog.w("note", "new-note setup: no New button found. Screen:\n" + (root?.let { DebugReport.describeTree(it) } ?: "Notes window not found"))
+            return toast("Couldn't find BOOX's new-note button. Send a debug report from Settings")
+        }
+        if (root == null) return run { handler.postDelayed({ setupTick(notesPackage) }, POLL_MS) }
+        val state = NotesScreen.read(root)
+        if (state is NotesScreen.State.Editor) {
+            if (setupBacks < 2) {
+                setupBacks++
+                service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+                handler.postDelayed({ setupTick(notesPackage) }, AFTER_BACK_MS)
+            } else handler.postDelayed({ setupTick(notesPackage) }, POLL_MS)
+            return
+        }
+        if (!setupTabTapped && root.packageName?.toString() == BooxNotes.BOOX_HOME_PACKAGE) {
+            setupTabTapped = true
+            findFirst(root) { n -> NotesScreen.textOf(n).lowercase().let { it == "notes" || it == "note" } && n.isVisibleToUser }?.let {
+                click(it, null)
+                handler.postDelayed({ setupTick(notesPackage) }, AFTER_TAP_MS)
+                return
+            }
+        }
+        val button = newNoteButton(root)
+        if (button == null) return run { handler.postDelayed({ setupTick(notesPackage) }, POLL_MS) }
+        DebugLog.i("note", "new-note setup: tapping ${button.viewIdResourceName ?: NotesScreen.textOf(button)}")
+        click(button, null)
+    }
+
+    /** The library's "new note" button: by its id, or its label / description. */
+    private fun newNoteButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val labels = setOf("new", "new note", "create", "create note", "add note", "+", "新建", "新建笔记")
+        return findFirst(root) { n ->
+            if (!n.isVisibleToUser) return@findFirst false
+            val id = n.viewIdResourceName?.substringAfter(":id/")?.lowercase().orEmpty()
+            val t = NotesScreen.textOf(n).lowercase()
+            t in labels || (id.isNotEmpty() && !id.contains("search") && !id.contains("folder") &&
+                (id.contains("new_note") || id.contains("create") || id == "add" || id.contains("add_note") || id.endsWith("_add") || id.startsWith("add_") || id.contains("iv_add")))
+        }
+    }
+
     fun cancel() {
         handler.removeCallbacksAndMessages(null)
         job = null
@@ -467,6 +539,7 @@ class NoteOpener(private val service: AccessibilityService) {
         private const val MAX_RELAUNCHES = 2
         private const val MAX_TAP_ATTEMPTS = 2
         private const val DIRECT_WAIT_MS = 3_500L
+        private const val SETUP_TIMEOUT_MS = 12_000L
 
         /**
          * Open-by-id is off until we know the extra OpenNoteByDocIdActivity reads:

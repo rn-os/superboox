@@ -77,15 +77,42 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(K_CLIP_SHOW, true)
         set(v) = sp.edit().putBoolean(K_CLIP_SHOW, v).apply()
 
-    /** The open clipboard also covers the apps at the bottom. */
-    var clipCoversApps: Boolean
-        get() = sp.getBoolean(K_CLIP_COVERS_APPS, true)
-        set(v) = sp.edit().putBoolean(K_CLIP_COVERS_APPS, v).apply()
-
     /** How many unpinned clips to keep. */
     var clipLimit: Int
         get() = sp.getInt(K_CLIP_LIMIT, 100)
         set(v) = sp.edit().putInt(K_CLIP_LIMIT, v).apply()
+
+    var clipKeepText: Boolean
+        get() = sp.getBoolean(K_CLIP_TEXT, true)
+        set(v) = sp.edit().putBoolean(K_CLIP_TEXT, v).apply()
+
+    var clipKeepLinks: Boolean
+        get() = sp.getBoolean(K_CLIP_LINKS, true)
+        set(v) = sp.edit().putBoolean(K_CLIP_LINKS, v).apply()
+
+    /** Short codes on their own (sign-in codes): off by default. */
+    var clipKeepCodes: Boolean
+        get() = sp.getBoolean(K_CLIP_CODES, false)
+        set(v) = sp.edit().putBoolean(K_CLIP_CODES, v).apply()
+
+    /** Handwriting copied with BOOX Notes' lasso. */
+    var clipKeepHandwriting: Boolean
+        get() = sp.getBoolean(K_CLIP_HANDWRITING, true)
+        set(v) = sp.edit().putBoolean(K_CLIP_HANDWRITING, v).apply()
+
+    /** While the clipboard is open, these parts of the panel still show (all off: it covers everything). */
+    var clipShowControls: Boolean
+        get() = sp.getBoolean(K_CLIP_SHOW_QC, false)
+        set(v) = sp.edit().putBoolean(K_CLIP_SHOW_QC, v).apply()
+
+    var clipShowLast: Boolean
+        get() = sp.getBoolean(K_CLIP_SHOW_LAST, false)
+        set(v) = sp.edit().putBoolean(K_CLIP_SHOW_LAST, v).apply()
+
+    var clipShowApps: Boolean
+        // Build 51's "covers the apps too" carries over.
+        get() = sp.getBoolean(K_CLIP_SHOW_APPS, !sp.getBoolean(K_CLIP_COVERS_APPS, true))
+        set(v) = sp.edit().putBoolean(K_CLIP_SHOW_APPS, v).apply()
 
     var clipKeepImages: Boolean
         get() = sp.getBoolean(K_CLIP_IMAGES, true)
@@ -254,6 +281,13 @@ class Prefs(context: Context) {
         const val K_CLIP_KEEP_RESTART = "clip_keep_restart"
         const val K_CLIP_IGNORED = "clip_ignored"
         const val K_CLIP_MODE = "clip_mode"
+        const val K_CLIP_TEXT = "clip_text"
+        const val K_CLIP_LINKS = "clip_links"
+        const val K_CLIP_CODES = "clip_codes"
+        const val K_CLIP_HANDWRITING = "clip_handwriting"
+        const val K_CLIP_SHOW_QC = "clip_show_qc"
+        const val K_CLIP_SHOW_LAST = "clip_show_last"
+        const val K_CLIP_SHOW_APPS = "clip_show_apps"
         const val CLIP_PANEL = "panel"
         const val CLIP_EVERY = "every"
 

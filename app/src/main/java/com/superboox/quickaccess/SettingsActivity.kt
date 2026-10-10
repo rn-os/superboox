@@ -813,9 +813,36 @@ class SettingsActivity : Activity() {
         list.addView(heading("In the panel"))
         list.addView(card(listOf(
             check("Show the Clipboard button", prefs.clipShowButton) { prefs.clipShowButton = it },
-            check("Clipboard covers the apps too", prefs.clipCoversApps) { prefs.clipCoversApps = it },
         )))
-        list.addView(note("The Clipboard button sits at the top left of the panel; Recent Files moves to the left end of the Quick Access bar. Off: Recent Files stays at the top."))
+        list.addView(note("The Clipboard button sits at the top left of the panel (hold it to come here); Recent Files moves to the left end of the Quick Access bar. Off: Recent Files stays at the top."))
+        list.addView(heading("What to keep"))
+        val everyCopy = "Every copy with Advanced access"
+        list.addView(card(listOf(
+            keepRow("Text", "Words and passages you copy: from notes, books, web pages, messages.", everyCopy, prefs.clipKeepText) { prefs.clipKeepText = it },
+            keepRow("Links", "Web addresses. Kept as links, so you can open them again from the clipboard.", everyCopy, prefs.clipKeepLinks) { prefs.clipKeepLinks = it },
+            keepRow("Images", "Pictures an app copies, like “Copy image” in the browser or gallery. Large images are kept at a reduced size.",
+                "Only when the panel opens", prefs.clipKeepImages, advanced = false) { prefs.clipKeepImages = it },
+            keepRow("Handwriting", "Strokes copied with the lasso in BOOX Notes. They paste back into BOOX Notes while BOOX still has the copy, usually until a restart.",
+                everyCopy, prefs.clipKeepHandwriting) { prefs.clipKeepHandwriting = it },
+            keepRow("Codes", "Short codes on their own, like a 6-digit sign-in code. Off by default; they're usually only needed once.", everyCopy, prefs.clipKeepCodes) { prefs.clipKeepCodes = it },
+            keepRow("Passwords and private copies", "Never kept: copies from password managers and anything an app marks as private.", null, true, locked = true) {},
+        )))
+        list.addView(note("Every copy with Advanced access: caught as you copy while Advanced access is on; otherwise saved when you open the panel (only the latest copy). " +
+            "Only when the panel opens: Android doesn't let SuperBoox fetch images in the background, even with Advanced access. Unticking a kind doesn't remove clips already saved."))
+        list.addView(heading("While the clipboard is open, still show"))
+        list.addView(card(listOf(
+            check("Quick Controls", prefs.clipShowControls) { prefs.clipShowControls = it; render() },
+            check("Last Opened Note & Document", prefs.clipShowLast) { prefs.clipShowLast = it; render() },
+            check("Apps at the bottom", prefs.clipShowApps) { prefs.clipShowApps = it; render() },
+            hbox().apply {
+                gravity = Gravity.CENTER
+                setPadding(dp(12), dp(12), dp(12), dp(14))
+                addView(miniPanelLabeled("Now", prefs.clipShowControls, prefs.clipShowLast, prefs.clipShowApps))
+                addView(miniPanelLabeled("Controls + apps", true, false, true))
+                addView(miniPanelLabeled("All on", true, true, true))
+            },
+        )))
+        list.addView(note("Quick Access is always replaced, since the clipboard takes its place. Fewer clips fit on a page when more is shown."))
         list.addView(heading("History"))
         val ignored = ignoredApps()
         list.addView(card(listOf(
@@ -823,7 +850,6 @@ class SettingsActivity : Activity() {
                 val options = listOf(25, 50, 100, 200, 500)
                 pick("Keep the last", options.map { "$it clips" }, options.indexOf(prefs.clipLimit).coerceAtLeast(0)) { prefs.clipLimit = options[it] }
             },
-            check("Keep images (screenshots, copied pictures)", prefs.clipKeepImages) { prefs.clipKeepImages = it },
             check("Keep history after a restart", prefs.clipKeepAfterRestart) { prefs.clipKeepAfterRestart = it },
             choiceRow("Ignore copies from", if (ignored.isEmpty()) "Password managers" else "${ignored.size} ${if (ignored.size == 1) "app" else "apps"}") { editIgnoredApps() },
         )))
@@ -857,6 +883,46 @@ class SettingsActivity : Activity() {
             }),
         )).apply { (layoutParams as ViewGroup.MarginLayoutParams).topMargin = dp(20) })
         list.addView(View(this), lp(MATCH, dp(24)))
+    }
+
+    /** One kind of clip to keep: tick box, what it covers, and how it's caught (black label: needs Advanced access). */
+    private fun keepRow(title: String, detail: String, how: String?, value: Boolean, advanced: Boolean = true, locked: Boolean = false, onChange: (Boolean) -> Unit): View =
+        hbox().apply {
+            gravity = Gravity.TOP
+            setPadding(dp(8), dp(10), dp(16), dp(12))
+            val box = CheckBox(context).apply {
+                buttonTintList = android.content.res.ColorStateList.valueOf(if (locked) Ink.DISABLED else Ink.INK)
+                isChecked = value
+                isClickable = false
+                isFocusable = false
+            }
+            addView(box)
+            addView(vbox().apply {
+                setPadding(dp(4), dp(6), 0, 0)
+                addView(text(title, 17f, medium = true, color = if (locked) Ink.MUTED else Ink.INK))
+                addView(text(detail, 13f, color = Ink.MUTED).apply { setPadding(0, dp(2), 0, 0) })
+                if (how != null) addView(text(how, 11.5f, bold = true, color = if (advanced) Ink.PAPER else Ink.INK).apply {
+                    setPadding(dp(6), dp(1), dp(6), dp(1))
+                    background = if (advanced) android.graphics.drawable.GradientDrawable().apply { setColor(Ink.INK); cornerRadius = dp(4).toFloat() } else outline(1, 4)
+                }, lp(WRAP, WRAP).apply { topMargin = dp(6) })
+            }, lp(0, WRAP, 1f))
+            contentDescription = "$title, ${if (value) "kept" else "not kept"}"
+            if (!locked) {
+                pressable()
+                setOnClickListener {
+                    box.isChecked = !box.isChecked
+                    onChange(box.isChecked)
+                }
+            }
+        }
+
+    /** A small drawing of the panel with the clipboard open: which parts still show. */
+    private fun miniPanelLabeled(label: String, controls: Boolean, last: Boolean, apps: Boolean): View = vbox().apply {
+        gravity = Gravity.CENTER_HORIZONTAL
+        setPadding(dp(6), 0, dp(6), 0)
+        addView(MiniPanel.view(context, listOfNotNull("Top bar", if (controls) "Quick Controls" else null, if (last) "Last Opened" else null),
+            "Clipboard", listOfNotNull(if (apps) "Apps" else null)), lp(dp(78), dp(122)))
+        addView(text(label, 12f).apply { gravity = Gravity.CENTER; setPadding(0, dp(4), 0, 0) })
     }
 
     /** Ignored apps that are installed (the built-in password manager list stays ignored even when not shown). */

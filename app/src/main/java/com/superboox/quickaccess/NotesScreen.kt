@@ -129,6 +129,9 @@ object NotesScreen {
 
     // ---- Editor --------------------------------------------------------------------------
 
+    /** The open note's name from BOOX's own title view only (no guessing), for Recent Files. */
+    fun trustedTitle(root: AccessibilityNodeInfo): String? = noteNameView(root)?.takeIf { it.isNotEmpty() }
+
     private fun noteNameView(root: AccessibilityNodeInfo): String? =
         runCatching { root.findAccessibilityNodeInfosByViewId("com.onyx.android.note:id/note_name") }.getOrNull()
             ?.firstOrNull { it.isVisibleToUser }

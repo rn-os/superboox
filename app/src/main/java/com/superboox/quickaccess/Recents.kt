@@ -40,8 +40,18 @@ object Recents {
         return runCatching {
             val arr = JSONArray(raw)
             (0 until arr.length()).mapNotNull { RecentItem.fromJson(arr.getJSONObject(it)) }
+                // Earlier builds could save a BOOX Notes tool pop-up ("Pen 0.30mm") as a note; leave those out.
+                .filterNot { it.kind == RecentItem.Kind.NOTE && isToolName(it.title) }
         }.getOrDefault(emptyList())
     }
+
+    private val TOOL_NAME = Regex(
+        """^(pen|pencil|fountain pen|ballpoint|brush|marker|highlighter|eraser|lasso|calligraphy|charcoal|shape|line)\b.*""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** A BOOX Notes tool name with a size ("Pen 0.30mm"), not a note. */
+    fun isToolName(title: String): Boolean = TOOL_NAME.matches(title.trim()) && title.any { it.isDigit() }
 
     fun lastNote(prefs: Prefs): RecentItem? = list(prefs).firstOrNull { it.kind == RecentItem.Kind.NOTE }
 
@@ -50,6 +60,7 @@ object Recents {
     /** Moves (or adds) [item] to the front. Skips the write when it's already the newest entry. */
     fun record(prefs: Prefs, item: RecentItem) {
         if (item.title.isBlank()) return
+        if (item.kind == RecentItem.Kind.NOTE && isToolName(item.title)) return DebugLog.i("recent", "skipped tool \"${item.title}\"")
         val current = list(prefs)
         val sameAsNewest = current.firstOrNull()?.key == item.key
         val updated = (listOf(item) + current.filterNot { it.key == item.key }).take(MAX)

@@ -35,7 +35,7 @@ import kotlin.math.abs
  * Android allows, so copies are caught as they happen.
  */
 object ClipHistory {
-    enum class Kind { TEXT, LINK, IMAGE }
+    enum class Kind { TEXT, LINK, IMAGE, HANDWRITING }
 
     data class Clip(
         val id: String,
@@ -45,6 +45,9 @@ object ClipHistory {
         val source: String?,
         val time: Long,
         val pinned: Boolean,
+        /** For handwriting: the original clip's label and types, to put it back as BOOX made it. */
+        val label: String? = null,
+        val mimes: String? = null,
     )
 
     private const val FILE = "clipboard"
@@ -89,6 +92,8 @@ object ClipHistory {
                     o.optString("src").ifEmpty { null },
                     o.optLong("time"),
                     o.optBoolean("pin"),
+                    o.optString("label").ifEmpty { null },
+                    o.optString("mimes").ifEmpty { null },
                 )
             }
         }.getOrDefault(emptyList())
@@ -98,7 +103,8 @@ object ClipHistory {
         val a = JSONArray()
         clips.forEach { c ->
             a.put(JSONObject().put("id", c.id).put("k", c.kind.name).put("t", c.text).put("img", c.image ?: "")
-                .put("src", c.source ?: "").put("time", c.time).put("pin", c.pinned))
+                .put("src", c.source ?: "").put("time", c.time).put("pin", c.pinned)
+                .put("label", c.label ?: "").put("mimes", c.mimes ?: ""))
         }
         sp(context).edit().putString(K_ITEMS, a.toString()).apply()
     }
@@ -172,12 +178,62 @@ object ClipHistory {
             }
             return
         }
-        val text = (item.text ?: item.htmlText?.let { android.text.Html.fromHtml(it, 0) } ?: uri?.toString())?.toString()
+        if (uri != null && item.text == null && item.htmlText == null) return recordUri(context, prefs, clip, uri, source)
+        val text = (item.text ?: item.htmlText?.let { android.text.Html.fromHtml(it, 0) })?.toString()
         if (text.isNullOrBlank()) return
-        add(context, prefs, if (isLink(text)) Kind.LINK else Kind.TEXT, text.take(20_000), null, source)
+        val kind = if (isLink(text)) Kind.LINK else Kind.TEXT
+        when {
+            kind == Kind.LINK && !prefs.clipKeepLinks -> return
+            kind == Kind.TEXT && isCode(text) -> if (!prefs.clipKeepCodes) return DebugLog.i("clipboard", "skipped a code (Codes are off)")
+            kind == Kind.TEXT && !prefs.clipKeepText -> return
+        }
+        add(context, prefs, kind, text.take(20_000), null, source)
     }
 
-    private fun add(context: Context, prefs: Prefs, kind: Kind, text: String, image: String?, source: String?) {
+    /** A short code on its own, like a 6-digit sign-in code. */
+    fun isCode(text: String): Boolean {
+        val t = text.trim()
+        if (t.length !in 4..10 || t.any { it.isWhitespace() }) return false
+        val digits = t.count { it.isDigit() }
+        return digits >= 4 && digits * 2 >= t.length && t.all { it.isLetterOrDigit() || it == '-' }
+    }
+
+    /**
+     * A clip that's only a file link (no text). BOOX Notes' lasso copy is one: a link to
+     * its own "CopyPoints" file. Kept as handwriting, never shown as the raw address.
+     */
+    private fun recordUri(context: Context, prefs: Prefs, clip: ClipData, uri: Uri, source: String?) {
+        val desc = clip.description
+        val mimes = desc?.let { d -> (0 until d.mimeTypeCount).map { d.getMimeType(it) } }.orEmpty()
+        val label = desc?.label?.toString()
+        val fromNotes = uri.authority.orEmpty().contains("onyx") || uri.path.orEmpty().contains("CopyPoints")
+        io.execute {
+            // What the linked file is (for the debug report): its type, size, first bytes, and whether it's a picture.
+            val type = runCatching { context.contentResolver.getType(uri) }.getOrNull()
+            val head = runCatching { context.contentResolver.openInputStream(uri)?.use { s -> ByteArray(32).let { b -> b.copyOf(s.read(b).coerceAtLeast(0)) } } }
+            val size = runCatching { context.contentResolver.openInputStream(uri)?.use { s -> var n = 0L; val b = ByteArray(8192); while (true) { val r = s.read(b); if (r < 0) break; n += r }; n } }.getOrNull()
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            runCatching { context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } }
+            val picture = bounds.outWidth > 0 && bounds.outHeight > 0
+            DebugLog.i("clipboard", "file clip: ${uri.authority}${uri.path?.substringBeforeLast('/')?.let { "$it/…" }} label=$label mimes=$mimes type=$type " +
+                "size=$size picture=$picture${if (picture) " ${bounds.outWidth}x${bounds.outHeight}" else ""} " +
+                "head=${head.getOrNull()?.joinToString("") { "%02x".format(it) } ?: head.exceptionOrNull()?.javaClass?.simpleName}")
+            when {
+                picture && prefs.clipKeepImages -> {
+                    val name = "${System.currentTimeMillis()}.png"
+                    if (runCatching { copyImage(context, uri, File(dir(context), name)) }.getOrDefault(false)) {
+                        main.post { add(context, prefs, Kind.IMAGE, "", name, source) }
+                    }
+                }
+                fromNotes && prefs.clipKeepHandwriting -> main.post {
+                    add(context, prefs, Kind.HANDWRITING, uri.toString(), null, source, label, mimes.joinToString(","))
+                }
+                else -> DebugLog.i("clipboard", "file clip not kept")
+            }
+        }
+    }
+
+    private fun add(context: Context, prefs: Prefs, kind: Kind, text: String, image: String?, source: String?, label: String? = null, mimes: String? = null) {
         val all = list(context)
         val same = if (kind == Kind.IMAGE) null else all.firstOrNull { it.kind != Kind.IMAGE && it.text == text }
         val now = System.currentTimeMillis()
@@ -188,7 +244,7 @@ object ClipHistory {
             }
             listOf(same.copy(time = now)) + all.filterNot { it.id == same.id }
         } else {
-            val c = Clip("c$now", kind, text, image, source, now, pinned = false)
+            val c = Clip("c$now", kind, text, image, source, now, pinned = false, label = label, mimes = mimes)
             DebugLog.i("clipboard", "saved a ${kind.name.lowercase()} clip from ${source ?: "?"}")
             listOf(c) + all
         }
@@ -297,6 +353,12 @@ object ClipHistory {
         val cm = context.getSystemService(ClipboardManager::class.java) ?: return false
         val data = when (clip.kind) {
             Kind.IMAGE -> ClipData.newUri(context.contentResolver, "Image", contentUri(clip) ?: return false)
+            // BOOX's own clip, as BOOX made it: pastes back into BOOX Notes while BOOX still has the copy.
+            Kind.HANDWRITING -> ClipData(
+                ClipDescription(clip.label ?: "Handwriting", clip.mimes?.split(',')?.filter { it.isNotBlank() }?.toTypedArray()?.takeIf { it.isNotEmpty() }
+                    ?: arrayOf(ClipDescription.MIMETYPE_TEXT_URILIST)),
+                ClipData.Item(Uri.parse(clip.text)),
+            )
             else -> ClipData.newPlainText("SuperBoox", clip.text)
         }
         return runCatching { cm.setPrimaryClip(data) }

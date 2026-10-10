@@ -145,8 +145,19 @@ class QuickAccessPanel(
         content.addView(topRow(), lp(MATCH, WRAP))
         content.addView(rule(2))
         if (mode == Mode.CLIPBOARD) {
+            // Settings → Clipboard → "While the clipboard is open, still show".
+            if (prefs.showSystemActions && prefs.clipShowControls) {
+                content.addView(quickControlsRow(), lp(MATCH, WRAP))
+                content.addView(rule(2))
+            }
+            if (prefs.clipShowLast) {
+                content.addView(lastNoteRow())
+                content.addView(insetRule())
+                content.addView(lastDocumentRow())
+                content.addView(rule(3))
+            }
             content.addView(clipboardHub(), lp(MATCH, 0, 1f))
-            if (!prefs.clipCoversApps) {
+            if (prefs.clipShowApps) {
                 content.addView(rule(3))
                 content.addView(dock(), lp(MATCH, WRAP))
             }
@@ -176,12 +187,12 @@ class QuickAccessPanel(
         hbox().apply {
             gravity = Gravity.NO_GRAVITY
             if (prefs.clipShowButton) {
-                addView(topCell(R.drawable.ic_clipboard, "Clipboard", lit = mode == Mode.CLIPBOARD) { toggleClipboard() }, lp(0, WRAP, 1f))
+                addView(topCell(R.drawable.ic_clipboard, "Clipboard", lit = mode == Mode.CLIPBOARD, onHold = { openSettingsPage("CLIPBOARD") }) { toggleClipboard() }, lp(0, WRAP, 1f))
             } else {
                 addView(topCell(R.drawable.ic_clock, "Recent Files") { show(if (mode == Mode.RECENT) Mode.MAIN else Mode.RECENT) }, lp(0, WRAP, 1f))
             }
             addView(vRule(), lp(dp(2), MATCH))
-            addView(topCell(R.drawable.ic_note_add, "New Note") { newNote() }, lp(0, WRAP, 1f))
+            addView(topCell(R.drawable.ic_note_add, "New Note", onHold = { newNoteSetup() }) { newNote() }, lp(0, WRAP, 1f))
             addView(vRule(), lp(dp(2), MATCH))
             addView(FrameLayout(ctx).apply {
                 contentDescription = "SuperBoox settings"
@@ -192,7 +203,7 @@ class QuickAccessPanel(
         }
     }
 
-    private fun topCell(iconRes: Int, label: String, lit: Boolean = false, onClick: () -> Unit): View = with(ctx) {
+    private fun topCell(iconRes: Int, label: String, lit: Boolean = false, onHold: (() -> Unit)? = null, onClick: () -> Unit): View = with(ctx) {
         vbox().apply {
             gravity = Gravity.CENTER
             setPadding(0, s(12), 0, s(10))
@@ -205,7 +216,22 @@ class QuickAccessPanel(
             })
             if (lit) pressable(android.graphics.drawable.ColorDrawable(Ink.INK)) else pressable()
             setOnClickListener { onClick() }
+            onHold?.let { hold -> setOnLongClickListener { hold(); true } }
         }
+    }
+
+    /** Settings, opened on one of its pages (a [SettingsActivity.Page] name). */
+    private fun openSettingsPage(page: String) {
+        service.hidePanel()
+        Launcher.start(service, Intent(service, SettingsActivity::class.java)
+            .putExtra(SettingsActivity.EXTRA_PAGE, page)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+    }
+
+    /** Hold New Note: BOOX's own new-note screen (name, template), from the Notes library. */
+    private fun newNoteSetup() {
+        service.hidePanel()
+        service.openNewNoteSetup()
     }
 
     private fun newNote() {
@@ -714,8 +740,14 @@ class QuickAccessPanel(
                 gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(s(6), 0, s(6), 0)
                 contentDescription = "Recent Files"
+                minimumWidth = s(48)
                 addView(icon(getDrawable(R.drawable.ic_clock), iconPx(24)))
-                addView(text("Recent", sp(11f)).apply { gravity = Gravity.CENTER })
+                // Single line at its full width, so it's never cut off.
+                addView(text("Recent", sp(11f)).apply {
+                    gravity = Gravity.CENTER
+                    maxLines = 1
+                    setHorizontallyScrolling(false)
+                }, lp(WRAP, WRAP))
                 pressable()
                 setOnClickListener { show(Mode.RECENT) }
             }, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.START or Gravity.CENTER_VERTICAL))
@@ -949,7 +981,7 @@ class QuickAccessPanel(
             ClipFilter.ALL -> true
             ClipFilter.TEXT -> c.kind == ClipHistory.Kind.TEXT
             ClipFilter.LINKS -> c.kind == ClipHistory.Kind.LINK
-            ClipFilter.IMAGES -> c.kind == ClipHistory.Kind.IMAGE
+            ClipFilter.IMAGES -> c.kind == ClipHistory.Kind.IMAGE || c.kind == ClipHistory.Kind.HANDWRITING
             ClipFilter.PINNED -> c.pinned
         }
         val q = clipQuery.trim()
@@ -983,7 +1015,9 @@ class QuickAccessPanel(
             }, lp(MATCH, WRAP))
         }
         val shown = all.filter(::clipMatches).sortedByDescending { it.pinned }
-        val per = if (prefs.clipCoversApps) CLIPS_PER_PAGE_FULL else CLIPS_PER_PAGE
+        // Fewer clips per page for each part of the panel that stays showing.
+        val per = (CLIPS_PER_PAGE_FULL - (if (prefs.showSystemActions && prefs.clipShowControls) 2 else 0) -
+            (if (prefs.clipShowLast) 1 else 0) - (if (prefs.clipShowApps) 3 else 0)).coerceAtLeast(CLIPS_PER_PAGE_MIN)
         val pages = maxOf(1, (shown.size + per - 1) / per)
         clipPage = clipPage.coerceIn(0, pages - 1)
         val list = ctx.vbox()
@@ -1036,6 +1070,7 @@ class QuickAccessPanel(
                 ClipHistory.Kind.TEXT -> R.drawable.ic_text
                 ClipHistory.Kind.LINK -> R.drawable.ic_link
                 ClipHistory.Kind.IMAGE -> R.drawable.ic_image
+                ClipHistory.Kind.HANDWRITING -> R.drawable.ic_edit
             }
             addView(FrameLayout(ctx).apply {
                 background = outline(1, 6)
@@ -1045,6 +1080,10 @@ class QuickAccessPanel(
                 setPadding(s(10), 0, s(6), 0)
                 if (c.kind == ClipHistory.Kind.IMAGE) {
                     addView(clipThumb(c, if (open) 160 else 64))
+                } else if (c.kind == ClipHistory.Kind.HANDWRITING) {
+                    // BOOX keeps the strokes in its own format: no preview, never the raw address.
+                    addView(text("Handwriting from BOOX Notes", sp(15f), medium = true))
+                    if (open) addView(text("Pastes back into BOOX Notes while BOOX still has this copy (usually until the tablet restarts).", sp(12.5f), color = Ink.MUTED))
                 } else {
                     addView(text(c.text.trim(), sp(15f)).apply {
                         maxLines = if (open) 8 else 2
@@ -1105,7 +1144,7 @@ class QuickAccessPanel(
             Triple(R.drawable.ic_copy, "Copy") { copyClip(c) },
             Triple(R.drawable.ic_paste, "Paste in app") { pasteClip(c) },
             if (c.kind == ClipHistory.Kind.LINK) Triple(R.drawable.ic_open, "Open") { openLink(c) } else null,
-            Triple(R.drawable.ic_share, "Share…") { shareClip(c) },
+            if (c.kind == ClipHistory.Kind.HANDWRITING) null else Triple(R.drawable.ic_share, "Share…") { shareClip(c) },
             Triple(R.drawable.ic_pin, if (c.pinned) "Unpin" else "Pin") {
                 ClipHistory.setPinned(service, c.id, !c.pinned)
                 fillClips()
@@ -1141,16 +1180,16 @@ class QuickAccessPanel(
 
     private fun copyClip(c: ClipHistory.Clip) {
         if (ClipHistory.putBack(service, c)) {
-            toast(if (c.kind == ClipHistory.Kind.IMAGE) "Image copied" else "Copied")
+            toast(when (c.kind) { ClipHistory.Kind.IMAGE -> "Image copied"; ClipHistory.Kind.HANDWRITING -> "Handwriting copied"; else -> "Copied" })
             clipOpen = null
             fillClips()
         } else {
-            toast("Couldn't copy that")
+            toast(if (c.kind == ClipHistory.Kind.HANDWRITING) "BOOX no longer has this copy" else "Couldn't copy that")
         }
     }
 
     private fun pasteClip(c: ClipHistory.Clip) {
-        if (!ClipHistory.putBack(service, c)) return toast("Couldn't copy that")
+        if (!ClipHistory.putBack(service, c)) return toast(if (c.kind == ClipHistory.Kind.HANDWRITING) "BOOX no longer has this copy" else "Couldn't copy that")
         service.hidePanel()
         service.pasteIntoApp()
     }
@@ -1538,7 +1577,7 @@ class QuickAccessPanel(
         const val DOCK_PER_PAGE = 4
         const val QC_PER_PAGE = 5
         const val LIGHT_PER_PAGE = 4
-        const val CLIPS_PER_PAGE = 4
+        const val CLIPS_PER_PAGE_MIN = 2
         const val CLIPS_PER_PAGE_FULL = 7
         private val io = Executors.newSingleThreadExecutor()
     }

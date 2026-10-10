@@ -159,9 +159,13 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     // ---- Recent notes & documents --------------------------------------------------------
 
     private val recordOpenNote = Runnable {
-        val state = notesState(log = false)
-        if (state is NotesScreen.State.Editor) {
-            Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, state.title, prefs.notesPackage, System.currentTimeMillis()))
+        // Only BOOX's own title view: tool pop-ups ("Pen 0.30mm") would otherwise be read as the note's name.
+        val root = runCatching {
+            windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+                .firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName?.toString() == prefs.notesPackage } }
+        }.getOrNull() ?: return@Runnable
+        NotesScreen.trustedTitle(root)?.let { title ->
+            Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, title, prefs.notesPackage, System.currentTimeMillis()))
         }
     }
 
@@ -263,6 +267,11 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 DebugLog.e("panel", "show failed", it)
                 Toast.makeText(this, "Couldn't open panel: ${it.message}", Toast.LENGTH_LONG).show()
             }
+    }
+
+    /** Hold New Note: BOOX's new-note screen, through the Notes library's own button. */
+    fun openNewNoteSetup() {
+        noteOpener.openNewNoteSetup(prefs.notesPackage, inEditor = foregroundPackage == prefs.notesPackage)
     }
 
     /** After the panel closes: pastes the clipboard into the text box that has focus in the app. */

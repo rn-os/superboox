@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 41)
+# SuperBoox: handoff / status (as of build 42)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -177,6 +177,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - `LevelBar` draws a solid pill at max; the ends snap.
 - `setLevels` is judged by reading the sliders back.
 - **Troubleshooting → Front light test**: writes `screen_ctm_brightness` (needs WRITE_SETTINGS), waits 3 s, restores, and asks whether the light changed. The answer is logged as `[light-test]`. If writing works and BOOX follows it, SuperBoox presets can set the light directly and stop borrowing BOOX's Custom.
+- Build 41 light test: writing `screen_ctm_brightness` is refused ("You cannot keep your settings in the secure settings"), so the light can't be set directly without adb. SuperBoox presets must borrow BOOX's Custom (build 39 restores your Custom). The test was removed in 42.
+
+## Build 42
+- `setLevels` moves each slider one step short, then taps BOOX's own `#brightness_bright_up/_down` / `#brightness_temp_up/_down`, in case BOOX applies the light only from its buttons (the user saw the light differ at max). Log lines show `BOOX light b/t` from `screen_ctm_*` to compare.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

@@ -288,36 +288,6 @@ class SettingsActivity : Activity() {
             .show()
     }
 
-    /**
-     * Can SuperBoox set the light without BOOX's Custom? Writes BOOX's own
-     * light settings (screen_ctm_*) to a dim level for a few seconds, then asks
-     * whether the light changed. The answer goes in the log for the report.
-     */
-    private fun lightTest() {
-        if (!Settings.System.canWrite(this)) {
-            toast("Allow \"Modify system settings\" first, then run the test again")
-            startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName")))
-            return
-        }
-        AlertDialog.Builder(this)
-            .setTitle("Front light test")
-            .setMessage("SuperBoox will dim the front light for 3 seconds, then put it back. Watch the screen.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Start") { _, _ ->
-                val result = QuickControls.directLightTest(this)
-                list.postDelayed({
-                    QuickControls.directLightRestore(this, result)
-                    AlertDialog.Builder(this)
-                        .setTitle("Did the light change?")
-                        .setMessage("Write: ${result.summary}")
-                        .setNegativeButton("No") { _, _ -> DebugLog.i("light-test", "user: light did NOT change"); toast("Noted in the log") }
-                        .setPositiveButton("Yes, it dimmed") { _, _ -> DebugLog.i("light-test", "user: light DID change"); toast("Noted in the log") }
-                        .show()
-                }, 3_000)
-            }
-            .show()
-    }
-
     // ---- Backup & restore -----------------------------------------------------------------
 
     private fun lastBackup(): String? = prefs.sp.getString(Prefs.K_LAST_BACKUP, null)
@@ -674,7 +644,6 @@ class SettingsActivity : Activity() {
                 "Share…" to { shareReport() },
             ),
             buttonRow("Clear log" to { DebugLog.clear(); toast("Log cleared"); render() }),
-            buttonRow("Front light test" to { lightTest() }),
         )))
         list.addView(View(this), lp(MATCH, dp(24)))
     }

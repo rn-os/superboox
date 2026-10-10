@@ -417,27 +417,49 @@ object QuickControls {
         val (b, w) = levelNodes(service) ?: return null
         val levels = Levels(b.rangeInfo?.current?.roundToInt() ?: return null, w.rangeInfo?.current?.roundToInt() ?: return null)
         saveLevels(prefs, levels)
-        DebugLog.i("controls", "front light Custom: $levels")
+        DebugLog.i("controls", "front light Custom: $levels; BOOX light ${ctm(service)}")
         return levels
     }
 
-    /** Sets Custom's sliders (Custom must already be selected). */
+    /**
+     * Sets Custom's sliders (Custom must already be selected). BOOX may apply
+     * the light only from its own − / + buttons, so each slider is moved to one
+     * step short and finished with a tap on the matching button.
+     */
     fun setLevels(service: AccessibilityService, prefs: Prefs, target: Levels): Boolean {
         val nodes = levelNodes(service) ?: return false.also { DebugLog.w("controls", "front light sliders not found") }
-        // A slider already at its value reports false, so it's judged by what it reads afterwards.
-        listOf(nodes.first to target.brightness, nodes.second to target.warmth).forEach { (bar, v) -> setSlider(bar, v) }
+        settle(service, nodes.first, target.brightness, "brightness_bright")
+        settle(service, nodes.second, target.warmth, "brightness_temp")
         val after = levelNodes(service)?.let { (b, w) -> Levels(b.rangeInfo?.current?.roundToInt() ?: -1, w.rangeInfo?.current?.roundToInt() ?: -1) }
         val ok = after == target
-        DebugLog.i("controls", "front light Custom -> $target: ${if (ok) "ok" else "now $after"}")
+        DebugLog.i("controls", "front light Custom -> $target: ${if (ok) "ok" else "now $after"}; BOOX light ${ctm(service)}")
         if (ok) saveLevels(prefs, target)
         return ok
     }
 
+    private fun settle(service: AccessibilityService, bar: AccessibilityNodeInfo, value: Int, prefix: String) {
+        val up = value > 0
+        // From one step away, the button press lands exactly on the value.
+        setSlider(bar, if (up) value - 1 else value + 1)
+        val button = button(service, if (up) "${prefix}_up" else "${prefix}_down")
+        if (button?.performAction(AccessibilityNodeInfo.ACTION_CLICK) != true) setSlider(bar, value)
+    }
+
     private fun setSlider(bar: AccessibilityNodeInfo, value: Int): Boolean {
         val args = android.os.Bundle().apply {
-            putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, value.toFloat())
+            putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, value.coerceIn(0, LEVEL_MAX).toFloat())
         }
         return bar.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id, args)
+    }
+
+    private fun button(service: AccessibilityService, id: String): AccessibilityNodeInfo? {
+        for (w in service.windows) {
+            val root = w.root ?: continue
+            val pkg = root.packageName?.toString() ?: continue
+            if (!pkg.contains("systemui")) continue
+            root.findAccessibilityNodeInfosByViewId("$pkg:id/$id").firstOrNull()?.let { return it }
+        }
+        return null
     }
 
     /** Custom's brightness and warmth sliders (SeekBars inside BOOX's two level rows). */
@@ -455,32 +477,15 @@ object QuickControls {
         return null
     }
 
-    // ---- Front light straight through BOOX's settings (experiment) -----------------------
-
-    class LightTest(val before: Levels?, val summary: String)
-
-    /** Sets BOOX's own light settings to a dim level; [directLightRestore] puts them back. */
-    fun directLightTest(context: Context): LightTest {
-        val cr = context.contentResolver
-        fun get(k: String) = runCatching { Settings.System.getInt(cr, k) }.getOrNull()
-        val before = get(CTM_BRIGHTNESS)?.let { b -> Levels(b, get(CTM_TEMPERATURE) ?: 0) }
-        val target = if ((before?.brightness ?: 32) > 10) 4 else 24
-        val wrote = runCatching { Settings.System.putInt(cr, CTM_BRIGHTNESS, target) }
-        val now = get(CTM_BRIGHTNESS)
-        val summary = wrote.fold({ "put $CTM_BRIGHTNESS=$target -> $it, reads back $now (was ${before?.brightness})" },
-            { "put $CTM_BRIGHTNESS refused: ${it.javaClass.simpleName} ${it.message?.take(120)}" })
-        DebugLog.i("light-test", summary)
-        return LightTest(before, summary)
-    }
-
-    fun directLightRestore(context: Context, test: LightTest) {
-        val b = test.before ?: return
-        val ok = runCatching { Settings.System.putInt(context.contentResolver, CTM_BRIGHTNESS, b.brightness) }.getOrDefault(false)
-        DebugLog.i("light-test", "restore $CTM_BRIGHTNESS=${b.brightness} -> $ok")
-    }
-
     private const val CTM_BRIGHTNESS = "screen_ctm_brightness"
     private const val CTM_TEMPERATURE = "screen_ctm_temperature"
+
+    /** The light BOOX says it's at (its own record; apps can read but not write it). */
+    private fun ctm(service: AccessibilityService): String {
+        val cr = service.contentResolver
+        fun get(k: String) = runCatching { Settings.System.getInt(cr, k) }.getOrNull()
+        return "${get(CTM_BRIGHTNESS)}/${get(CTM_TEMPERATURE)}"
+    }
 
     // ---- Your own Front Light presets (applied through Custom) ----------------------------
 

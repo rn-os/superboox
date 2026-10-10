@@ -38,9 +38,38 @@ object NoteIdProbe {
         runCatching { providers(context, notesPackage, deadline, out) }
             .onFailure { out += "providers: ${it.javaClass.simpleName} ${it.message}" }
         // dexKeys() (id-like names across the whole Notes app) already did its job in
-        // build 14's report; the targeted activityStrings() below replaces it.
-        runCatching { out += activityStrings(context, notesPackage) }
-            .onFailure { out += "activity strings: ${it.javaClass.simpleName} ${it.message}" }
+        // build 14's report; activityStrings() (build 16) is superseded by deep() below.
+        // Build 16 listed the strings; this resolves the fields, calls and bean shapes behind them.
+        runCatching { out += deep(context, notesPackage) }
+            .onFailure { out += "deep scan: ${it.javaClass.simpleName} ${it.message}" }
+        return out
+    }
+
+    /**
+     * What BOOX's note-opening screens read and call, the values of the
+     * constants behind their extra names, and the fields of the note
+     * description (OpenNoteBean) they pass along. Read from the APKs only.
+     */
+    private fun deep(context: Context, notesPackage: String): List<String> {
+        val beans = listOf("/OpenNoteBean;")
+        val targets = listOf(
+            notesPackage to listOf(
+                "Lcom/onyx/android/note/note/ui/OpenNote",
+                "Lcom/onyx/android/note/note/ui/ScribbleActivity;",
+                "Lcom/onyx/android/note/note/ui/CreateQuickNoteActivity",
+            ),
+            BooxNotes.BOOX_HOME_PACKAGE to listOf("Lcom/onyx/common/common/base/MiddlewareActivity"),
+        )
+        val out = ArrayList<String>()
+        for ((pkg, prefixes) in targets) {
+            val apk = runCatching { context.packageManager.getApplicationInfo(pkg, 0).sourceDir }.getOrNull()
+            if (apk == null) {
+                out += "deep scan ($pkg): apk not found"
+                continue
+            }
+            val found = DexProbe.deepScan(apk, prefixes, beans, SystemClock.uptimeMillis() + 15_000)
+            out += if (found.isEmpty()) listOf("deep scan ($pkg): nothing found") else found.map { "deep $pkg: ${it.take(1500)}" }
+        }
         return out
     }
 

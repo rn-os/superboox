@@ -105,6 +105,14 @@ object BooxNotes {
         val info = runCatching { pm.getActivityInfo(byId, PackageManager.GET_META_DATA) }.getOrNull()
         out += if (info == null) "OpenNoteByDocIdActivity: not found" else
             "OpenNoteByDocIdActivity: exported=${info.exported} permission=${info.permission} launchMode=${info.launchMode} meta=${info.metaData?.keySet()}"
+        for (cn in listOf(
+            ComponentName(BOOX_HOME_PACKAGE, "com.onyx.common.common.base.MiddlewareActivity"),
+            ComponentName(notesPackage, "com.onyx.android.note.note.ui.ScribbleActivity"),
+        )) {
+            val a = runCatching { pm.getActivityInfo(cn, 0) }.getOrNull()
+            out += if (a == null) "${cn.className.substringAfterLast('.')}: not found" else
+                "${cn.className.substringAfterLast('.')}: exported=${a.exported} permission=${a.permission} launchMode=${a.launchMode}"
+        }
         for (pkg in packages(notesPackage).sorted()) {
             val providers = runCatching { pm.getPackageInfo(pkg, PackageManager.GET_PROVIDERS).providers }.getOrNull().orEmpty()
             providers.forEach { p ->

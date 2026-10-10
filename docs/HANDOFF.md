@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 22)
+# SuperBoox: handoff / status (as of build 23)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -88,10 +88,17 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - `heading()` puts a bold uppercase name above each card. `note()` adds help text below a card; `cardText()` is text inside one.
   - The adb tip in Advanced is gone. The Quick Access hint now reads "open it, swipe the panel open and tap Add".
 
+## Build 23: icons (mockup 17, approved)
+- `ic_note` is now an outlined notebook and `ic_note_add` the same notebook with a plus (2dp strokes). `ic_apps` is a 2×2 grid.
+- Icons by kind (`QuickAccessPanel.pinIcon`): BOOX note = notebook, NeoReader document = book, other file = page, then folder, app grid, link. They appear before each pinned item, in edit mode too.
+- Last Opened Note uses the notebook, Last Opened Document the book.
+- `Prefs.appOwnIcons` (Settings → Gesture card, "Use apps' own icons for pinned apps") is off by default.
+- `Launcher.appLabel` drops a trailing version ("NeoReader V3.0" → "NeoReader").
+
 ## Next step
-- All requested features are built and confirmed except build 22's look on device. Wait for user feedback.
+- Wait for user feedback on build 23.
 
 ## Open ideas / backlog
 - Store the note id in pins when pinning, so lookup by title isn't needed.
 - Last Opened Document only returns to the last reading app; titles depend on that app.
-- Mockups `docs/mockups/10–14` show the approved Supernote design, `15–16` the approved bordered Settings (`settings-borders.html`); `01–09` show the older design.
+- Mockups `docs/mockups/10–14` show the approved Supernote design, `15–16` the approved bordered Settings (`settings-borders.html`), `17` the approved icons (`panel-icons.html`); `01–09` show the older design.

@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 17)
+# SuperBoox: handoff / status (as of build 18)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -59,15 +59,20 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - the debug report.
 - Known gap: opening a note **shows the BOOX home screen for about 2 seconds**, because there's no exported way into the library.
 
-## Next step (in progress)
-1. The user installs **build 17** and sends a debug report. Read the lines starting with **`deep …`**, which come from `DexProbe.deepScan`:
-   - `bean …OpenNoteBean: …` shows the field names a JSON `OPEN_NOTE_BEAN_JSON` extra for `ScribbleActivity` would use.
-   - `reads …` and `constants: Owner.FIELD="value"` show the extra keys read through non-inlined String constants. These matter for `OpenNoteByDocIdActivity` and `MiddlewareActivity`.
-   - `initializer strings …` covers constants set in `<clinit>` instead of static values.
-   - `calls …` lists the app methods each screen calls. Look for an intent helper that reads the doc id.
-   - `MiddlewareActivity: exported=…` and `ScribbleActivity: exported=…` appear in the note-id access section.
-2. Implement the direct open in `NotesDb.openIntent()`. Preferred order: `OpenNoteByDocIdActivity` with the correct key; then `MiddlewareActivity` (action `com.onyx.action.MIDDLEWARE`, type `note`) if it is exported; then `ScribbleActivity` with `OPEN_NOTE_BEAN_JSON`. Never send anything that could create a note.
-3. Flip `NoteOpener.DIRECT_OPEN = true`. Keep the 3.5-second confirmation and library fallback. Then ship and confirm through a report that the log shows `opened by id`.
+## Build 18 (latest)
+- `NotesScreen.read` checks the `note_name` view **first**. In build 17 the editor's tool column (Layer, Margin, AI, …, Sync) was read as library cards, which broke Add inside a note and switching notes.
+- `Pin.noteId`: `NoteIds.capture` saves the Notes database id of every BOOX_NOTE pin. It runs on service connect and whenever the `pins` pref changes. `NoteIds.resolve` follows renames when a pin is opened.
+- `OpeningCover`: takes an accessibility `takeScreenshot` into memory only (`canTakeScreenshot` was added to the service config) and shows it as a non-touchable overlay while `NoteOpener` works. It's lifted 400 ms after success, at once on failure, after 12 s at most, or when the panel opens. With no screenshot, notes open without the cover. **The user doesn't want saved screenshots, and nothing is saved.**
+- Build 17 findings:
+  - MiddlewareActivity, ScribbleActivity and OpenNoteByDocIdActivity are all exported.
+  - OpenNoteBean fields: `documentId`, `title`, `parentUniqueId`, `pageIndex`, `jumpBackToNote`, …
+  - OpenNoteByDocIdActivity reads the id via `OpenNoteIntentsKt.noteDocIdFromIntent`. Build 18's report dumps that helper's strings, under `code strings …OpenNoteIntentsKt`.
+
+## Next step
+1. From the build 18 report:
+   - get the extra key from the `OpenNoteIntentsKt` lines, set it in `NotesDb.openIntent()` and flip `NoteOpener.DIRECT_OPEN = true` (`knownId` is already passed from pins);
+   - read the `readers` lines (NeoReader package, its exported DB tables and columns) to plan document pins by file path (step 3: open with ACTION_VIEW).
+2. Confirm the cover works: look for `[cover] screen held` in the log, and check for `screenshot not available`.
 
 ## Open ideas / backlog
 - Store the note id in pins when pinning, so lookup by title isn't needed.

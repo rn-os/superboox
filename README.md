@@ -40,11 +40,20 @@ Each release is tagged with the APK's own version (`0.1.0-build.N`), so Obtainiu
 
 ## Using the panel
 
-- **Pin the note you're writing in:** open the panel inside a note and tap **Pin this note**.
-- **Pin from the library:** open the panel on the BOOX Notes library and tap **Pin a note from this screen**. Only note and folder cards are listed.
-- **Rearrange or remove pins:** long-press any item to enter edit mode. Use ↑ ↓ to move items and the trash can to remove them, then tap **Done**.
-- **Apps** at the bottom show 8 per page (4 × 2), like Supernote. With more than 8, use ‹ › to page through them.
-- **Menu size** (Settings → Gesture) scales the panel's text, icons and touch targets: Small, Standard, Large or Extra large.
+The panel follows the Supernote sidebar:
+
+- **Recent Files**: notes and documents you opened recently, newest first. Files from the folder set in Settings → Recent files are included.
+- **New Note**: opens BOOX's quick-note screen. If the firmware doesn't allow that, it opens Notes instead.
+- **⚙**: SuperBoox settings.
+- **Last Opened Note**: reopens the last note you had open. SuperBoox reads its name from the editor's title bar and keeps the list on the device.
+- **Last Opened Document**: returns to the reading app you last used (NeoReader, KOReader, Kindle and so on), where the book is still open. It's grayed out until you've read something.
+- **Quick Access**: your pinned items. Tap **Add** to pin something:
+  - inside a note, Add pins that note;
+  - in the Notes library, Add opens a picker where you tick several notes or folders, then tap **Add (n)**;
+  - anywhere else, Add pins the current app.
+- **Long-press** an item to enter edit mode, with ↑ ↓ to reorder, 🗑 to remove, and **Done** to finish.
+- **Apps** show 4 per page (2 × 2). Use ‹ › to page through them.
+- **Menu size** (Settings → Gesture) scales text, icons and touch targets. The Back / Home / Recents / Capture row is off by default and can be turned on in Settings.
 
 ## BOOX Notes integration
 

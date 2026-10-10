@@ -82,6 +82,38 @@ object BooxNotes {
         return out
     }
 
+    /** BOOX's "new quick note" screen; other apps may open it on firmware 4.3. */
+    private const val QUICK_NOTE_ACTIVITY = "com.onyx.android.note.note.ui.CreateQuickNoteActivity"
+
+    /** Opens a new blank note, if this firmware lets other apps do that. */
+    fun newNoteIntent(context: Context, notesPackage: String): Intent? {
+        val cn = ComponentName(notesPackage, QUICK_NOTE_ACTIVITY)
+        val info = runCatching { context.packageManager.getActivityInfo(cn, 0) }.getOrNull() ?: return null
+        if (!info.exported) return null
+        return Intent(Intent.ACTION_MAIN).setComponent(cn).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+
+    /**
+     * What this device exposes that could open a note by its internal id
+     * (OpenNoteByDocIdActivity) or reveal those ids (content providers). Shown
+     * in the debug report so this can be investigated without adb.
+     */
+    fun describeNoteIdAccess(context: Context, notesPackage: String): List<String> {
+        val pm = context.packageManager
+        val out = ArrayList<String>()
+        val byId = ComponentName(notesPackage, "com.onyx.android.note.note.ui.OpenNoteByDocIdActivity")
+        val info = runCatching { pm.getActivityInfo(byId, PackageManager.GET_META_DATA) }.getOrNull()
+        out += if (info == null) "OpenNoteByDocIdActivity: not found" else
+            "OpenNoteByDocIdActivity: exported=${info.exported} permission=${info.permission} launchMode=${info.launchMode} meta=${info.metaData?.keySet()}"
+        for (pkg in packages(notesPackage).sorted()) {
+            val providers = runCatching { pm.getPackageInfo(pkg, PackageManager.GET_PROVIDERS).providers }.getOrNull().orEmpty()
+            providers.forEach { p ->
+                out += "provider $pkg: ${p.authority} exported=${p.exported} read=${p.readPermission} write=${p.writePermission} grantUri=${p.grantUriPermissions}"
+            }
+        }
+        return out
+    }
+
     /** Note-related activities on this device, for the debug report. */
     fun describeActivities(context: Context, notesPackage: String): List<String> {
         val pm = context.packageManager

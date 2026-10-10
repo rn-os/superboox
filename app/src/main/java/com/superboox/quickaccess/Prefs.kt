@@ -66,7 +66,8 @@ class Prefs(context: Context) {
         set(v) = sp.edit().putString(K_MENU_SIZE, v.name).apply()
 
     var showSystemActions: Boolean
-        get() = sp.getBoolean(K_SYSTEM_ACTIONS, true)
+        // Supernote's panel has no Back/Home row, so it's opt-in.
+        get() = sp.getBoolean(K_SYSTEM_ACTIONS, false)
         set(v) = sp.edit().putBoolean(K_SYSTEM_ACTIONS, v).apply()
 
     var notesPackage: String
@@ -141,6 +142,7 @@ class Prefs(context: Context) {
         const val K_PANEL_WIDTH = "panel_width_pct"
         const val K_SYSTEM_ACTIONS = "system_actions"
         const val K_MENU_SIZE = "menu_size"
+        const val K_RECENTS = "recents"
         const val K_NOTES_PKG = "notes_package"
         const val K_RECENT_URI = "recent_uri"
         const val K_RECENT_COUNT = "recent_count"

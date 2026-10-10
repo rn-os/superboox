@@ -297,6 +297,7 @@ class NoteOpener(private val service: AccessibilityService) {
     private fun succeed(j: Job) {
         job = null
         DebugLog.i("note", "opened \"${j.steps.joinToString(" / ")}\"")
+        (service as? QuickAccessService)?.noteOpened(j.steps.last())
     }
 
     private fun fail(j: Job, why: String) {

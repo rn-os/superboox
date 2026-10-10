@@ -71,6 +71,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 if (isActivity) foregroundActivity = cls else if (newApp) foregroundActivity = null
                 DebugLog.i("foreground", "$pkg ($cls)")
             }
+            trackRecent(pkg, event)
         }
     }
 
@@ -108,6 +109,35 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (::noteOpener.isInitialized) noteOpener.cancel()
         hidePanel()
         detachHandle()
+    }
+
+    // ---- Recent notes & documents --------------------------------------------------------
+
+    private val recordOpenNote = Runnable {
+        val state = notesState(log = false)
+        if (state is NotesScreen.State.Editor) {
+            Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, state.title, prefs.notesPackage, System.currentTimeMillis()))
+        }
+    }
+
+    /** Remembers the open note (read from the editor's title) and the last reading app used. */
+    private fun trackRecent(pkg: String, event: AccessibilityEvent) {
+        if (pkg == prefs.notesPackage) {
+            // The editor's views settle after the window appears; read the title a moment later.
+            handler.removeCallbacks(recordOpenNote)
+            handler.postDelayed(recordOpenNote, 1_200)
+        } else if (Recents.isReader(pkg, prefs.notesPackage)) {
+            val app = Launcher.appLabel(this, pkg)
+            // The window event's text is often the document title; fall back to the app name.
+            val text = event.text.joinToString(" ").trim()
+            val title = text.takeIf { it.isNotEmpty() && !it.equals(app, ignoreCase = true) && it.length <= 120 } ?: app
+            Recents.record(prefs, RecentItem(RecentItem.Kind.DOCUMENT, title, pkg, System.currentTimeMillis()))
+        }
+    }
+
+    /** Called by [NoteOpener] when it has opened a note. */
+    fun noteOpened(title: String) {
+        Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, title, prefs.notesPackage, System.currentTimeMillis()))
     }
 
     // ---- Edge handle ---------------------------------------------------------------------
@@ -197,7 +227,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     }
 
     /** What BOOX Notes is showing (open note or library), for pinning from the panel. */
-    fun notesState(): NotesScreen.State? {
+    fun notesState(log: Boolean = true): NotesScreen.State? {
         val packages = BooxNotes.packages(prefs.notesPackage)
         val pkg = packages.joinToString("/")
         val root = runCatching {
@@ -205,7 +235,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 .firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName?.toString() in packages } }
         }.getOrNull()
         if (root == null) {
-            DebugLog.w("picker", "no $pkg window found; windows=${runCatching { windows.map { "${it.type}:${it.root?.packageName}" } }.getOrNull()}")
+            if (log) DebugLog.w("picker", "no $pkg window found; windows=${runCatching { windows.map { "${it.type}:${it.root?.packageName}" } }.getOrNull()}")
             return null
         }
         val state = NotesScreen.read(root)
@@ -214,7 +244,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             is NotesScreen.State.Library -> "library, ${state.cards.size} cards: ${state.cards.joinToString { it.label }.take(300)}"
             NotesScreen.State.Unknown -> "unrecognised screen"
         }
-        DebugLog.i("picker", "$pkg: $summary\n" + DebugReport.describeTree(root))
+        if (log) DebugLog.i("picker", "$pkg: $summary\n" + DebugReport.describeTree(root))
         return state
     }
 

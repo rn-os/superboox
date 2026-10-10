@@ -47,6 +47,11 @@ object DebugReport {
         line("notes package setting: $notesPkg (launcher entry: ${pm.getLaunchIntentForPackage(notesPkg) != null})")
         line("notes in front: ${QuickAccessService.instance?.isNotesInFront} (${QuickAccessService.instance?.foregroundActivity})")
         line("ways to open Notes: ${BooxNotes.launchCandidates(context, notesPkg).joinToString { it.first }.ifEmpty { "none" }}")
+        line("new note screen available: ${BooxNotes.newNoteIntent(context, notesPkg) != null}")
+        line("note-id access (for instant opening):")
+        BooxNotes.describeNoteIdAccess(context, notesPkg).forEach { line("  $it") }
+        val recents = Recents.list(prefs)
+        line("remembered recent items: ${recents.size}${recents.take(5).joinToString(prefix = " (", postfix = ")") { "${it.kind}:${it.title}" }}")
         line("note activities:")
         BooxNotes.describeActivities(context, notesPkg).forEach { line("  $it") }
 

@@ -17,7 +17,16 @@ import android.view.accessibility.AccessibilityNodeInfo
  */
 object NotesScreen {
 
-    class Card(val label: String, val node: AccessibilityNodeInfo, val bounds: Rect = Rect().also(node::getBoundsInScreen))
+    class Card(
+        val label: String,
+        val node: AccessibilityNodeInfo,
+        val bounds: Rect = Rect().also(node::getBoundsInScreen),
+        /** Secondary text on the card: a date, or "6 notes" for a folder. */
+        val detail: String? = null,
+    ) {
+        /** Folders show an item count instead of a date. */
+        val isFolder: Boolean get() = detail?.let { FOLDER_HINT.containsMatchIn(it) } == true
+    }
 
     sealed class State {
         /** An open note. [title] is the note's name as shown in the top bar. */
@@ -87,19 +96,26 @@ object NotesScreen {
         val minWide = screen.width() * 40 / 100
         val maxTall = screen.height() * 60 / 100
         val topBar = screen.top + screen.height() * 12 / 100
-        val out = LinkedHashMap<String, Card>()
-        val seenCards = HashSet<String>()
+        // Per card (keyed by its bounds): its name node and first secondary text.
+        val names = LinkedHashMap<String, Pair<String, AccessibilityNodeInfo>>()
+        val details = HashMap<String, String>()
+        val rects = HashMap<String, Rect>()
         for (n in all(root)) {
             val text = textOf(n)
-            if (text.isEmpty() || !n.isVisibleToUser || isMeta(text)) continue
+            if (text.isEmpty() || !n.isVisibleToUser) continue
             val card = clickableAncestor(n) ?: continue
             val r = Rect().also(card::getBoundsInScreen)
             if (r.height() < minTall && r.width() < minWide) continue
             if (r.height() > maxTall) continue // the whole page, not a card
             if (r.centerY() < topBar) continue
             val key = r.flattenToString()
-            if (!seenCards.add(key)) continue // one name per card
-            out.putIfAbsent(norm(text), Card(text, n, r))
+            rects[key] = r
+            if (isMeta(text)) details.putIfAbsent(key, text) else names.putIfAbsent(key, text to n)
+        }
+        val out = LinkedHashMap<String, Card>()
+        for ((key, nameAndNode) in names) {
+            val (text, n) = nameAndNode
+            out.putIfAbsent(norm(text), Card(text, n, rects.getValue(key), details[key]))
         }
         return out.values.toList()
     }
@@ -142,6 +158,7 @@ object NotesScreen {
         return false
     }
 
+    private val FOLDER_HINT = Regex("""\b\d+\s*(notes?|items?|files?)\b|folder""", RegexOption.IGNORE_CASE)
     private val META_NUMERIC = Regex("""^[\d\s.,:/%()+-]+$""")
     private val META_DATE = Regex(
         """\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d|\d{4}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}|\d{1,2}:\d{2}""",

@@ -130,7 +130,7 @@ class QuickAccessPanel(
         content.addView(topRow(), lp(MATCH, WRAP))
         content.addView(rule(2))
         if (prefs.showSystemActions) {
-            content.addView(systemActions(), lp(MATCH, WRAP))
+            content.addView(quickControlsRow(), lp(MATCH, WRAP))
             content.addView(rule(2))
         }
         content.addView(lastNoteRow())
@@ -199,25 +199,69 @@ class QuickAccessPanel(
         Launcher.start(service, Intent(service, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
-    private fun systemActions(): View = with(ctx) {
-        hbox().apply {
-            setPadding(s(4), s(6), s(4), s(6))
-            fun action(iconRes: Int, label: String, global: Int) {
-                addView(vbox().apply {
-                    gravity = Gravity.CENTER
-                    setPadding(0, s(6), 0, s(6))
-                    contentDescription = label
-                    addView(icon(getDrawable(iconRes), iconPx(26)))
-                    addView(text(label, sp(12f), medium = true).apply { gravity = Gravity.CENTER })
-                    pressable()
-                    setOnClickListener { service.systemAction(global) }
-                }, lp(0, WRAP, 1f))
+    // ---- Quick Controls: one row of round tiles, paged ----------------------------------
+
+    private fun quickControlsRow(): View = with(ctx) {
+        val controls = QuickControls.selected(prefs)
+        val box = vbox().apply { setPadding(s(4), s(10), s(4), s(2)) }
+        if (controls.isEmpty()) {
+            box.addView(hint("Add Quick Controls in Settings."))
+            return@with box
+        }
+        val pages = controls.chunked(QC_PER_PAGE)
+        val page = service.quickControlsPage.coerceIn(0, pages.size - 1)
+        service.quickControlsPage = page
+        val states = QuickControls.states(service, prefs)
+        fun go(to: Int) {
+            if (to in pages.indices && to != page) {
+                service.quickControlsPage = to
+                show(mode)
             }
-            action(R.drawable.ic_back, "Back", AccessibilityService.GLOBAL_ACTION_BACK)
-            action(R.drawable.ic_home, "Home", AccessibilityService.GLOBAL_ACTION_HOME)
-            action(R.drawable.ic_recents, "Recents", AccessibilityService.GLOBAL_ACTION_RECENTS)
-            action(R.drawable.ic_notifications, "Alerts", AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS)
-            action(R.drawable.ic_screenshot, "Capture", AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT)
+        }
+        val row = SwipeRow(ctx, s(40)) { go(page + it) }
+        pages[page].forEach { row.addView(controlTile(it, states[it.id] == true), lp(0, WRAP, 1f)) }
+        repeat(QC_PER_PAGE - pages[page].size) { row.addView(View(ctx), lp(0, 1, 1f)) }
+        box.addView(row, lp(MATCH, WRAP))
+        if (pages.size > 1) {
+            box.addView(hbox().apply {
+                gravity = Gravity.CENTER
+                addView(pagerButton(R.drawable.ic_chevron_left, "Previous controls", page > 0) { go(page - 1) })
+                addView(text("${page + 1} / ${pages.size}", sp(13f), bold = true).apply { setPadding(s(12), 0, s(12), 0) })
+                addView(pagerButton(R.drawable.ic_chevron_right, "More controls", page < pages.size - 1) { go(page + 1) })
+            }, lp(MATCH, WRAP))
+        }
+        box
+    }
+
+    /** Round tile like the BOOX Control Center: black when on, outlined when off. */
+    private fun controlTile(control: QuickControls.Control, on: Boolean): View = with(ctx) {
+        val lit = on && control.kind == QuickControls.Kind.TOGGLE
+        vbox().apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, 0, 0, s(6))
+            contentDescription = "${control.label}${if (control.kind == QuickControls.Kind.TOGGLE) if (on) ", on" else ", off" else ""}"
+            val size = s(52)
+            addView(FrameLayout(ctx).apply {
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(if (lit) Ink.INK else Ink.PAPER)
+                    setStroke(dp(2), Ink.INK)
+                }
+                addView(icon(getDrawable(control.icon), iconPx(26)).apply {
+                    imageTintList = ColorStateList.valueOf(if (lit) Ink.PAPER else Ink.INK)
+                }, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+            }, lp(size, size))
+            addView(text(control.label, sp(12f)).apply {
+                gravity = Gravity.CENTER
+                maxLines = 2
+                setPadding(s(2), s(5), s(2), 0)
+            }, lp(MATCH, WRAP))
+            pressable()
+            setOnClickListener { service.quickControl(control, hold = false) }
+            setOnLongClickListener {
+                service.quickControl(control, hold = true)
+                true
+            }
         }
     }
 
@@ -634,22 +678,24 @@ class QuickAccessPanel(
     private fun dock(): View = with(ctx) {
         val apps = prefs.dock
         val box = vbox()
-        if (apps.isEmpty()) {
+        val previous = if (prefs.previousAppInDock) service.previousApp else null
+        val cells: List<View> = listOfNotNull(previous?.let { previousCell(it) }) + apps.map { appCell(it) }
+        if (cells.isEmpty()) {
             box.addView(hint("Add apps in Settings."))
             return@with box
         }
-        val pages = apps.chunked(DOCK_PER_PAGE)
+        val pages = cells.chunked(DOCK_PER_PAGE)
         dockPage = dockPage.coerceIn(0, pages.size - 1)
         pages[dockPage].chunked(2).forEachIndexed { r, pair ->
             if (r > 0) box.addView(rule(1))
             box.addView(hbox().apply {
                 gravity = Gravity.NO_GRAVITY
-                addView(appCell(pair[0]), lp(0, WRAP, 1f))
+                addView(pair[0], lp(0, WRAP, 1f))
                 addView(vRule(), lp(dp(1), MATCH).apply {
                     topMargin = s(10)
                     bottomMargin = s(10)
                 })
-                if (pair.size > 1) addView(appCell(pair[1]), lp(0, WRAP, 1f)) else addView(View(ctx), lp(0, 1, 1f))
+                if (pair.size > 1) addView(pair[1], lp(0, WRAP, 1f)) else addView(View(ctx), lp(0, 1, 1f))
             }, lp(MATCH, WRAP))
         }
         if (pages.size > 1) {
@@ -663,6 +709,33 @@ class QuickAccessPanel(
             }, lp(MATCH, WRAP))
         }
         box
+    }
+
+    /** "Previous app": that app's icon with a small ← badge; tap to switch straight back. */
+    private fun previousCell(pkg: String): View = with(ctx) {
+        vbox().apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(s(4), s(9), s(4), s(9))
+            contentDescription = "Previous app: ${Launcher.appLabel(service, pkg)}"
+            val iconSize = iconPx(40)
+            addView(FrameLayout(ctx).apply {
+                addView(icon(Launcher.appIcon(service, pkg), iconSize, tint = false), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.END))
+                addView(FrameLayout(ctx).apply {
+                    background = android.graphics.drawable.GradientDrawable().apply {
+                        shape = android.graphics.drawable.GradientDrawable.OVAL
+                        setColor(Ink.PAPER)
+                        setStroke(dp(2), Ink.INK)
+                    }
+                    addView(icon(getDrawable(R.drawable.ic_back), iconPx(14)), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+                }, FrameLayout.LayoutParams(s(22), s(22), Gravity.TOP or Gravity.START))
+            }, lp(dp(iconSize) + s(8), dp(iconSize) + s(8)))
+            addView(oneLine(text("Previous app", sp(14f))).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, s(3), 0, 0)
+            }, lp(MATCH, WRAP))
+            pressable()
+            setOnClickListener { service.openPreviousApp() }
+        }
     }
 
     private fun appCell(app: Pin): View = with(ctx) {
@@ -726,6 +799,43 @@ class QuickAccessPanel(
     private companion object {
         // Two rows of two, like the Supernote photo; more pages with ‹ ›.
         const val DOCK_PER_PAGE = 4
+        const val QC_PER_PAGE = 5
         val io = Executors.newSingleThreadExecutor()
+    }
+}
+
+/**
+ * A row that turns a sideways swipe into a page change, while taps and long
+ * presses still reach its children.
+ */
+private class SwipeRow(context: android.content.Context, private val threshold: Int, private val onSwipe: (Int) -> Unit) :
+    android.widget.LinearLayout(context) {
+    private var downX = 0f
+    private var downY = 0f
+
+    init {
+        orientation = HORIZONTAL
+    }
+
+    override fun onInterceptTouchEvent(e: android.view.MotionEvent): Boolean {
+        when (e.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN -> {
+                downX = e.x
+                downY = e.y
+            }
+            android.view.MotionEvent.ACTION_MOVE -> {
+                val dx = e.x - downX
+                if (kotlin.math.abs(dx) > threshold / 2 && kotlin.math.abs(dx) > kotlin.math.abs(e.y - downY)) return true
+            }
+        }
+        return false
+    }
+
+    override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
+        if (e.actionMasked == android.view.MotionEvent.ACTION_UP) {
+            val dx = e.x - downX
+            if (kotlin.math.abs(dx) > threshold) onSwipe(if (dx < 0) 1 else -1)
+        }
+        return true
     }
 }

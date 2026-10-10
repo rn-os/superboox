@@ -73,6 +73,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 foregroundPackage = pkg
                 if (isActivity) foregroundActivity = cls else if (newApp) foregroundActivity = null
                 DebugLog.i("foreground", "$pkg ($cls)")
+                if (newApp) rememberApp(pkg)
             }
             trackRecent(pkg, event)
         }
@@ -200,9 +201,10 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     fun togglePanel() = if (isPanelShowing) hidePanel() else showPanel()
 
-    fun showPanel() {
+    /** @param keepCover leave the screen hold up (it's lifted by whoever put it there). */
+    fun showPanel(keepCover: Boolean = false) {
         if (panel != null) return
-        cover.hide()
+        if (!keepCover) cover.hide()
         val p = QuickAccessPanel(this, prefs, foregroundPackage)
         val params = overlayParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT, focusable = true)
         runCatching { wm.addView(p.root, params) }
@@ -270,6 +272,71 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         }
     }
 
+    // ---- Quick Controls -----------------------------------------------------------------
+
+    /** The Quick Controls page shown, kept while the panel is rebuilt. */
+    var quickControlsPage = 0
+
+    /**
+     * Runs a Quick Control. Actions go straight to Android. Control Center tiles
+     * are pressed behind the screen hold: the still is taken with the panel up,
+     * so after a toggle the panel simply reappears with the new state.
+     */
+    fun quickControl(control: QuickControls.Control, hold: Boolean) {
+        if (control.kind == QuickControls.Kind.ACTION) {
+            if (!hold) systemAction(control.globalAction)
+            return
+        }
+        val reopen = control.kind == QuickControls.Kind.TOGGLE && !hold
+        cover.show {
+            hidePanel()
+            QuickControls.operate(this, prefs, control, hold) { ok ->
+                if (reopen) {
+                    showPanel(keepCover = true)
+                    cover.hide(250)
+                } else {
+                    cover.hide(300)
+                }
+                if (!ok) Toast.makeText(this, "Couldn't find ${control.label} in the Control Center", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // ---- Previous app -------------------------------------------------------------------
+
+    /** Apps used recently, newest first (launchers and system screens left out). */
+    private val recentApps = ArrayDeque<String>()
+
+    private val homePackages: Set<String> by lazy {
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        packageManager.queryIntentActivities(home, 0).map { it.activityInfo.packageName }.toSet() + BooxNotes.BOOX_HOME_PACKAGE
+    }
+
+    private fun rememberApp(pkg: String) {
+        if (pkg in homePackages || pkg.contains("quickstep") || pkg.contains("launcher") || pkg in NOT_APPS) return
+        recentApps.remove(pkg)
+        recentApps.addFirst(pkg)
+        while (recentApps.size > 6) recentApps.removeLast()
+    }
+
+    /** The app used before the one in front (or the last app, from the home screen). */
+    val previousApp: String?
+        get() = recentApps.firstOrNull { it != foregroundPackage }
+
+    /** Goes back to [previousApp]: Notes and NeoReader reopen the note or book you were in. */
+    fun openPreviousApp() {
+        val pkg = previousApp ?: return
+        hidePanel()
+        DebugLog.i("previous", "back to $pkg")
+        when (pkg) {
+            prefs.notesPackage -> Recents.lastNote(prefs)?.let { openBooxNote(it.title) }
+                ?: BooxNotes.launchCandidates(this, prefs.notesPackage).firstOrNull()?.let { Launcher.start(this, it.second) }
+            ReaderLibrary.NEOREADER -> Recents.list(prefs).firstOrNull { it.pkg == pkg && it.path.isNotEmpty() }
+                ?.let { ReaderLibrary.open(this, it.path) } ?: Launcher.launchApp(this, pkg)
+            else -> Launcher.launchApp(this, pkg)
+        }
+    }
+
     /** Called by [NoteOpener] when it's done, either way. */
     fun noteOpenFinished(opened: Boolean) {
         // On success give the note a moment to draw before revealing it.
@@ -332,6 +399,13 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         @Volatile
         var instance: QuickAccessService? = null
             private set
+
+        /** System screens that pass through the foreground but aren't apps you'd go back to. */
+        private val NOT_APPS = setOf(
+            "com.android.intentresolver", "com.android.providers.media.module", "com.android.permissioncontroller",
+            "com.google.android.permissioncontroller", "com.android.packageinstaller", "com.google.android.packageinstaller",
+            "com.onyx.kime", // BOOX keyboard
+        )
 
         private val IGNORED_PACKAGES = setOf(
             "android",

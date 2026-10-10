@@ -53,6 +53,7 @@ class SettingsActivity : Activity() {
         list.removeAllViews()
         statusSection()
         gestureSection()
+        quickControlsSection()
         pinsSection()
         dockSection()
         recentSection()
@@ -108,7 +109,6 @@ class SettingsActivity : Activity() {
             slider("Touch strip height", prefs.handleHeightPct, 10, 100, "% of screen") { prefs.handleHeightPct = it },
             slider("Touch strip position from top", prefs.handleTopPct, 0, 90, "%") { prefs.handleTopPct = it },
             slider("Panel width", prefs.panelWidthPct, 25, 100, "% of screen") { prefs.panelWidthPct = it },
-            check("Show Back / Home / Recents / Capture row", prefs.showSystemActions) { prefs.showSystemActions = it },
             choiceRow("Menu size", prefs.menuSize.title) {
                 pick("Menu size", MenuSize.entries.map { it.title }, prefs.menuSize.ordinal) { prefs.menuSize = MenuSize.entries[it] }
             },
@@ -144,10 +144,92 @@ class SettingsActivity : Activity() {
         list.addView(note("Easiest way to add a note or book: open it, swipe the panel open and tap Add."))
     }
 
+    private fun quickControlsSection() {
+        list.addView(heading("Quick Controls"))
+        val controls = QuickControls.selected(prefs)
+        val rows = mutableListOf<View>(
+            check("Show Quick Controls in the panel", prefs.showSystemActions) { prefs.showSystemActions = it },
+        )
+        controls.forEachIndexed { i, c ->
+            rows += controlRow(c, i, controls.size,
+                onMove = { from, to -> QuickControls.save(prefs, controls.move(from, to)) },
+                onRemove = { QuickControls.save(prefs, controls.filterNot { it.id == c.id }) })
+        }
+        if (controls.isEmpty()) rows += cardText("No controls yet.")
+        rows += buttonRow(
+            "+ Add control" to { addControls() },
+            "Reset to default" to { QuickControls.reset(prefs); render() },
+        )
+        list.addView(card(rows))
+        list.addView(note("Tap a control to switch it; hold it to open its settings. Swipe sideways or use ‹ › for more. Wi‑Fi, Bluetooth and the BOOX tiles work through the BOOX Control Center."))
+    }
+
+    private fun controlRow(c: QuickControls.Control, index: Int, count: Int, onMove: (Int, Int) -> Unit, onRemove: () -> Unit): View = hbox().apply {
+        setPadding(dp(14), dp(8), dp(12), dp(8))
+        addView(android.widget.FrameLayout(context).apply {
+            background = outline(2, 20)
+            addView(icon(getDrawable(c.icon), 20), android.widget.FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+        }, lp(dp(38), dp(38)))
+        addView(vbox().apply {
+            setPadding(dp(12), 0, 0, 0)
+            addView(text(c.label, 17f, medium = true))
+            addView(text(describe(c), 13f, color = Ink.MUTED))
+        }, lp(0, WRAP, 1f))
+        fun small(iconRes: Int, label: String, enabled: Boolean = true, action: () -> Unit) {
+            addView(inkIconButton(iconRes, label, 44, enabled) { action(); render() })
+        }
+        small(R.drawable.ic_arrow_up, "Move up", index > 0) { onMove(index, index - 1) }
+        small(R.drawable.ic_arrow_down, "Move down", index < count - 1) { onMove(index, index + 1) }
+        small(R.drawable.ic_delete, "Remove") { onRemove() }
+    }
+
+    private fun describe(c: QuickControls.Control): String = when (c.kind) {
+        QuickControls.Kind.TOGGLE -> "Tap: on/off · hold: its settings"
+        QuickControls.Kind.TILE -> "Tap: open · hold: its settings"
+        QuickControls.Kind.ACTION -> "Tap: ${c.label.lowercase()}"
+    }
+
+    /** Picker grouped like the BOOX Control Center; controls already added are marked. */
+    private fun addControls() {
+        val have = QuickControls.selected(prefs).map { it.id }.toSet()
+        val ticked = LinkedHashSet<String>()
+        val body = vbox().apply { setPadding(dp(8), dp(4), dp(8), dp(4)) }
+        for (group in QuickControls.GROUPS) {
+            body.addView(text(group.uppercase(), 13f, bold = true).apply {
+                letterSpacing = 0.06f
+                setPadding(dp(12), dp(14), dp(12), dp(4))
+            })
+            QuickControls.ALL.filter { it.group == group }.forEach { c ->
+                val added = c.id in have
+                body.addView(CheckBox(this).apply {
+                    buttonTintList = android.content.res.ColorStateList.valueOf(Ink.INK)
+                    text = if (added) "${c.label}  (added)" else c.label
+                    textSize = 16f
+                    isEnabled = !added
+                    isChecked = added
+                    setOnCheckedChangeListener { _, on -> if (on) ticked += c.id else ticked -= c.id }
+                })
+            }
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Add control")
+            .setView(ScrollView(this).apply { addView(body) })
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Add") { _, _ ->
+                if (ticked.isNotEmpty()) {
+                    QuickControls.save(prefs, QuickControls.selected(prefs) + ticked.mapNotNull { QuickControls.byId(it) })
+                    render()
+                }
+            }
+            .show()
+    }
+
     private fun dockSection() {
         list.addView(heading("Apps at the bottom"))
         val dock = prefs.dock
-        val rows = mutableListOf<View>()
+        val rows = mutableListOf<View>(
+            check("Show \"Previous app\" first: the app you were in before this one", prefs.previousAppInDock) { prefs.previousAppInDock = it },
+        )
         if (dock.isEmpty()) rows += cardText("No apps yet.")
         dock.forEachIndexed { i, app ->
             rows += itemRow(app, i, dock.size, onMove = { from, to -> prefs.dock = dock.move(from, to) },

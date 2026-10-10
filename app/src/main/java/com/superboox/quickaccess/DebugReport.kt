@@ -60,6 +60,9 @@ object DebugReport {
         section("Control Center (Quick Controls test)")
         controlCenter().forEach { line(it) }
 
+        section("Front light: system settings")
+        lightSettings(context).forEach { line(it) }
+
         section("Settings")
         line("edge=${prefs.edge} trigger=${prefs.trigger} handleEnabled=${prefs.handleEnabled} showMarker=${prefs.showHandle}")
         line("strip width=${prefs.handleWidthDp}dp height=${prefs.handleHeightPct}% top=${prefs.handleTopPct}% panelWidth=${prefs.panelWidthPct}% systemRow=${prefs.showSystemActions}")
@@ -111,6 +114,30 @@ object DebugReport {
         }
         walk(root, 0)
         if (count >= maxNodes) append("  …(more nodes not shown)\n")
+    }
+
+    /**
+     * Android settings that look like the front light (brightness, warmth),
+     * to see whether BOOX's light can be set without its Control Center.
+     */
+    private fun lightSettings(context: Context): List<String> {
+        val out = ArrayList<String>()
+        val pattern = Regex("bright|light|warm|cold|temp|\\bfl_|_fl\\b|frontlight|ctm", RegexOption.IGNORE_CASE)
+        for (table in listOf("system", "secure", "global")) {
+            runCatching {
+                context.contentResolver.query(android.net.Uri.parse("content://settings/$table"), arrayOf("name", "value"), null, null, null)?.use { c ->
+                    var n = 0
+                    while (c.moveToNext()) {
+                        val name = c.getString(0) ?: continue
+                        n++
+                        if (pattern.containsMatchIn(name)) out += "$table/$name = ${c.getString(1)}"
+                    }
+                    out += "$table: $n readable"
+                } ?: run { out += "$table: no access" }
+            }.onFailure { out += "$table: ${it.javaClass.simpleName} ${it.message?.take(80)}" }
+        }
+        out += "custom levels: SuperBoox last read ${QuickControls.savedLevels(Prefs(context)) ?: "none"}, your BOOX Custom ${QuickControls.booxCustom(Prefs(context)) ?: "unknown"}"
+        return out
     }
 
     private fun serviceEnabled(context: Context): Boolean {

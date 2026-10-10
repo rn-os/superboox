@@ -209,16 +209,20 @@ class SettingsActivity : Activity() {
         }
         rows += buttonRow("+ New preset" to { editLightPreset(null) })
         list.addView(card(rows))
-        list.addView(note("Shown on page 2 of the Front Light presets in the panel. Choosing one switches BOOX to Custom at its levels, so BOOX's own Custom shows them too."))
+        list.addView(note("Shown on page 2 of the Front Light presets in the panel. BOOX only has Bright, Soft and Custom, so yours borrow Custom while they're on; picking Custom again puts your own BOOX Custom back."))
     }
 
     /** Name and levels; the light follows the sliders while the dialog is open, and goes back on Cancel. */
     private fun editLightPreset(existing: QuickControls.LightPreset?) {
         val service = QuickAccessService.instance
-        val before = QuickControls.savedLevels(prefs)
-        var levels = existing?.levels ?: before ?: QuickControls.Levels(16, 0)
+        // The preview borrows Custom as this preset, so your BOOX Custom is never overwritten.
+        val id = existing?.id ?: QuickControls.newPresetId()
+        val before = service?.frontLightPreset()
+        val beforeMine = QuickControls.activeMine(prefs)
+        var levels = existing?.levels ?: service?.customLevels() ?: QuickControls.Levels(16, 8)
+        var previewed = false
         val name = field("Name", existing?.name ?: "Preset ${QuickControls.myPresets(prefs).size + 1}")
-        val preview = Runnable { service?.frontLightLevels(levels) }
+        val preview = Runnable { previewed = true; service?.frontLightLevels(levels, id) }
         fun bar(label: String, value: Int, onChange: (Int) -> Unit): View = vbox().apply {
             val title = text("$label: $value", 15f, bold = true).apply { setPadding(dp(4), dp(12), 0, 0) }
             addView(title)
@@ -252,14 +256,18 @@ class SettingsActivity : Activity() {
             .setView(body)
             .setNegativeButton("Cancel") { _, _ ->
                 list.removeCallbacks(preview)
-                if (before != null && levels != before) service?.frontLightLevels(before)
+                // Put the light back as it was.
+                if (previewed && service != null) {
+                    val wasMine = QuickControls.myPresets(prefs).firstOrNull { it.id == beforeMine && before == "Custom" }
+                    if (wasMine != null) service.frontLightLevels(wasMine.levels, wasMine.id) else service.frontLight(before ?: "Custom")
+                }
             }
             .setPositiveButton("Save") { _, _ ->
                 list.removeCallbacks(preview)
                 val label = name.text.toString().trim().ifEmpty { existing?.name ?: "Preset" }
                 val mine = QuickControls.myPresets(prefs)
                 QuickControls.saveMyPresets(prefs,
-                    if (existing == null) mine + QuickControls.LightPreset(QuickControls.newPresetId(), label, levels)
+                    if (existing == null) mine + QuickControls.LightPreset(id, label, levels)
                     else mine.map { if (it.id == existing.id) it.copy(name = label, levels = levels) else it })
                 render()
             }

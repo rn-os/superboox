@@ -338,10 +338,14 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (!qcBusy) startSession()
     }
 
-    /** Switches BOOX's front light to [preset] (Bright, Soft, Custom or Off). */
+    /**
+     * Switches BOOX's front light to [preset] (Bright, Soft, Custom or Off).
+     * Custom is always your BOOX Custom: if one of SuperBoox's presets was
+     * borrowing it, your own levels are put back.
+     */
     fun frontLight(preset: String) {
-        QuickControls.setActiveMine(prefs, null)
-        queuePreset(preset, levels = null, read = false)
+        val restore = if (preset == "Custom" && QuickControls.activeMine(prefs) != null) QuickControls.booxCustom(prefs) else null
+        queuePreset(preset, levels = restore, read = preset == "Custom", mine = null)
     }
 
     /**
@@ -349,29 +353,33 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
      * presets ([mine]), which BOOX only knows as Custom.
      */
     fun frontLightLevels(levels: QuickControls.Levels, mine: String? = null) {
-        QuickControls.setActiveMine(prefs, mine)
+        // Before a SuperBoox preset first borrows Custom, read your BOOX Custom so it can be put back.
+        if (mine != null && QuickControls.booxCustom(prefs) == null && QuickControls.activeMine(prefs) == null) {
+            queuePreset("Custom", levels = null, read = true, mine = null)
+        }
         pendingLevels = levels.clamp()
+        pendingMine = mine
         // Slider steps come quickly: only the latest is applied.
-        if (qcQueue.none { it.levels != null }) queuePreset("Custom", levels = levels.clamp(), read = false)
+        if (qcQueue.none { it.levels != null }) queuePreset("Custom", levels = levels.clamp(), read = false, mine = mine)
     }
 
-    /** Switches to Custom and reads its sliders, so the panel shows BOOX's own levels. */
-    fun frontLightReadCustom() {
-        QuickControls.setActiveMine(prefs, null)
-        queuePreset("Custom", levels = null, read = true)
-    }
+    /** Switches to your BOOX Custom and reads its sliders, so the panel shows its levels. */
+    fun frontLightReadCustom() = frontLight("Custom")
 
-    /** Custom's levels to show: one being applied, else the last read. */
-    fun customLevels(): QuickControls.Levels? = pendingLevels ?: QuickControls.savedLevels(prefs)
+    /** Your BOOX Custom levels to show: one being applied, else the last known. */
+    fun customLevels(): QuickControls.Levels? =
+        (if (pendingMine == null) pendingLevels else null) ?: QuickControls.booxCustom(prefs) ?: QuickControls.savedLevels(prefs)
+
+    private var pendingMine: String? = null
 
     private var pendingLevels: QuickControls.Levels? = null
 
-    private fun queuePreset(preset: String, levels: QuickControls.Levels?, read: Boolean) {
+    private fun queuePreset(preset: String, levels: QuickControls.Levels?, read: Boolean, mine: String?) {
         val control = QuickControls.byId(QuickControls.FRONT_LIGHT) ?: return
         optimistic[control.id] = (preset != QuickControls.PRESET_OFF) to SystemClock.uptimeMillis() + OPTIMISTIC_MS
         optimisticPreset = preset to SystemClock.uptimeMillis() + OPTIMISTIC_MS
         panel?.refresh()
-        qcQueue.addLast(QcTask(control, hold = false, preset = preset, levels = levels, read = read))
+        qcQueue.addLast(QcTask(control, hold = false, preset = preset, levels = levels, read = read, mine = mine))
         if (!qcBusy) startSession()
     }
 
@@ -391,6 +399,8 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         val levels: QuickControls.Levels? = null,
         /** Read Custom's levels afterwards. */
         val read: Boolean = false,
+        /** The SuperBoox preset this applies (null: BOOX's own presets). */
+        val mine: String? = null,
         val scrolled: Boolean = false,
     )
 
@@ -453,11 +463,13 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     }
 
     private fun nextPreset(task: QcTask, preset: String) {
+        // Which levels Custom holds decides where they're remembered (yours or BOOX's own).
+        QuickControls.setActiveMine(prefs, if (preset == "Custom") task.mine else null)
         val press = QuickControls.pressPreset(this, prefs, preset)
         if (!press.found && !task.scrolled) {
             // The presets sit under the tiles: scroll the Control Center down and look again.
             QuickControls.scrollShade(this)
-            qcQueue.addFirst(QcTask(task.control, false, preset, task.levels, task.read, scrolled = true))
+            qcQueue.addFirst(QcTask(task.control, false, preset, task.levels, task.read, task.mine, scrolled = true))
             handler.postDelayed({ nextControl() }, 400)
             return
         }
@@ -470,14 +482,14 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         }
         handler.postDelayed({
             QuickControls.settlePreset(this, prefs, preset)
-            val levels = task.levels?.let { pendingLevels ?: it }
+            val levels = task.levels?.let { if (pendingLevels != null && pendingMine == task.mine) pendingLevels else it }
             if (levels == null && !task.read) {
                 panel?.refresh()
                 return@postDelayed nextControl()
             }
             // Custom's sliders: set them, then read back what BOOX shows.
             if (levels != null) QuickControls.setLevels(this, prefs, levels)
-            pendingLevels = null
+            if (levels != null) pendingLevels = null
             handler.postDelayed({
                 QuickControls.readLevels(this, prefs)
                 panel?.refresh()

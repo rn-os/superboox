@@ -190,6 +190,7 @@ class Prefs(context: Context) {
         const val K_REMEMBER_PAGES = "remember_pages"
         const val K_FL_PRESET = "front_light_preset"
         const val K_FL_LEVELS = "front_light_levels"
+        const val K_FL_BOOX_CUSTOM = "front_light_boox_custom"
         const val K_FL_MINE = "front_light_mine"
         const val K_FL_MINE_ACTIVE = "front_light_mine_active"
         const val K_LAST_BACKUP = "last_backup"

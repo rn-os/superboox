@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 38)
+# SuperBoox: handoff / status (as of build 39)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -159,6 +159,14 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - Custom levels: `QuickControls.readLevels` (only valid while Custom is selected) and `setLevels`. The latter uses `ACTION_SET_PROGRESS` on the SeekBars inside `#brightness_bright_panel` / `#warm_panel`; the cache is `K_FL_LEVELS`. The session `QcTask` gained `levels`/`read`. **Unverified on device**: whether BOOX's SeekBar honours `ACTION_SET_PROGRESS`. If not, fall back to clicking `#brightness_bright_up/_down` / `#brightness_temp_up/_down`.
 - Your presets work through Custom (they overwrite BOOX's Custom levels); the active one is `K_FL_MINE_ACTIVE`.
 - Settings: Front Light · your presets card on the Quick Controls page (edit dialog with live preview), ≡ drag handles on every reorderable list (`dragHandle`), and a **Backup & restore** page (`Backup.kt`: JSON of all prefs except live state, via `ACTION_CREATE_DOCUMENT` / `ACTION_OPEN_DOCUMENT`).
+- Build 38 log: setting the sliders works (`ACTION_SET_PROGRESS` → true, read back matches). Two bugs. (1) + New with unknown levels applied 16/0 over the user's BOOX Custom. (2) Tapping Custom while it was already selected opened BOOX's own Custom editor and broke later steps. In NeoReader (full screen), the top-right pull-down failed.
+
+## Build 39
+- **Your BOOX Custom is kept separate** (`K_FL_BOOX_CUSTOM`, `QuickControls.booxCustom`): levels are saved there only while no SuperBoox preset is active. SuperBoox presets borrow Custom (`QcTask.mine`, set in `nextPreset`). `service.frontLight("Custom")` restores your BOOX Custom if a SuperBoox preset was borrowing it. The first time one borrows it, your Custom is read first.
+- `pressPreset` never taps the preset that's already selected.
+- `QuickControls.open`: a second top-right pull-down after 1.4 s, for full-screen apps.
+- Settings edit-preset preview borrows Custom under the preset's id; Cancel restores the previous preset.
+- The debug report has a "Front light: system settings" section listing settings keys like bright/warm/fl. If BOOX exposes the light there, SuperBoox presets could set it without touching Custom at all.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

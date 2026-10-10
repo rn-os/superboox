@@ -178,16 +178,29 @@ object QuickControls {
         }
         val start = System.currentTimeMillis()
         var deadline = start + FIND_TIMEOUT_MS
-        var pulled = false
+        var pulls = 0
+        var lastPull = 0L
         fun check() {
             if (runCatching { controlCenterShowing(service) }.getOrDefault(false)) return ready(true)
             val now = System.currentTimeMillis()
-            if (!pulled && (now - start >= SWITCH_MS || runCatching { notificationsShowing(service) }.getOrDefault(false))) {
-                pulled = true
-                DebugLog.w("controls", "notifications opened instead of the Control Center; pulling down from the top-right")
+            val wrong = runCatching { notificationsShowing(service) }.getOrDefault(false)
+            if (pulls == 0 && (now - start >= SWITCH_MS || wrong)) {
+                pulls = 1
+                lastPull = now
+                DebugLog.w("controls", "${if (wrong) "notifications opened" else "nothing opened"} instead of the Control Center; pulling down from the top-right")
                 closeShade(service)
                 handler.postDelayed({ pullDown(service, 0.8f, "controls") }, 500)
                 deadline = now + 500 + FIND_TIMEOUT_MS
+                handler.postDelayed(::check, 900)
+                return
+            }
+            // Full-screen apps (NeoReader): the first swipe only brings the status bar back.
+            if (pulls == 1 && now - lastPull >= 1_400) {
+                pulls = 2
+                DebugLog.w("controls", "still no Control Center; pulling down again")
+                if (wrong) closeShade(service)
+                handler.postDelayed({ pullDown(service, 0.8f, "controls") }, if (wrong) 500 else 0)
+                deadline = now + 600 + FIND_TIMEOUT_MS
                 handler.postDelayed(::check, 900)
                 return
             }
@@ -352,6 +365,11 @@ object QuickControls {
             DebugLog.w("controls", "Front Light presets not found (${buttons.keys.joinToString().ifEmpty { "none" }})")
             return Press(found = false, pressed = false, before = null)
         }
+        // Tapping the preset already in use opens BOOX's own editor for it (Custom): don't.
+        if (before == preset) {
+            DebugLog.i("controls", "front light: \"$preset\" already selected")
+            return Press(found = true, pressed = true, before = before != PRESET_OFF)
+        }
         val pressed = button.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         DebugLog.i("controls", "front light: tap \"$preset\" (was ${before ?: "?"}) -> $pressed")
         return Press(found = true, pressed = pressed, before = before?.let { it != PRESET_OFF })
@@ -376,8 +394,17 @@ object QuickControls {
     fun savedLevels(prefs: Prefs): Levels? = prefs.sp.getString(Prefs.K_FL_LEVELS, null)?.split(",")
         ?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 }?.let { Levels(it[0], it[1]) }
 
+    /**
+     * Your own BOOX Custom levels: Custom as it was when none of SuperBoox's
+     * presets was borrowing it. Picking Custom in the panel puts these back.
+     */
+    fun booxCustom(prefs: Prefs): Levels? = prefs.sp.getString(Prefs.K_FL_BOOX_CUSTOM, null)?.split(",")
+        ?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 }?.let { Levels(it[0], it[1]) }
+
     private fun saveLevels(prefs: Prefs, l: Levels) {
-        prefs.sp.edit().putString(Prefs.K_FL_LEVELS, "${l.brightness},${l.warmth}").apply()
+        val edit = prefs.sp.edit().putString(Prefs.K_FL_LEVELS, "${l.brightness},${l.warmth}")
+        if (activeMine(prefs) == null) edit.putString(Prefs.K_FL_BOOX_CUSTOM, "${l.brightness},${l.warmth}")
+        edit.apply()
     }
 
     /**

@@ -296,7 +296,7 @@ class QuickAccessPanel(
                     if (preset == "Custom") tile.setOnLongClickListener {
                         if (lightEdit == "custom") lightEdit = null else {
                             lightEdit = "custom"
-                            service.frontLightReadCustom()
+                            if (current != "Custom" || active != null) service.frontLightReadCustom()
                         }
                         editLevels = null
                         show(mode)
@@ -427,7 +427,8 @@ class QuickAccessPanel(
         val mine = QuickControls.myPresets(prefs)
         var n = mine.size + 1
         while (mine.any { it.name == "Preset $n" }) n++
-        val p = QuickControls.LightPreset(QuickControls.newPresetId(), "Preset $n", service.customLevels() ?: QuickControls.Levels(16, 0))
+        // Starts from the light as it is (your BOOX Custom); SuperBoox never overwrites that.
+        val p = QuickControls.LightPreset(QuickControls.newPresetId(), "Preset $n", service.customLevels() ?: QuickControls.Levels(16, 8))
         QuickControls.saveMyPresets(prefs, mine + p)
         lightEdit = p.id
         editLevels = null

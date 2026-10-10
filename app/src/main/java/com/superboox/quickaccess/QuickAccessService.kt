@@ -347,11 +347,11 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         // A SuperBoox preset set the light directly: if BOOX already shows [preset], tapping it
         // would do nothing, so put back the light it had.
         val directBefore = prefs.sp.getString(Prefs.K_FL_DIRECT_BEFORE, null)
-        if (QuickControls.activeMine(prefs) != null && directBefore != null && preset == QuickControls.savedPreset(prefs) && AdvancedAccess.allowed()) {
+        if (QuickControls.activeMine(prefs) != null && directBefore != null && preset == QuickControls.savedPreset(prefs) && AdvancedAccess.independentPresets(prefs)) {
             val (b, w) = directBefore.split(",").map { it.toInt() }
             QuickControls.setActiveMine(prefs, null)
             prefs.sp.edit().remove(Prefs.K_FL_DIRECT_BEFORE).apply()
-            AdvancedAccess.setLight(QuickControls.Levels(b, w)) { panel?.refresh() }
+            AdvancedAccess.setLight(QuickControls.Levels(b, w), AdvancedAccess.lightMethod(prefs)) { panel?.refresh() }
             DebugLog.i("controls", "front light: back to BOOX's $preset ($b/$w)")
             return
         }
@@ -373,8 +373,8 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             QuickControls.setActiveMine(prefs, mine)
             QuickControls.byId(QuickControls.FRONT_LIGHT)?.let { optimistic[it.id] = true to SystemClock.uptimeMillis() + OPTIMISTIC_MS }
             AdvancedAccess.markUsed(prefs)
-            AdvancedAccess.setLight(levels) { ok ->
-                if (!ok) Toast.makeText(this, "Couldn't set the front light (Advanced access)", Toast.LENGTH_SHORT).show()
+            AdvancedAccess.setLight(levels, AdvancedAccess.lightMethod(prefs)) { ok ->
+                if (ok == null) Toast.makeText(this, "Couldn't set the front light (Advanced access)", Toast.LENGTH_SHORT).show()
                 panel?.refresh()
             }
             panel?.refresh()

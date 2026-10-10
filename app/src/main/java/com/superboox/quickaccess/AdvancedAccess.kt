@@ -41,8 +41,26 @@ object AdvancedAccess {
         runCatching { Shizuku.requestPermission(REQUEST_CODE) }.onFailure { DebugLog.w("adb", "permission request failed: ${it.message}") }
     }
 
-    /** Independent Front Light presets: turned on, test passed, and access available now. */
-    fun independentPresets(prefs: Prefs): Boolean = prefs.independentPresets && prefs.lightTestPassed && allowed()
+    /**
+     * Independent Front Light presets: turned on and the test passed, by a way
+     * that's available now (SuperBoox itself, or Shizuku while it's running).
+     */
+    fun independentPresets(prefs: Prefs): Boolean = prefs.independentPresets && prefs.lightTestPassed &&
+        when (lightMethod(prefs)) {
+            METHOD_APP -> true
+            METHOD_SHELL -> allowed()
+            else -> false
+        }
+
+    /** How the light test passed: [METHOD_APP] (no Shizuku needed) or [METHOD_SHELL]. */
+    fun lightMethod(prefs: Prefs): String? = prefs.sp.getString(Prefs.K_ADV_METHOD, null)
+
+    fun setLightMethod(prefs: Prefs, method: String?) {
+        prefs.sp.edit().apply { if (method == null) remove(Prefs.K_ADV_METHOD) else putString(Prefs.K_ADV_METHOD, method) }.apply()
+    }
+
+    const val METHOD_APP = "app"
+    const val METHOD_SHELL = "shell"
 
     // ---- Restart detection ------------------------------------------------------------------
 
@@ -111,19 +129,57 @@ object AdvancedAccess {
     private const val CTM_BRIGHTNESS = "screen_ctm_brightness"
     private const val CTM_TEMPERATURE = "screen_ctm_temperature"
 
-    /** The light as BOOX records it (apps may read it; only ADB may write it). */
+    /**
+     * BOOX's light hardware (build 45 report): brightness and colour temperature,
+     * 0–32 each, writable by anyone as far as file permissions go. Android's
+     * security rules may still stop an app; Shizuku runs as the shell, which can.
+     */
+    private const val BL_BRIGHTNESS = "/sys/class/backlight/onyx_bl_br/brightness"
+    private const val BL_WARMTH = "/sys/class/backlight/onyx_bl_ct/brightness"
+
+    /** The light as it is: from the hardware if readable, else BOOX's own record. */
     fun currentLight(context: Context): QuickControls.Levels? {
+        runCatching {
+            val b = java.io.File(BL_BRIGHTNESS).readText().trim().toInt()
+            val w = java.io.File(BL_WARMTH).readText().trim().toInt()
+            return QuickControls.Levels(b, w)
+        }
         val cr = context.contentResolver
         val b = runCatching { Settings.System.getInt(cr, CTM_BRIGHTNESS) }.getOrNull() ?: return null
         val w = runCatching { Settings.System.getInt(cr, CTM_TEMPERATURE) }.getOrNull() ?: 0
         return QuickControls.Levels(b, w)
     }
 
-    /** Sets the light without going through BOOX's presets. */
-    fun setLight(levels: QuickControls.Levels, done: (Boolean) -> Unit = {}) {
+    private fun writeAsApp(l: QuickControls.Levels): Boolean = runCatching {
+        java.io.FileOutputStream(BL_BRIGHTNESS).use { it.write("${l.brightness}".toByteArray()) }
+        java.io.FileOutputStream(BL_WARMTH).use { it.write("${l.warmth}".toByteArray()) }
+        true
+    }.getOrElse {
+        DebugLog.i("light", "SuperBoox can't write the light itself: ${it.javaClass.simpleName} ${it.message}")
+        false
+    }
+
+    private fun writeAsShell(l: QuickControls.Levels, done: (Boolean) -> Unit) {
+        if (!allowed()) return done(false)
+        shell("sh", "-c", "echo ${l.brightness} > $BL_BRIGHTNESS && echo ${l.warmth} > $BL_WARMTH") { code, _ -> done(code == 0) }
+    }
+
+    /**
+     * Sets the light without going through BOOX's presets, by [method]
+     * (null: SuperBoox itself first, then Shizuku). [done] gets the way that worked, or null.
+     */
+    fun setLight(levels: QuickControls.Levels, method: String? = null, done: (String?) -> Unit = {}) {
         val l = levels.clamp()
-        shell("settings", "put", "system", CTM_BRIGHTNESS, "${l.brightness}") { c1, _ ->
-            shell("settings", "put", "system", CTM_TEMPERATURE, "${l.warmth}") { c2, _ -> done(c1 == 0 && c2 == 0) }
+        if (method == METHOD_SHELL) return writeAsShell(l) { done(if (it) METHOD_SHELL else null) }
+        io.execute {
+            val ok = writeAsApp(l)
+            main.post {
+                when {
+                    ok -> done(METHOD_APP)
+                    method == METHOD_APP -> done(null)
+                    else -> writeAsShell(l) { done(if (it) METHOD_SHELL else null) }
+                }
+            }
         }
     }
 }

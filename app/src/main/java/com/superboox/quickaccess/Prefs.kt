@@ -209,6 +209,7 @@ class Prefs(context: Context) {
         const val K_ADV_INDEPENDENT = "adv_independent_presets"
         const val K_ADV_TEST = "adv_light_test"
         const val K_ADV_BOOT = "adv_boot"
+        const val K_ADV_METHOD = "adv_light_method"
         const val K_FL_DIRECT_BEFORE = "front_light_direct_before"
         const val K_FL_LAST_ON = "front_light_last_on"
 

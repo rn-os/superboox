@@ -166,7 +166,8 @@ class SettingsActivity : Activity() {
         list.addView(card(listOf(
             menuRow(R.drawable.ic_bug, Page.TROUBLESHOOTING, "Copy or share a debug report"),
             menuRow(R.drawable.ic_shield, Page.ADVANCED_ACCESS, when {
-                AdvancedAccess.allowed() -> "Connected" + if (AdvancedAccess.independentPresets(prefs)) " · independent Front Light presets on" else ""
+                AdvancedAccess.independentPresets(prefs) -> "Independent Front Light presets on"
+                AdvancedAccess.allowed() -> "Connected"
                 AdvancedAccess.restartedSinceUse(prefs) -> "Off since the restart · start Shizuku again"
                 else -> "Off · unlocks independent Front Light presets"
             }),
@@ -374,28 +375,31 @@ class SettingsActivity : Activity() {
                     if (!running) null else "Connect" to { AdvancedAccess.requestPermission() }),
             )))
         }
-        list.addView(heading(if (allowed) "Front light" else "Unlocks"))
+        list.addView(heading("Front light"))
+        val method = AdvancedAccess.lightMethod(prefs)
         val testText = when {
-            !prefs.lightTestRun -> "Checks that BOOX follows the light when it's set directly. Runs first."
-            prefs.lightTestPassed -> "Passed: BOOX followed the light set directly."
-            else -> "Didn't pass: BOOX didn't follow the light set directly, so presets keep borrowing Custom."
+            !prefs.lightTestRun -> "Checks that the light can be set directly. Tries SuperBoox on its own first, then Shizuku."
+            prefs.lightTestPassed && method == AdvancedAccess.METHOD_APP -> "Passed: SuperBoox sets the light by itself, so Shizuku isn't needed for this."
+            prefs.lightTestPassed -> "Passed through Shizuku: it needs to be running (started again after a restart)."
+            else -> "Didn't pass. Run it again after connecting Shizuku."
         }
+        val usable = prefs.lightTestPassed && (method == AdvancedAccess.METHOD_APP || allowed)
         list.addView(card(listOf(
             hbox().apply {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(16), dp(10), dp(12), dp(10))
                 addView(vbox().apply {
-                    addView(text("Front light test", 17f, medium = true, color = if (allowed) Ink.INK else Ink.DISABLED))
-                    addView(text(testText, 13f, color = if (allowed) Ink.MUTED else Ink.DISABLED))
+                    addView(text("Front light test", 17f, medium = true))
+                    addView(text(testText, 13f, color = Ink.MUTED))
                 }, lp(0, WRAP, 1f))
-                if (allowed) addView(inkButton(if (prefs.lightTestRun) "Run again" else "Run test", 14f) { lightTest() }.apply { setPadding(dp(14), 0, dp(14), 0) })
+                addView(inkButton(if (prefs.lightTestRun) "Run again" else "Run test", 14f) { lightTest() }.apply { setPadding(dp(14), 0, dp(14), 0) })
             },
             CheckBox(this).apply {
                 buttonTintList = android.content.res.ColorStateList.valueOf(Ink.INK)
                 text = "Independent Front Light presets\nYour presets set the light directly. BOOX's Bright, Soft, Custom and Off stay as you set them."
                 textSize = 16f
                 setPadding(dp(8), dp(10), dp(12), dp(10))
-                isEnabled = allowed && prefs.lightTestPassed
+                isEnabled = usable
                 isChecked = prefs.independentPresets && prefs.lightTestPassed
                 setOnCheckedChangeListener { _, on -> prefs.independentPresets = on; if (on) AdvancedAccess.markUsed(prefs); render() }
             },
@@ -422,7 +426,11 @@ class SettingsActivity : Activity() {
         }, lp(0, WRAP, 1f))
     }
 
-    /** Dims the light directly (through Shizuku) for 3 s, puts it back, and asks whether it changed. */
+    /**
+     * Dims the light directly for 3 s (SuperBoox itself first, else through
+     * Shizuku), puts it back, and asks whether it changed. A yes records which
+     * way worked; presets then use it.
+     */
     private fun lightTest() {
         val before = AdvancedAccess.currentLight(this)
         val dim = QuickControls.Levels(if ((before?.brightness ?: 32) > 10) 4 else 24, before?.warmth ?: 0)
@@ -431,15 +439,27 @@ class SettingsActivity : Activity() {
             .setMessage("SuperBoox will set the light to ${dim.brightness} for 3 seconds, then put it back. Watch the screen.")
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Start") { _, _ ->
-                AdvancedAccess.setLight(dim) { wrote ->
+                AdvancedAccess.setLight(dim) { method ->
+                    DebugLog.i("light-test", "direct write ${method ?: "failed both ways"} (light was $before)")
+                    if (method == null) {
+                        prefs.lightTestPassed = false
+                        AdvancedAccess.setLightMethod(prefs, null)
+                        toast(if (AdvancedAccess.allowed()) "Couldn't change the light either way" else "SuperBoox can't change the light by itself; connect Shizuku and try again")
+                        render()
+                        return@setLight
+                    }
                     list.postDelayed({
-                        val after = AdvancedAccess.currentLight(this)
-                        before?.let { AdvancedAccess.setLight(it) }
-                        DebugLog.i("light-test", "direct write ${if (wrote) "ok" else "failed"}; BOOX records $after (was $before)")
+                        before?.let { AdvancedAccess.setLight(it, method) }
                         AlertDialog.Builder(this)
                             .setTitle("Did the light change?")
-                            .setNegativeButton("No") { _, _ -> prefs.lightTestPassed = false; prefs.independentPresets = false; DebugLog.i("light-test", "user: did NOT change"); render() }
-                            .setPositiveButton("Yes, it dimmed") { _, _ -> prefs.lightTestPassed = true; AdvancedAccess.markUsed(prefs); DebugLog.i("light-test", "user: DID change"); render() }
+                            .setNegativeButton("No") { _, _ ->
+                                prefs.lightTestPassed = false; prefs.independentPresets = false; AdvancedAccess.setLightMethod(prefs, null)
+                                DebugLog.i("light-test", "user: did NOT change ($method)"); render()
+                            }
+                            .setPositiveButton("Yes, it dimmed") { _, _ ->
+                                prefs.lightTestPassed = true; AdvancedAccess.setLightMethod(prefs, method); AdvancedAccess.markUsed(prefs)
+                                DebugLog.i("light-test", "user: DID change ($method)"); render()
+                            }
                             .show()
                     }, 3_000)
                 }

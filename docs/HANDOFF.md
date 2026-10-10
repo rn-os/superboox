@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 45)
+# SuperBoox: handoff / status (as of build 46)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -192,6 +192,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 
 ## Build 45
 - The debug report has an "Advanced access" section: Shizuku state, light test result, and a read-only probe via Shizuku (`AdvancedAccess.lightProbe`). It runs `id`, lists `/sys/class/backlight`, shows each device's brightness/max and permissions, `service list` filtered for light/onyx, and getprop filtered. Next: if a backlight file is writable by shell, try it as the light test's direct method.
+- Build 45 probe: the light hardware is `/sys/class/backlight/onyx_bl_br/brightness` (brightness) and `onyx_bl_ct/brightness` (warmth), 0–32, mode **-rw-rw-rw-**. `panel0-backlight` is not readable. Services: `onyx_device_service`, `lights`.
+
+## Build 46
+- `AdvancedAccess.setLight(levels, method)` writes those two files: as the app first (`METHOD_APP`, no Shizuku; SELinux may refuse), else through Shizuku `echo` (`METHOD_SHELL`). The light test records which method worked (`K_ADV_METHOD`) when the user says the light changed. `independentPresets()` needs Shizuku only for `METHOD_SHELL`, and the restart prompt only applies then. The test can run without Shizuku.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

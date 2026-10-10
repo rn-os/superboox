@@ -351,7 +351,8 @@ class QuickAccessPanel(
 
     /** In place of your presets while Advanced access isn't on (or dropped after a restart). */
     private fun advancedPrompt(): View = with(ctx) {
-        val restarted = prefs.independentPresets && prefs.lightTestPassed && AdvancedAccess.restartedSinceUse(prefs) && !AdvancedAccess.running()
+        val restarted = prefs.independentPresets && prefs.lightTestPassed && AdvancedAccess.lightMethod(prefs) == AdvancedAccess.METHOD_SHELL &&
+            AdvancedAccess.restartedSinceUse(prefs) && !AdvancedAccess.running()
         vbox().apply {
             setPadding(s(10), s(6), s(10), s(8))
             addView(text(if (restarted) "Start Shizuku again" else "Your own presets need Advanced access", sp(15f), bold = true))

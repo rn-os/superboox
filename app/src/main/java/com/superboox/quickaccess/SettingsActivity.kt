@@ -71,49 +71,50 @@ class SettingsActivity : Activity() {
         list.addView(paragraph("A Supernote-style Quick Access panel for BOOX. Swipe from the screen edge on any page to open it."))
 
         val on = isServiceEnabled()
-        list.addView(
+        val rows = mutableListOf<View>(
             text(if (on) "● Service is running" else "○ Service is off", 17f, bold = true)
-                .apply { setPadding(dp(16), dp(12), dp(16), dp(4)) },
+                .apply { setPadding(dp(16), dp(14), dp(16), dp(10)) },
         )
         if (!on) {
-            list.addView(
-                paragraph(
-                    "Turn on \"SuperBoox Quick Access\" under Accessibility. On BOOX also open App Management for SuperBoox " +
-                        "and allow it to run in the background so the system doesn't freeze it.",
-                ),
-            )
+            rows += paragraph(
+                "Turn on \"SuperBoox Quick Access\" under Accessibility. On BOOX also open App Management for SuperBoox " +
+                    "and allow it to run in the background so the system doesn't freeze it.",
+            ).apply { setPadding(dp(16), dp(10), dp(16), dp(10)) }
         }
-        list.addView(buttonRow(
+        rows += buttonRow(
             "Accessibility settings" to { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
             "Open panel" to {
                 val s = QuickAccessService.instance
                 if (s == null) toast("Turn the service on first") else { s.showPanel() }
             },
-        ))
+        )
+        list.addView(card(rows))
     }
 
     private fun gestureSection() {
-        list.addView(sectionTitle("Gesture"))
-        list.addView(choiceRow("Screen edge", prefs.edge.name.lowercase().replaceFirstChar { it.uppercase() }) {
-            pick("Screen edge", Edge.entries.map { it.name.lowercase().replaceFirstChar { c -> c.uppercase() } }, prefs.edge.ordinal) {
-                prefs.edge = Edge.entries[it]
-            }
-        })
-        list.addView(choiceRow("Trigger", prefs.trigger.title) {
-            pick("Trigger", Trigger.entries.map { it.title }, prefs.trigger.ordinal) { prefs.trigger = Trigger.entries[it] }
-        })
-        list.addView(check("Edge gesture enabled", prefs.handleEnabled) { prefs.handleEnabled = it })
-        list.addView(check("Show a small marker on the edge", prefs.showHandle) { prefs.showHandle = it })
-        list.addView(slider("Touch strip width", prefs.handleWidthDp, 6, 48, "dp") { prefs.handleWidthDp = it })
-        list.addView(slider("Touch strip height", prefs.handleHeightPct, 10, 100, "% of screen") { prefs.handleHeightPct = it })
-        list.addView(slider("Touch strip position from top", prefs.handleTopPct, 0, 90, "%") { prefs.handleTopPct = it })
-        list.addView(slider("Panel width", prefs.panelWidthPct, 25, 100, "% of screen") { prefs.panelWidthPct = it })
-        list.addView(check("Show Back / Home / Recents / Capture row", prefs.showSystemActions) { prefs.showSystemActions = it })
-        list.addView(choiceRow("Menu size", prefs.menuSize.title) {
-            pick("Menu size", MenuSize.entries.map { it.title }, prefs.menuSize.ordinal) { prefs.menuSize = MenuSize.entries[it] }
-        })
+        list.addView(heading("Gesture"))
+        list.addView(card(listOf(
+            choiceRow("Screen edge", prefs.edge.name.lowercase().replaceFirstChar { it.uppercase() }) {
+                pick("Screen edge", Edge.entries.map { it.name.lowercase().replaceFirstChar { c -> c.uppercase() } }, prefs.edge.ordinal) {
+                    prefs.edge = Edge.entries[it]
+                }
+            },
+            choiceRow("Trigger", prefs.trigger.title) {
+                pick("Trigger", Trigger.entries.map { it.title }, prefs.trigger.ordinal) { prefs.trigger = Trigger.entries[it] }
+            },
+            check("Edge gesture enabled", prefs.handleEnabled) { prefs.handleEnabled = it },
+            check("Show a small marker on the edge", prefs.showHandle) { prefs.showHandle = it },
+            slider("Touch strip width", prefs.handleWidthDp, 6, 48, "dp") { prefs.handleWidthDp = it },
+            slider("Touch strip height", prefs.handleHeightPct, 10, 100, "% of screen") { prefs.handleHeightPct = it },
+            slider("Touch strip position from top", prefs.handleTopPct, 0, 90, "%") { prefs.handleTopPct = it },
+            slider("Panel width", prefs.panelWidthPct, 25, 100, "% of screen") { prefs.panelWidthPct = it },
+            check("Show Back / Home / Recents / Capture row", prefs.showSystemActions) { prefs.showSystemActions = it },
+            choiceRow("Menu size", prefs.menuSize.title) {
+                pick("Menu size", MenuSize.entries.map { it.title }, prefs.menuSize.ordinal) { prefs.menuSize = MenuSize.entries[it] }
+            },
+        )))
         list.addView(
-            paragraph(
+            note(
                 "Tip: the \"Quick Access\" app icon opens the panel too. Assign it to a BOOX gesture or the Navigation Ball " +
                     "if you'd rather not reserve a strip of the screen edge. There's also a Quick Settings tile.",
             ),
@@ -121,93 +122,124 @@ class SettingsActivity : Activity() {
     }
 
     private fun pinsSection() {
-        list.addView(sectionTitle("Quick Access items"))
+        list.addView(heading("Quick Access items"))
         val pins = prefs.pins
-        if (pins.isEmpty()) list.addView(paragraph("No items yet."))
+        val rows = mutableListOf<View>()
+        if (pins.isEmpty()) rows += cardText("No items yet.")
         pins.forEachIndexed { i, pin ->
-            list.addView(itemRow(pin, i, pins.size, onMove = { from, to -> prefs.pins = pins.move(from, to) },
-                onEdit = { editPin(pin) }, onRemove = { prefs.removePin(pin.id); render() }))
+            rows += itemRow(pin, i, pins.size, onMove = { from, to -> prefs.pins = pins.move(from, to) },
+                onEdit = { editPin(pin) }, onRemove = { prefs.removePin(pin.id); render() })
         }
-        list.addView(buttonRow(
+        rows += buttonRow(
             "+ BOOX note" to { editPin(null) },
             "+ Document" to { pickDocument(REQ_FILE) },
             "+ Folder" to { pickTree(REQ_FOLDER) },
-        ))
-        list.addView(buttonRow(
+        )
+        rows += buttonRow(
             "+ App" to { pickApp { prefs.addPin(it); render() } },
             "+ Custom intent" to { editIntent() },
-        ))
-        list.addView(
-            paragraph(
-                "BOOX notes open by name: SuperBoox starts BOOX Notes at its library and taps the note for you. " +
-                    "Use \"Folder / Note\" for notes in folders. The easiest way to add one is to open BOOX Notes, " +
-                    "swipe the panel open and tap \"Pin a note from this screen\".",
-            ),
         )
+        list.addView(card(rows))
+        list.addView(note("Easiest way to add a note or book: open it, swipe the panel open and tap Add."))
     }
 
     private fun dockSection() {
-        list.addView(sectionTitle("Apps at the bottom"))
+        list.addView(heading("Apps at the bottom"))
         val dock = prefs.dock
-        if (dock.isEmpty()) list.addView(paragraph("No apps yet."))
+        val rows = mutableListOf<View>()
+        if (dock.isEmpty()) rows += cardText("No apps yet.")
         dock.forEachIndexed { i, app ->
-            list.addView(itemRow(app, i, dock.size, onMove = { from, to -> prefs.dock = dock.move(from, to) },
-                onEdit = null, onRemove = { prefs.dock = dock.filterNot { it.id == app.id }; render() }))
+            rows += itemRow(app, i, dock.size, onMove = { from, to -> prefs.dock = dock.move(from, to) },
+                onEdit = null, onRemove = { prefs.dock = dock.filterNot { it.id == app.id }; render() })
         }
-        list.addView(buttonRow("+ Add app" to { pickApp { prefs.dock = prefs.dock + it; render() } }))
+        rows += buttonRow("+ Add app" to { pickApp { prefs.dock = prefs.dock + it; render() } })
+        list.addView(card(rows))
     }
 
     private fun recentSection() {
-        list.addView(sectionTitle("Recent files"))
+        list.addView(heading("Recent files"))
         val uri = prefs.recentFolderUri
-        list.addView(
-            paragraph(
+        val rows = mutableListOf<View>(
+            cardText(
                 if (uri == null) "Show the newest files from a folder, e.g. where BOOX Notes exports PDFs (often /note or /Documents)."
                 else "Folder: ${Launcher.displayName(this, Uri.parse(uri))}",
             ),
         )
         if (uri != null) {
-            list.addView(slider("Files shown", prefs.recentCount, 1, 20, "") { prefs.recentCount = it })
+            rows += slider("Files shown", prefs.recentCount, 1, 20, "") { prefs.recentCount = it }
         }
-        list.addView(buttonRow(
+        rows += buttonRow(
             *listOfNotNull(
                 (if (uri == null) "Choose folder" else "Change folder") to { pickTree(REQ_RECENT) },
                 if (uri != null) "Don't show" to { prefs.recentFolderUri = null; render() } else null,
             ).toTypedArray(),
-        ))
+        )
+        list.addView(card(rows))
     }
 
     private fun advancedSection() {
-        list.addView(sectionTitle("Advanced"))
+        list.addView(heading("Advanced"))
         val pkg = prefs.notesPackage
         val installed = BooxNotes.isInstalled(this, pkg)
-        list.addView(choiceRow("BOOX Notes package", if (installed) pkg else "$pkg (not found)") {
-            prompt("BOOX Notes package", pkg, "Package name") { prefs.notesPackage = it.ifBlank { BooxNotes.DEFAULT_PACKAGE } }
-        })
-        list.addView(
-            paragraph(
-                "Find a firmware-specific deep link with: adb shell dumpsys activity activities | grep -i onyx " +
-                    "while the note is open, then add it as a Custom intent " +
-                    "(e.g. intent:#Intent;component=com.onyx.android.note/.SomeActivity;S.extra=value;end).",
-            ),
-        )
+        list.addView(card(listOf(
+            choiceRow("BOOX Notes package", if (installed) pkg else "$pkg (not found)") {
+                prompt("BOOX Notes package", pkg, "Package name") { prefs.notesPackage = it.ifBlank { BooxNotes.DEFAULT_PACKAGE } }
+            },
+        )))
     }
 
     private fun troubleshootingSection() {
-        list.addView(sectionTitle("Troubleshooting"))
-        list.addView(
-            paragraph(
+        list.addView(heading("Troubleshooting"))
+        list.addView(card(listOf(
+            cardText(
                 "SuperBoox keeps a log of what it does on this device (${DebugLog.entries().size} entries): gestures, " +
-                    "the app in front, launches, and each step of opening a BOOX note. It never leaves the device " +
+                    "the app in front, launches, and each step of opening a note. It never leaves the device " +
                     "unless you copy or share the report.",
             ),
-        )
-        list.addView(buttonRow(
-            "Copy debug report" to { copyReport() },
-            "Share…" to { shareReport() },
-        ))
-        list.addView(buttonRow("Clear log" to { DebugLog.clear(); toast("Log cleared"); render() }))
+            buttonRow(
+                "Copy debug report" to { copyReport() },
+                "Share…" to { shareReport() },
+            ),
+            buttonRow("Clear log" to { DebugLog.clear(); toast("Log cleared"); render() }),
+        )))
+        list.addView(View(this), lp(MATCH, dp(24)))
     }
+
+    // ---- Cards ---------------------------------------------------------------------------
+
+    /** Bold section name above its card. */
+    private fun heading(value: String): View =
+        text(value.uppercase(), 14f, bold = true).apply {
+            letterSpacing = 0.06f
+            setPadding(dp(20), dp(20), dp(20), dp(8))
+        }
+
+    /**
+     * A section's rows in a black-bordered card, with a thin rule between
+     * rows, so each setting reads as its own block on e-ink.
+     */
+    private fun card(rows: List<View>): View = vbox().apply {
+        background = outline(2, 8)
+        // Keep row backgrounds (pressed gray) inside the border.
+        setPadding(dp(2), dp(2), dp(2), dp(2))
+        clipToOutline = true
+        rows.forEachIndexed { i, row ->
+            if (i > 0) addView(divider(1))
+            addView(row)
+        }
+        layoutParams = lp(MATCH, WRAP).apply {
+            marginStart = dp(12)
+            marginEnd = dp(12)
+        }
+    }
+
+    /** Explanatory text inside a card. */
+    private fun cardText(s: String): TextView =
+        text(s, 14f, color = Ink.MUTED).apply { setPadding(dp(16), dp(12), dp(16), dp(12)) }
+
+    /** Help text under a card. */
+    private fun note(s: String): TextView =
+        text(s, 14f, color = Ink.MUTED).apply { setPadding(dp(20), dp(8), dp(20), dp(4)) }
 
     /** Builds the report off the main thread (it scans the Notes app), then hands it over. */
     private fun withReport(then: (String) -> Unit) {
@@ -394,7 +426,7 @@ class SettingsActivity : Activity() {
         text(s, 14f, color = Ink.MUTED).apply { setPadding(dp(16), dp(4), dp(16), dp(8)) }
 
     private fun buttonRow(vararg buttons: Pair<String, () -> Unit>): View = hbox().apply {
-        setPadding(dp(12), dp(6), dp(12), dp(6))
+        setPadding(dp(12), dp(10), dp(12), dp(10))
         buttons.forEach { (label, action) ->
             addView(inkButton(label) { action() }, lp(0, WRAP, 1f).apply {
                 marginStart = dp(4)
@@ -416,9 +448,9 @@ class SettingsActivity : Activity() {
         text = title
         textSize = 17f
         isChecked = value
-        setPadding(dp(8), dp(8), dp(16), dp(8))
+        setPadding(dp(8), dp(10), dp(16), dp(10))
         setOnCheckedChangeListener { _, checked -> onChange(checked) }
-        layoutParams = lp(MATCH, WRAP).apply { marginStart = dp(8) }
+        layoutParams = lp(MATCH, WRAP).apply { marginStart = dp(10) }
     }
 
     private fun slider(title: String, value: Int, min: Int, max: Int, unit: String, onChange: (Int) -> Unit): View = vbox().apply {

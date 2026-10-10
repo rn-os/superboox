@@ -2,6 +2,10 @@ name: Build APK
 
 on:
   push:
+    # Docs/mockup-only pushes don't produce a new APK or release.
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
   pull_request:
   workflow_dispatch:
 

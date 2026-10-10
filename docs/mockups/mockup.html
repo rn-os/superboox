@@ -8,7 +8,7 @@
   1 CSS px = 1 dp. Rendered at 2x (≈1404×1872 px panel) by render.mjs.
   Every size, padding and font size mirrors QuickAccessPanel.kt / SettingsActivity.kt,
   so changes tried here translate 1:1 into the Kotlin code.
-  Pick a screen with #closed, #panel, #editor-pin, #library-pin, #edit, #panel-large, #settings-1..3.
+  Pick a screen with #closed, #panel, #editor-pin, #library-pin, #edit, #panel-large, #settings-1..3, and the Supernote-style proposal #sn-panel, #sn-empty-doc, #sn-recent, #sn-pick, #sn-edit.
 -->
 <style>
   @font-face { font-family: Roboto; font-weight: 400; src: url(fonts/roboto-latin-400-normal.woff2) format("woff2"); }
@@ -458,6 +458,157 @@ const SCREENS = {
   "settings-2": { html: () => settings(860), notes: ["8 · Settings (items & apps)", ["Reorder, edit and remove with the same outlined icon buttons as the panel's edit mode."]] },
   "settings-3": { html: () => settings(1560), notes: ["9 · Settings (bottom)", ["Recent files, Advanced, and Troubleshooting (Copy debug report / Share / Clear log)."]] },
 };
+
+
+// ===== Supernote-style redesign (proposal for review) =====
+Object.assign(P, {
+  clock: "M11.99,2C6.47,2 2,6.48 2,12s4.47,10 9.99,10C17.52,22 22,17.52 22,12S17.52,2 11.99,2zM12,20c-4.42,0 -8,-3.58 -8,-8s3.58,-8 8,-8 8,3.58 8,8 -3.58,8 -8,8zM12.5,7H11v6l5.25,3.15 0.75,-1.23 -4.5,-2.67z",
+  note_add: "M14,2H6c-1.1,0 -1.99,0.9 -1.99,2L4,20c0,1.1 0.89,2 1.99,2H18c1.1,0 2,-0.9 2,-2V8l-6,-6zM16,16h-3v3h-2v-3H8v-2h3v-3h2v3h3v2zM13,9V3.5L18.5,9H13z",
+  book: "M21,5c-1.11,-0.35 -2.33,-0.5 -3.5,-0.5 -1.95,0 -4.05,0.4 -5.5,1.5 -1.45,-1.1 -3.55,-1.5 -5.5,-1.5S2.45,4.9 1,6v14.65c0,0.25 0.25,0.5 0.5,0.5 0.1,0 0.15,-0.05 0.25,-0.05C3.1,20.45 5.05,20 6.5,20c1.95,0 4.05,0.4 5.5,1.5 1.35,-0.85 3.8,-1.5 5.5,-1.5 1.65,0 3.35,0.3 4.75,1.05 0.1,0.05 0.15,0.05 0.25,0.05 0.25,0 0.5,-0.25 0.5,-0.5V6c-0.6,-0.45 -1.25,-0.75 -2,-1zM21,18.5c-1.1,-0.35 -2.3,-0.5 -3.5,-0.5 -1.7,0 -4.15,0.65 -5.5,1.5V8c1.35,-0.85 3.8,-1.5 5.5,-1.5 1.2,0 2.4,0.15 3.5,0.5v11.5z",
+  link_add: "M8,11h8v2H8zM20.1,12H22c0,-2.76 -2.24,-5 -5,-5h-4v1.9h4c1.71,0 3.1,1.39 3.1,3.1zM3.9,12c0,-1.71 1.39,-3.1 3.1,-3.1h4V7H7c-2.76,0 -5,2.24 -5,5s2.24,5 5,5h4v-1.9H7c-1.71,0 -3.1,-1.39 -3.1,-3.1zM19,12h-2v3h-3v2h3v3h2v-3h3v-2h-3z",
+});
+
+const SN_PINS = ["Projects & Committees", "Alex Alsup Notes", "Ops Meetings", "Personal", "Technology", "SuperBoox Notes"];
+const SN_APPS = ["Files", "Calendar", "Dictionary", "Calculator", "Mail", "Todo", "Library", "Settings", "Browser"];
+
+const snLine = (w = 1.5) => `<div style="height:${w}px;background:#000;flex:none"></div>`;
+const snInsetRule = () => `<div style="height:1px;background:#000;margin:0 ${s(16)}px"></div>`;
+
+function snTop() {
+  const cell = (k, label) => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:${s(12)}px 0 ${s(10)}px">
+    ${ic(k, Math.round(32 * K))}<span style="font-size:${s(15)}px;font-weight:500;margin-top:${s(4)}px">${label}</span></div>`;
+  return `<div style="display:flex;align-items:stretch">${cell("clock", "Recent Files")}<div style="width:1.5px;background:#000"></div>${cell("note_add", "New Note")}
+    <div style="width:1.5px;background:#000"></div><div style="width:${s(52)}px;display:flex;align-items:center;justify-content:center">${ic("settings", Math.round(26 * K))}</div></div>`;
+}
+
+function snLastRow(label, sub, enabled = true) {
+  const c = enabled ? "#000" : "#999";
+  return `<div style="display:flex;align-items:center;padding:${s(12)}px ${s(16)}px;color:${c}">
+    <svg width="${Math.round(30 * K)}" height="${Math.round(30 * K)}" viewBox="0 0 24 24"><path fill="${c}" d="${P.book}"/></svg>
+    <div style="padding-left:${s(14)}px;min-width:0"><div style="font-size:${s(17)}px;font-weight:500">${label}</div>
+    ${sub ? `<div style="font-size:${s(13)}px;color:${enabled ? "#333" : "#999"};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</div>` : ""}</div></div>`;
+}
+
+function snQaHeader(addLabel = true) {
+  return `<div style="position:relative;display:flex;align-items:center;justify-content:center;padding:${s(12)}px ${s(16)}px">
+    <span style="font-size:${s(17)}px;font-weight:700">Quick Access</span>
+    ${addLabel ? `<span style="position:absolute;right:${s(10)}px;display:flex;flex-direction:column;align-items:center;font-size:${s(11)}px">${ic("link_add", Math.round(24 * K))}Add</span>` : ""}</div>`;
+}
+
+const snItem = (t) => `<div style="font-size:${s(17)}px;padding:${s(13)}px ${s(20)}px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t}</div>`;
+
+function snApps(apps = SN_APPS, page = 0) {
+  const pages = []; for (let i = 0; i < apps.length; i += 4) pages.push(apps.slice(i, i + 4));
+  const cur = pages[page];
+  let rows = "";
+  for (let i = 0; i < cur.length; i += 2) {
+    const cell = (a) => a ? `<div style="flex:1;display:flex;flex-direction:column;align-items:center;padding:${s(9)}px 0">${appIcon(a, Math.round(40 * K))}<span style="font-size:${s(14)}px;margin-top:${s(3)}px">${a}</span></div>` : `<div style="flex:1"></div>`;
+    rows += `<div style="display:flex;${i ? "border-top:1px solid #000;" : ""}">${cell(cur[i])}<div style="width:1px;background:#000;margin:${s(10)}px 0"></div>${cell(cur[i + 1])}</div>`;
+  }
+  const pager = pages.length > 1 ? `<div style="display:flex;align-items:center;justify-content:center;border-top:1px solid #000;padding:${s(2)}px 0">
+    ${iconBtn("chevron_left", page === 0)}<span style="font-size:${s(14)}px;font-weight:700;padding:0 ${s(14)}px">${page + 1} / ${pages.length}</span>${iconBtn("chevron_right", page === pages.length - 1)}</div>` : "";
+  return rows + pager;
+}
+
+function snPanel(middle, opts = {}) {
+  const width = Math.min(W, Math.max(s(300), Math.floor(W * (opts.widthPct || 45) / 100)));
+  return `<div class="sheet" style="width:${width}px"><div style="width:3px;background:#000;flex:none"></div><div class="content">
+    ${snTop()}${snLine()}
+    ${snLastRow("Last Opened Note", opts.lastNote ?? "SuperBoox Notes")}${snInsetRule()}
+    ${snLastRow("Last Opened Document", opts.lastDoc ?? null, !!opts.lastDoc)}
+    ${snLine(2.5)}
+    <div class="body" style="display:flex;flex-direction:column">${middle}</div>
+    ${snLine(2.5)}
+    ${snApps(opts.apps, opts.page || 0)}
+  </div></div>`;
+}
+
+function snQuickAccess(extra = "") {
+  let h = snQaHeader() + snLine(1);
+  SN_PINS.forEach((t, i) => { if (i) h += snInsetRule(); h += snItem(t); });
+  return h + extra;
+}
+
+function snRecent() {
+  const items = [["note", "SuperBoox Notes", "Note · 3 min ago"], ["note", "Alex Alsup Notes", "Note · 1 hour ago"], ["book", "Walden.epub", "NeoReader · 2 hours ago"],
+    ["note", "Ops Meetings", "Note · Yesterday"], ["note", "Daily Work", "Note · Yesterday"], ["file", "Q3 Plan.pdf", "Document · Oct 7"]];
+  let h = `<div style="position:relative;display:flex;align-items:center;justify-content:center;padding:${s(12)}px ${s(16)}px">
+    <span style="position:absolute;left:${s(8)}px;display:flex;align-items:center;font-size:${s(14)}px">${ic("chevron_left", Math.round(26 * K))}Back</span>
+    <span style="font-size:${s(17)}px;font-weight:700">Recent Files</span></div>` + snLine(1);
+  items.forEach(([k, t, sub], i) => {
+    if (i) h += snInsetRule();
+    h += `<div style="display:flex;align-items:center;padding:${s(11)}px ${s(16)}px">${ic(k, Math.round(24 * K))}<div style="padding-left:${s(12)}px"><div style="font-size:${s(17)}px">${t}</div><div style="font-size:${s(13)}px;color:#333">${sub}</div></div></div>`;
+  });
+  return h;
+}
+
+function snEdit() {
+  let h = `<div style="display:flex;align-items:center;padding:${s(10)}px ${s(10)}px ${s(10)}px ${s(16)}px"><div style="flex:1;font-size:${s(17)}px;font-weight:700">Edit Quick Access</div>${inkBtn("Done", s(15))}</div>` + snLine(1);
+  SN_PINS.forEach((t, i) => {
+    if (i) h += snInsetRule();
+    h += `<div style="display:flex;align-items:center;padding:${s(7)}px ${s(8)}px ${s(7)}px ${s(20)}px"><div style="flex:1;font-size:${s(17)}px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t}</div>
+      ${inkIconBtn("arrow_up", i === 0)}${inkIconBtn("arrow_down", i === SN_PINS.length - 1)}${inkIconBtn("delete")}</div>`;
+  });
+  return h;
+}
+
+// Library with Supernote-style multi-select "Add" bar (drawn over the BOOX library).
+function snPick() {
+  const rows = [["folder", "Work", "Folder · 6 notes", false], ["note", "SuperBoox Notes", "Oct 10, 2026", true], ["note", "Daily Journal", "Oct 9, 2026", false],
+    ["note", "Reading notes", "Oct 7, 2026", true], ["note", "Sketches", "Oct 2, 2026", false], ["note", "Ideas", "Sep 28, 2026", false], ["note", "Grocery list", "Sep 27, 2026", false]];
+  const box = (on) => `<div style="width:${s(24)}px;height:${s(24)}px;border:2px solid #000;border-radius:3px;flex:none;position:relative;${on ? "background:#000" : ""}">${on ? `<svg style="position:absolute;inset:1px" viewBox="0 0 24 24"><path fill="#fff" d="M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z"/></svg>` : ""}</div>`;
+  let h = `<div style="background:#000;color:#fff;display:flex;align-items:center;padding:${s(12)}px ${s(16)}px;font-size:${s(16)}px;font-weight:500">
+      <span>Cancel</span><span style="flex:1;text-align:center;font-weight:700">Add to Quick Access</span><span style="display:flex;align-items:center;gap:6px">
+      <svg width="22" height="22" viewBox="0 0 24 24"><path fill="#fff" d="${P.link_add}"/></svg>Add (2)</span></div>`;
+  rows.forEach(([k, t, sub, on], i) => {
+    if (i) h += snInsetRule();
+    h += `<div style="display:flex;align-items:center;gap:${s(12)}px;padding:${s(11)}px ${s(16)}px">${box(on)}${ic(k, Math.round(24 * K))}<div><div style="font-size:${s(17)}px;font-weight:${on ? 700 : 400}">${t}</div><div style="font-size:${s(13)}px;color:#333">${sub}</div></div></div>`;
+  });
+  return h;
+}
+
+Object.assign(SCREENS, {
+  "sn-panel": {
+    html: () => editorPage() + handle(false) + snPanel(snQuickAccess(), { lastDoc: "Walden.epub · NeoReader" }),
+    notes: ["A · Supernote-style panel (proposal)", [
+      "Top: <b>Recent Files</b> and <b>New Note</b> as boxed buttons, like Supernote. The small ⚙ opens SuperBoox settings.",
+      "<b>Last Opened Note</b>: SuperBoox remembers the last note you had open and reopens it in one tap.",
+      "<b>Last Opened Document</b>: the last book or PDF, by returning to the reading app it was open in (grayed when there's none).",
+      "<b>Quick Access</b>: centered heading, plain text rows with thin rules, no icons. <b>Add</b> (top right) pins the open note, or opens the picker in the library.",
+      "Apps: 2 columns with dividers, 4 per page (2 rows, like your photo) so Quick Access keeps the space. ‹ 1 / 3 › pages through the rest.",
+      "Back/Home/Recents row moves to an option in Settings (off by default).",
+    ]],
+  },
+  "sn-empty-doc": {
+    html: () => reader() + handle(false) + snPanel(snQuickAccess(), { lastNote: "Alex Alsup Notes", lastDoc: null, apps: SN_APPS.slice(0, 5) }),
+    notes: ["B · Fresh install / no document yet", [
+      "“Last Opened Document” is grayed until you've read something.",
+      "With 5 apps there are two pages of apps.",
+    ]],
+  },
+  "sn-recent": {
+    html: () => reader() + handle(false) + snPanel(snRecent(), { lastDoc: "Walden.epub · NeoReader" }),
+    notes: ["C · Recent Files", [
+      "Tapping <b>Recent Files</b> swaps the middle for notes and documents you opened recently, newest first, remembered by SuperBoox.",
+      "Folders you set under Settings → Recent files are merged in.",
+      "<b>‹ Back</b> returns to Quick Access.",
+    ]],
+  },
+  "sn-pick": {
+    html: () => notesLib() + handle(false) + `<div class="sheet" style="width:${Math.floor(W * 0.62)}px"><div style="width:3px;background:#000;flex:none"></div><div class="content"><div class="body">${snPick()}</div></div></div>`,
+    notes: ["D · Add from the Notes library", [
+      "Like Supernote's file manager: tick any number of notes or folders, then <b>Add (n)</b> in the black bar.",
+      "Opened by <b>Add</b> while the Notes library is on screen. Inside a note, Add pins that note straight away.",
+      "Wider sheet (62%) so names and dates fit.",
+    ]],
+  },
+  "sn-edit": {
+    html: () => reader() + handle(false) + snPanel(snEdit(), { lastDoc: "Walden.epub · NeoReader" }),
+    notes: ["E · Edit mode (long-press an item)", [
+      "Same ↑ ↓ 🗑 controls as now; text-only rows match the new list style.",
+    ]],
+  },
+});
 
 const key = (location.hash || "#panel").slice(1);
 const scr = SCREENS[key] || SCREENS.panel;

@@ -6,7 +6,8 @@ import path from "node:path";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const url = pathToFileURL(path.join(dir, "mockup.html")).href;
-const screens = ["closed", "panel", "editor-pin", "library-pin", "edit", "panel-large", "settings-1", "settings-2", "settings-3"];
+const screens = ["closed", "panel", "editor-pin", "library-pin", "edit", "panel-large", "settings-1", "settings-2", "settings-3",
+  "sn-panel", "sn-empty-doc", "sn-recent", "sn-pick", "sn-edit"];
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 1200, height: 1100 } });

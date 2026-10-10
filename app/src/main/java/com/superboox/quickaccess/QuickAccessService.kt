@@ -255,6 +255,21 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         cover.show { noteOpener.open(prefs.notesPackage, path, inNotes, noteId) }
     }
 
+    /**
+     * Quick Controls test (debug report): reads the BOOX Control Center behind
+     * the screen hold, taps nothing.
+     */
+    fun probeControlCenter(done: (List<String>) -> Unit) {
+        hidePanel()
+        cover.show {
+            ControlCenterProbe.run(this) { lines ->
+                cover.hide(600)
+                lines.forEach { DebugLog.i("control-center", it) }
+                done(lines)
+            }
+        }
+    }
+
     /** Called by [NoteOpener] when it's done, either way. */
     fun noteOpenFinished(opened: Boolean) {
         // On success give the note a moment to draw before revealing it.

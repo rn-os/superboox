@@ -57,6 +57,9 @@ object DebugReport {
         line("note activities:")
         BooxNotes.describeActivities(context, notesPkg).forEach { line("  $it") }
 
+        section("Control Center (Quick Controls test)")
+        controlCenter().forEach { line(it) }
+
         section("Settings")
         line("edge=${prefs.edge} trigger=${prefs.trigger} handleEnabled=${prefs.handleEnabled} showMarker=${prefs.showHandle}")
         line("strip width=${prefs.handleWidthDp}dp height=${prefs.handleHeightPct}% top=${prefs.handleTopPct}% panelWidth=${prefs.panelWidthPct}% systemRow=${prefs.showSystemActions}")
@@ -69,6 +72,21 @@ object DebugReport {
         section("Event log (${log.size} entries, newest last)")
         log.forEach { line(it) }
     }.let { if (it.length > MAX_CHARS) "…(truncated)\n" + it.takeLast(MAX_CHARS) else it }
+
+    /** Runs [ControlCenterProbe] through the service and waits for it (called off the main thread). */
+    private fun controlCenter(): List<String> {
+        val service = QuickAccessService.instance ?: return listOf("service not running")
+        val result = java.util.concurrent.atomic.AtomicReference<List<String>>(listOf("timed out"))
+        val latch = java.util.concurrent.CountDownLatch(1)
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            service.probeControlCenter {
+                result.set(it)
+                latch.countDown()
+            }
+        }
+        latch.await(8, java.util.concurrent.TimeUnit.SECONDS)
+        return result.get()
+    }
 
     /**
      * Compact outline of a window's view tree (class, id, text, flags). Logged

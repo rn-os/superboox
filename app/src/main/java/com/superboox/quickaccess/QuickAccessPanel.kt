@@ -726,7 +726,7 @@ class QuickAccessPanel(
         box
     }
 
-    /** "Previous app": that app's icon with a small ← badge; tap to switch straight back. */
+    /** "Previous app": that app's icon with a small ← badge; tap to switch straight back, hold for recent apps. */
     private fun previousCell(pkg: String): View = with(ctx) {
         vbox().apply {
             gravity = Gravity.CENTER_HORIZONTAL
@@ -750,6 +750,11 @@ class QuickAccessPanel(
             }, lp(MATCH, WRAP))
             pressable()
             setOnClickListener { service.openPreviousApp() }
+            // Hold: Android's recent apps, to pick any other app.
+            setOnLongClickListener {
+                service.systemAction(AccessibilityService.GLOBAL_ACTION_RECENTS)
+                true
+            }
         }
     }
 

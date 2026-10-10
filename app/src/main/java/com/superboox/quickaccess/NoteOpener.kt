@@ -29,6 +29,7 @@ class NoteOpener(private val service: AccessibilityService) {
         var index = 0
         var scrolls = 0
         var notBefore = 0L
+        var loggedNoRoot = false
     }
 
     fun open(pkg: String, path: String) {
@@ -36,6 +37,7 @@ class NoteOpener(private val service: AccessibilityService) {
         val steps = BooxNotes.splitPath(path)
         val intent = BooxNotes.launchIntent(service, pkg, fresh = true)
         if (intent == null) {
+            DebugLog.w("note", "no launch intent for $pkg")
             toast("BOOX Notes ($pkg) is not installed")
             return
         }
@@ -63,6 +65,10 @@ class NoteOpener(private val service: AccessibilityService) {
         }
         val root = notesRoot(j.pkg)
         if (root == null) {
+            if (!j.loggedNoRoot) {
+                j.loggedNoRoot = true
+                DebugLog.i("note", "waiting for ${j.pkg} window (active=${service.rootInActiveWindow?.packageName})")
+            }
             handler.postDelayed(::tick, POLL_MS)
             return
         }
@@ -70,6 +76,7 @@ class NoteOpener(private val service: AccessibilityService) {
         val target = j.steps[j.index]
         val node = findLabel(root, target)
         if (node != null) {
+            DebugLog.i("note", "found \"$target\" (${node.className}, clickable=${node.isClickable}) step ${j.index + 1}/${j.steps.size}")
             tap(node)
             j.index++
             j.scrolls = 0
@@ -86,6 +93,7 @@ class NoteOpener(private val service: AccessibilityService) {
         val scrollable = findFirst(root) { it.isScrollable }
         if (scrollable != null && j.scrolls < MAX_SCROLLS && now > j.notBefore + LOAD_GRACE_MS) {
             val moved = scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+            DebugLog.i("note", "\"$target\" not visible; scroll ${j.scrolls + 1} -> $moved")
             if (!moved) {
                 fail(j)
                 return
@@ -98,6 +106,12 @@ class NoteOpener(private val service: AccessibilityService) {
 
     private fun fail(j: Job) {
         job = null
+        val root = notesRoot(j.pkg)
+        DebugLog.w(
+            "note",
+            "gave up on \"${j.steps.getOrNull(j.index)}\" (step ${j.index + 1}/${j.steps.size}, scrolls ${j.scrolls}). " +
+                if (root == null) "Notes window not found." else "Screen:\n" + DebugReport.describeTree(root),
+        )
         toast("Couldn't find \"${j.steps.getOrNull(j.index) ?: ""}\" in BOOX Notes")
     }
 
@@ -127,6 +141,7 @@ class NoteOpener(private val service: AccessibilityService) {
             n = n.parent
             depth++
         }
+        DebugLog.i("note", "no clickable ancestor; tapping bounds instead")
         // Nothing clickable in the hierarchy (custom-drawn list): tap its center instead.
         val r = Rect()
         node.getBoundsInScreen(r)

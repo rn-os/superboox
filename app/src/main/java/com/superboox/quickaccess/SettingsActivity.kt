@@ -2,6 +2,8 @@ package com.superboox.quickaccess
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.ResolveInfo
@@ -56,6 +58,7 @@ class SettingsActivity : Activity() {
         dockSection()
         recentSection()
         advancedSection()
+        troubleshootingSection()
         scroll.post { scroll.scrollTo(0, y) }
     }
 
@@ -183,6 +186,40 @@ class SettingsActivity : Activity() {
                     "(e.g. intent:#Intent;component=com.onyx.android.note/.SomeActivity;S.extra=value;end).",
             ),
         )
+    }
+
+    private fun troubleshootingSection() {
+        list.addView(sectionTitle("Troubleshooting"))
+        list.addView(
+            paragraph(
+                "SuperBoox keeps a log of what it does on this device (${DebugLog.entries().size} entries): gestures, " +
+                    "the app in front, launches, and each step of opening a BOOX note. It never leaves the device " +
+                    "unless you copy or share the report.",
+            ),
+        )
+        list.addView(buttonRow(
+            "Copy debug report" to { copyReport() },
+            "Share…" to { shareReport() },
+        ))
+        list.addView(buttonRow("Clear log" to { DebugLog.clear(); toast("Log cleared"); render() }))
+    }
+
+    private fun copyReport() {
+        val report = DebugReport.build(this)
+        val cm = getSystemService(ClipboardManager::class.java)
+        cm.setPrimaryClip(ClipData.newPlainText("SuperBoox debug report", report))
+        DebugLog.i("report", "copied (${report.length} chars)")
+        toast("Debug report copied (${report.length / 1024 + 1} KB)")
+    }
+
+    private fun shareReport() {
+        val report = DebugReport.build(this)
+        val send = Intent(Intent.ACTION_SEND)
+            .setType("text/plain")
+            .putExtra(Intent.EXTRA_SUBJECT, "SuperBoox debug report")
+            .putExtra(Intent.EXTRA_TEXT, report)
+        runCatching { startActivity(Intent.createChooser(send, "Share debug report")) }
+            .onFailure { toast("No app to share with; use Copy instead") }
     }
 
     // ---- Pins: dialogs ------------------------------------------------------------------

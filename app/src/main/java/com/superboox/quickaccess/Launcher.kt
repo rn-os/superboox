@@ -47,10 +47,13 @@ object Launcher {
 
     fun start(context: Context, intent: Intent): Boolean = try {
         context.startActivity(intent)
+        DebugLog.i("launch", intent.toUri(0))
         true
     } catch (e: ActivityNotFoundException) {
+        DebugLog.w("launch", "no activity for ${intent.toUri(0)}", e)
         fail(context, "No app can open this")
     } catch (e: SecurityException) {
+        DebugLog.w("launch", "not allowed: ${intent.toUri(0)}", e)
         fail(context, "Not allowed: ${e.message}")
     }
 
@@ -80,6 +83,7 @@ object Launcher {
     }
 
     private fun fail(context: Context, msg: String): Boolean {
+        DebugLog.w("launch", msg)
         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
         return false
     }

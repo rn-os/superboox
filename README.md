@@ -42,6 +42,18 @@ BOOX Notes keeps its notes in a private database and has no documented "open not
 
 If your firmware uses a different Notes package, change it under **Advanced** in Settings.
 
+## Reporting bugs
+
+Open **SuperBoox → Troubleshooting → Copy debug report** (or **Share…**) and paste the result into a bug report. The report contains:
+
+- Device and firmware info, the BOOX apps installed, and your SuperBoox settings and pins.
+- A log of recent events: gestures, which app was in front, launches, panel errors and crashes.
+- Each step of opening a BOOX note. When a note can't be found, the log includes an outline of what BOOX Notes had on screen.
+
+The log stays on the device unless you copy or share it. **Clear log** empties it.
+
+With a computer you can also watch the log live: `adb logcat -s SuperBoox`.
+
 ## How it works
 
 ```

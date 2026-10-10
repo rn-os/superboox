@@ -38,6 +38,8 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        DebugLog.init(this)
+        DebugLog.i("service", "connected")
         prefs = Prefs(this)
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         noteOpener = NoteOpener(this)
@@ -52,7 +54,10 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (pkg == packageName || pkg in IGNORED_PACKAGES || pkg.contains("inputmethod")) return
         // Dialogs/toasts from other apps also fire this event; only count real app windows.
         val windowType = runCatching { windows.firstOrNull { it.id == event.windowId }?.type }.getOrNull()
-        if (windowType == null || windowType == AccessibilityWindowInfo.TYPE_APPLICATION) foregroundPackage = pkg
+        if ((windowType == null || windowType == AccessibilityWindowInfo.TYPE_APPLICATION) && pkg != foregroundPackage) {
+            foregroundPackage = pkg
+            DebugLog.i("foreground", "$pkg (${event.className})")
+        }
     }
 
     override fun onInterrupt() = Unit
@@ -73,6 +78,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        DebugLog.w("service", "unbound (accessibility service turned off or killed)")
         teardown()
         return super.onUnbind(intent)
     }
@@ -97,7 +103,10 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (!prefs.handleEnabled) return
         val screen = screenSize()
         val edge = prefs.edge
-        val view = EdgeHandleView(this, edge, prefs.trigger, prefs.showHandle) { showPanel() }
+        val view = EdgeHandleView(this, edge, prefs.trigger, prefs.showHandle) {
+            DebugLog.i("gesture", "${prefs.trigger} on $edge edge")
+            showPanel()
+        }
         val params = overlayParams(
             width = dp(prefs.handleWidthDp.coerceIn(6, 48)),
             height = (screen.second * prefs.handleHeightPct.coerceIn(10, 100) / 100f).toInt(),
@@ -107,8 +116,14 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             y = (screen.second * prefs.handleTopPct.coerceIn(0, 90) / 100f).toInt()
         }
         runCatching { wm.addView(view, params) }
-            .onSuccess { handleView = view }
-            .onFailure { Toast.makeText(this, "Couldn't add edge handle: ${it.message}", Toast.LENGTH_LONG).show() }
+            .onSuccess {
+                handleView = view
+                DebugLog.i("handle", "attached ${params.width}x${params.height}px at y=${params.y} on $edge (screen ${screen.first}x${screen.second})")
+            }
+            .onFailure {
+                DebugLog.e("handle", "attach failed", it)
+                Toast.makeText(this, "Couldn't add edge handle: ${it.message}", Toast.LENGTH_LONG).show()
+            }
     }
 
     private fun detachHandle() {
@@ -127,8 +142,14 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         val p = QuickAccessPanel(this, prefs, foregroundPackage)
         val params = overlayParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT, focusable = true)
         runCatching { wm.addView(p.root, params) }
-            .onSuccess { panel = p }
-            .onFailure { Toast.makeText(this, "Couldn't open panel: ${it.message}", Toast.LENGTH_LONG).show() }
+            .onSuccess {
+                panel = p
+                DebugLog.i("panel", "shown over $foregroundPackage")
+            }
+            .onFailure {
+                DebugLog.e("panel", "show failed", it)
+                Toast.makeText(this, "Couldn't open panel: ${it.message}", Toast.LENGTH_LONG).show()
+            }
     }
 
     fun hidePanel() {
@@ -148,11 +169,15 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     fun systemAction(action: Int) {
         hidePanel()
         // Let the e-ink screen redraw without the panel before screenshots etc.
-        handler.postDelayed({ performGlobalAction(action) }, if (action == GLOBAL_ACTION_TAKE_SCREENSHOT) 600L else 50L)
+        handler.postDelayed({
+            val ok = performGlobalAction(action)
+            DebugLog.i("action", "global action $action -> $ok")
+        }, if (action == GLOBAL_ACTION_TAKE_SCREENSHOT) 600L else 50L)
     }
 
     fun openBooxNote(path: String) {
         hidePanel()
+        DebugLog.i("note", "open \"$path\" in ${prefs.notesPackage}")
         noteOpener.open(prefs.notesPackage, path)
     }
 
@@ -162,8 +187,14 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         val root = runCatching {
             windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
                 .firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName == pkg } }
-        }.getOrNull() ?: return emptyList()
-        return NoteOpener.visibleLabels(root)
+        }.getOrNull()
+        if (root == null) {
+            DebugLog.w("picker", "no $pkg window found; windows=${runCatching { windows.map { "${it.type}:${it.root?.packageName}" } }.getOrNull()}")
+            return emptyList()
+        }
+        val labels = NoteOpener.visibleLabels(root)
+        DebugLog.i("picker", "${labels.size} labels in $pkg\n" + DebugReport.describeTree(root))
+        return labels
     }
 
     // ---- Window helpers ----------------------------------------------------------------

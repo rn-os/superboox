@@ -35,6 +35,9 @@ class NoteOpener(private val service: AccessibilityService) {
     private var job: Job? = null
 
     private class Job(val packages: Set<String>, val notesPackage: String, val steps: List<String>, val deadline: Long) {
+        /** While > 0: we asked BOOX to open the note by id and are waiting for it to appear. */
+        var directUntil = 0L
+
         /** Set when we opened the BOOX launcher and still need to tap its "Notes" tab. */
         var needsNotesTab = false
         var index = 0
@@ -78,12 +81,29 @@ class NoteOpener(private val service: AccessibilityService) {
         cancel()
         val steps = BooxNotes.splitPath(path)
         if (steps.isEmpty()) return
+        toast("Opening \"${steps.last()}\"…")
+        // Look the note's id up off the main thread, then try opening it directly.
+        val token = Any()
+        pending = token
+        io.execute {
+            val id = NotesDb.findNoteId(service, steps)
+            handler.post { if (pending === token) start(notesPackage, steps, inNotes, id) }
+        }
+    }
+
+    private var pending: Any? = null
+
+    private fun start(notesPackage: String, steps: List<String>, inNotes: Boolean, id: String?) {
         val j = Job(BooxNotes.packages(notesPackage), notesPackage, steps, SystemClock.uptimeMillis() + TIMEOUT_MS)
-        if (!inNotes && !launchNotes(j)) {
+        val direct = id?.let { NotesDb.openIntent(service, notesPackage, it) }
+        if (direct != null && Launcher.tryStart(service, direct)) {
+            // Fast path: BOOX opens the note itself. The loop confirms it, or falls back.
+            DebugLog.i("note", "opening by id")
+            j.directUntil = SystemClock.uptimeMillis() + DIRECT_WAIT_MS
+        } else if (!inNotes && !launchNotes(j)) {
             toast("Couldn't open BOOX Notes on this device")
             return
         }
-        toast("Opening \"${steps.last()}\"…")
         val now = SystemClock.uptimeMillis()
         job = j.also { it.notBefore = now + FIRST_DELAY_MS }
         handler.postDelayed(::tick, FIRST_DELAY_MS)
@@ -108,6 +128,7 @@ class NoteOpener(private val service: AccessibilityService) {
     fun cancel() {
         handler.removeCallbacksAndMessages(null)
         job = null
+        pending = null
     }
 
     private fun tick() {
@@ -115,6 +136,21 @@ class NoteOpener(private val service: AccessibilityService) {
         val now = SystemClock.uptimeMillis()
         if (now > j.deadline) return fail(j, "timed out")
         if (now < j.notBefore) return later(j.notBefore - now)
+
+        // Waiting on "open by id": succeed when the note shows up, otherwise fall back to
+        // finding it in the library. Never press Back while waiting (the old note may linger).
+        if (j.directUntil > 0) {
+            val state = notesRoot(j.packages)?.let { NotesScreen.read(it) }
+            if (state is NotesScreen.State.Editor && NotesScreen.matches(state.title, j.steps.last())) {
+                DebugLog.i("note", "opened by id")
+                return succeed(j)
+            }
+            if (now < j.directUntil) return later(POLL_MS)
+            DebugLog.w("note", "open by id didn't show \"${j.steps.last()}\" (screen: ${state?.let { NotesScreen.signature(it) }}); finding it in the library instead")
+            j.directUntil = 0
+            if (notesRoot(j.packages) == null && !launchNotes(j)) return fail(j, "couldn't open BOOX Notes")
+            return wait(j, now, FIRST_DELAY_MS)
+        }
 
         val root = notesRoot(j.packages)
         if (root == null) {
@@ -408,6 +444,8 @@ class NoteOpener(private val service: AccessibilityService) {
         private const val MAX_BACKS = 5
         private const val MAX_RELAUNCHES = 2
         private const val MAX_TAP_ATTEMPTS = 2
+        private const val DIRECT_WAIT_MS = 3_500L
+        private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
 
         fun findFirst(root: AccessibilityNodeInfo, predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
             val queue = ArrayDeque<AccessibilityNodeInfo>()

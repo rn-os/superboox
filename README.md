@@ -60,7 +60,8 @@ The panel follows the Supernote sidebar:
 BOOX Notes keeps its notes in a private database and has no documented "open note X" intent. SuperBoox uses three approaches instead:
 
 1. **Notes in the dock.** The BOOX Notes app (`com.onyx.android.note`) is placed in the dock by default.
-2. **Pinned notes, opened by name.** Tapping a pinned note brings BOOX Notes to the front. If a different note is open, SuperBoox presses Back until it reaches the library. It then scrolls the library to the top and taps the note, paging down if it has to. If the note isn't in the current folder, it goes up a level and looks again. Notes inside folders are written as a path: `Work / Meetings / Standup`.
+2. **Pinned notes, opened directly when possible.** On firmware that exposes BOOX's note database (for example, Note Air 6C with firmware 4.3), SuperBoox looks up the note's ID by its name. It then opens the note through BOOX's own "open note by ID" screen, skipping the library. SuperBoox reads only note names and IDs, never their contents. If that doesn't work, it falls back to the method below.
+   **Pinned notes, opened by name.** Tapping a pinned note brings BOOX Notes to the front. If a different note is open, SuperBoox presses Back until it reaches the library. It then scrolls the library to the top and taps the note, paging down if it has to. If the note isn't in the current folder, it goes up a level and looks again. Notes inside folders are written as a path: `Work / Meetings / Standup`.
    - The easiest way to pin a note: open BOOX Notes, open the panel, tap **Pin a note from this screen** and choose the note from what's shown.
    - This depends on the note names being on screen in the Notes library. If a firmware update changes that screen, it may need adjusting.
 3. **Files and custom intents.**

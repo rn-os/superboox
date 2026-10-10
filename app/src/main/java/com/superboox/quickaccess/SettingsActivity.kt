@@ -228,7 +228,7 @@ class SettingsActivity : Activity() {
         list.addView(heading("Apps at the bottom"))
         val dock = prefs.dock
         val rows = mutableListOf<View>(
-            check("Show \"Previous app\" first: the app you were in before this one", prefs.previousAppInDock) { prefs.previousAppInDock = it },
+            check("Show \"Previous app\": the app you were in before this one", prefs.previousAppInDock) { prefs.previousAppInDock = it; render() },
         )
         if (dock.isEmpty()) rows += cardText("No apps yet.")
         dock.forEachIndexed { i, app ->
@@ -237,6 +237,7 @@ class SettingsActivity : Activity() {
         }
         rows += buttonRow("+ Add app" to { pickApp { prefs.dock = prefs.dock + it; render() } })
         list.addView(card(rows))
+        if (prefs.previousAppInDock) list.addView(note("Move \"Previous app\" with ↑ ↓ to choose where it sits."))
     }
 
     private fun recentSection() {
@@ -501,7 +502,7 @@ class SettingsActivity : Activity() {
         PinType.FILE -> "Document"
         PinType.DOCUMENT -> "Document · ${pin.value.substringAfterLast('/')}"
         PinType.FOLDER -> "Folder"
-        PinType.APP -> "App · ${pin.value.substringBefore('/')}"
+        PinType.APP -> if (pin.value == Prefs.PREVIOUS_APP) "Switches back to the app you were in before" else "App · ${pin.value.substringBefore('/')}"
         PinType.INTENT -> "Intent · ${pin.value}"
     }
 

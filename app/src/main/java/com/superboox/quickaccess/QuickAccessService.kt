@@ -8,6 +8,7 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -278,28 +279,106 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     var quickControlsPage = 0
 
     /**
-     * Runs a Quick Control. Actions go straight to Android. Control Center tiles
-     * are pressed behind the screen hold: the still is taken with the panel up,
-     * so after a toggle the panel simply reappears with the new state.
+     * Runs a Quick Control. Actions go straight to Android. Control Center
+     * tiles are pressed in the real Control Center behind the screen hold,
+     * while the panel stays on top and usable: each tap flips its tile at once
+     * and is queued, so quick taps one after another all land.
      */
     fun quickControl(control: QuickControls.Control, hold: Boolean) {
         if (control.kind == QuickControls.Kind.ACTION) {
-            if (!hold) systemAction(control.globalAction)
+            if (hold) return
+            // Back/Home with the Control Center open would act on it instead: wait.
+            if (qcBusy) afterSession.addLast(control) else systemAction(control.globalAction)
             return
         }
-        val reopen = control.kind == QuickControls.Kind.TOGGLE && !hold
-        cover.show {
-            hidePanel()
-            QuickControls.operate(this, prefs, control, hold) { ok ->
-                if (reopen) {
-                    showPanel(keepCover = true)
-                    cover.hide(250)
-                } else {
-                    cover.hide(300)
+        if (control.kind == QuickControls.Kind.TOGGLE && !hold) {
+            val now = quickControlStates()[control.id] ?: false
+            optimistic[control.id] = !now to SystemClock.uptimeMillis() + OPTIMISTIC_MS
+            panel?.refresh()
+        }
+        qcQueue.addLast(control to hold)
+        if (!qcBusy) startSession()
+    }
+
+    /** States to show: the last known ones, with taps still being applied on top. */
+    fun quickControlStates(): Map<String, Boolean> {
+        val out = QuickControls.states(this, prefs).toMutableMap()
+        val now = SystemClock.uptimeMillis()
+        optimistic.entries.removeAll { it.value.second < now }
+        optimistic.forEach { (id, v) -> out[id] = v.first }
+        return out
+    }
+
+    private val qcQueue = ArrayDeque<Pair<QuickControls.Control, Boolean>>()
+    private val afterSession = ArrayDeque<QuickControls.Control>()
+    private val optimistic = HashMap<String, Pair<Boolean, Long>>()
+    private var qcBusy = false
+
+    private fun startSession() {
+        qcBusy = true
+        // The still also swallows taps outside the panel, so none reach the Control Center.
+        cover.show(touchable = true) {
+            raisePanel(focusable = false)
+            QuickControls.open(this) { ok ->
+                if (ok) nextControl() else {
+                    qcQueue.clear()
+                    finishSession(closeShade = true, keepPanel = true, error = "Couldn't open the Control Center")
                 }
-                if (!ok) Toast.makeText(this, "Couldn't find ${control.label} in the Control Center", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    private fun nextControl() {
+        val (control, hold) = qcQueue.removeFirstOrNull() ?: return finishSession(closeShade = true, keepPanel = true)
+        val press = QuickControls.press(this, prefs, control, hold)
+        if (!press.found || !press.pressed) {
+            optimistic.remove(control.id)
+            panel?.refresh()
+            Toast.makeText(this, "Couldn't find ${control.label} in the Control Center", Toast.LENGTH_SHORT).show()
+            return nextControl()
+        }
+        handler.postDelayed({
+            if (control.kind == QuickControls.Kind.TOGGLE && !hold) {
+                QuickControls.settle(this, prefs, control, press.before)?.let {
+                    optimistic[control.id] = it to SystemClock.uptimeMillis() + OPTIMISTIC_MS
+                }
+                panel?.refresh()
+                nextControl()
+            } else {
+                // A hold opens the tile's settings; other tiles start their own screen. Either
+                // way that screen takes over: the panel goes, and any later taps are dropped.
+                qcQueue.clear()
+                finishSession(closeShade = !hold, keepPanel = false)
+            }
+        }, QuickControls.AFTER_TAP_MS)
+    }
+
+    private fun finishSession(closeShade: Boolean, keepPanel: Boolean, error: String? = null) {
+        if (closeShade) QuickControls.close(this)
+        if (keepPanel) raisePanel(focusable = true, reAdd = false) else hidePanel()
+        cover.hide(250)
+        qcBusy = false
+        error?.let { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
+        var delay = 300L
+        while (afterSession.isNotEmpty()) {
+            val action = afterSession.removeFirst()
+            handler.postDelayed({ systemAction(action.globalAction) }, delay)
+            delay += 400L
+        }
+    }
+
+    /** Puts the panel above the screen hold (re-adding its window), or just restores its focus. */
+    private fun raisePanel(focusable: Boolean, reAdd: Boolean = true) {
+        val root = panel?.root ?: return
+        val params = overlayParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT, focusable)
+        runCatching {
+            if (reAdd) {
+                wm.removeView(root)
+                wm.addView(root, params)
+            } else {
+                wm.updateViewLayout(root, params)
+            }
+        }.onFailure { DebugLog.w("controls", "panel layering: ${it.message}") }
     }
 
     // ---- Previous app -------------------------------------------------------------------
@@ -395,6 +474,8 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     companion object {
         private const val REVEAL_DELAY_MS = 400L
+        /** How long a tapped tile shows its new state before the system's own reading wins. */
+        private const val OPTIMISTIC_MS = 8_000L
 
         @Volatile
         var instance: QuickAccessService? = null

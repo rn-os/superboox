@@ -70,10 +70,26 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(K_APP_OWN_ICONS, false)
         set(v) = sp.edit().putBoolean(K_APP_OWN_ICONS, v).apply()
 
-    /** "Previous app" as the first cell of the apps grid. */
+    /**
+     * "Previous app" in the apps grid. It's an item in the dock list
+     * ([PREVIOUS_APP]), so it can be moved like any app.
+     */
     var previousAppInDock: Boolean
-        get() = sp.getBoolean(K_PREVIOUS_APP, false)
-        set(v) = sp.edit().putBoolean(K_PREVIOUS_APP, v).apply()
+        get() {
+            // Build 25 stored it as a plain switch (always first): carry that over once.
+            if (sp.getBoolean(K_PREVIOUS_APP, false)) {
+                sp.edit().remove(K_PREVIOUS_APP).apply()
+                if (dock.none { it.value == PREVIOUS_APP }) dock = listOf(previousAppPin()) + dock
+            }
+            return dock.any { it.value == PREVIOUS_APP }
+        }
+        set(v) {
+            sp.edit().remove(K_PREVIOUS_APP).apply()
+            val rest = dock.filterNot { it.value == PREVIOUS_APP }
+            dock = if (v) listOf(previousAppPin()) + rest else rest
+        }
+
+    private fun previousAppPin() = Pin(PinType.APP, "Previous app", PREVIOUS_APP)
 
     /** Quick Controls row in the panel (it grew out of the Back/Home/Recents row, same setting). */
     var showSystemActions: Boolean
@@ -154,6 +170,9 @@ class Prefs(context: Context) {
         const val K_SYSTEM_ACTIONS = "system_actions"
         const val K_APP_OWN_ICONS = "app_own_icons"
         const val K_PREVIOUS_APP = "previous_app"
+
+        /** Dock item value standing for "the app used before this one". */
+        const val PREVIOUS_APP = "@previous"
         const val K_QUICK_CONTROLS = "quick_controls"
         const val K_QC_STATES = "quick_control_states"
         const val K_MENU_SIZE = "menu_size"

@@ -144,53 +144,69 @@ object QuickControls {
         prefs.sp.edit().putString(Prefs.K_QC_STATES, o.toString()).apply()
     }
 
-    // ---- Operating a Control Center tile -----------------------------------------------
+    // ---- Operating Control Center tiles ------------------------------------------------
 
     private const val POLL_MS = 150L
     private const val FIND_TIMEOUT_MS = 2_500L
-    private const val AFTER_TAP_MS = 600L
+    const val AFTER_TAP_MS = 600L
 
-    /**
-     * Opens the Control Center, taps (or, with [hold], long-presses) the tile for
-     * [control], records the states it shows, and closes it again.
-     * [done] gets whether the tile was found and pressed.
-     */
-    fun operate(service: AccessibilityService, prefs: Prefs, control: Control, hold: Boolean, done: (Boolean) -> Unit) {
+    /** Opens the Control Center and calls [ready] once its tiles can be read (false: they never appeared). */
+    fun open(service: AccessibilityService, ready: (Boolean) -> Unit) {
         val handler = Handler(Looper.getMainLooper())
         if (!service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)) {
             DebugLog.w("controls", "couldn't open the Control Center")
-            return done(false)
+            return ready(false)
         }
         val deadline = System.currentTimeMillis() + FIND_TIMEOUT_MS
-        fun attempt() {
-            val tiles = runCatching { readTiles(service) }.getOrDefault(emptyList())
-            val tile = tiles.firstOrNull { control.matches(it.normalized) }
-            if (tile == null) {
-                if (System.currentTimeMillis() < deadline) return run { handler.postDelayed(::attempt, POLL_MS) }
-                DebugLog.w("controls", "\"${control.label}\" not found in the Control Center (${tiles.size} tiles: ${tiles.joinToString { it.label }})")
-                closeShade(service)
-                return done(false)
-            }
-            saveStates(prefs, statesOf(tiles))
-            val action = if (hold) AccessibilityNodeInfo.ACTION_LONG_CLICK else AccessibilityNodeInfo.ACTION_CLICK
-            val pressed = pressable(tile.node, hold)?.performAction(action) == true
-            DebugLog.i("controls", "${if (hold) "hold" else "tap"} \"${tile.label}\" (was ${tile.on?.let { if (it) "on" else "off" } ?: "?"}) -> $pressed")
-            handler.postDelayed({
-                if (control.kind == Kind.TOGGLE && !hold) {
-                    val after = runCatching { readTiles(service) }.getOrDefault(emptyList())
-                    saveStates(prefs, statesOf(after))
-                    after.firstOrNull { control.matches(it.normalized) }?.on?.let {
-                        DebugLog.i("controls", "\"${control.label}\" is now ${if (it) "on" else "off"}")
-                    }
-                }
-                // After a tap, put the Control Center away (whatever the tile started is its own
-                // window). After a hold, leave it: the tile's settings may open inside it.
-                if (!hold) closeShade(service)
-                done(pressed)
-            }, AFTER_TAP_MS)
+        fun check() {
+            if (runCatching { readTiles(service) }.getOrDefault(emptyList()).isNotEmpty()) return ready(true)
+            if (System.currentTimeMillis() < deadline) handler.postDelayed(::check, POLL_MS) else ready(false)
         }
-        handler.postDelayed(::attempt, POLL_MS)
+        handler.postDelayed(::check, POLL_MS)
     }
+
+    /**
+     * Taps (or, with [hold], long-presses) the tile for [control] in the open
+     * Control Center. Returns the tile's state before the press (null: unknown),
+     * or [NOT_FOUND]. Also records every state it sees.
+     */
+    fun press(service: AccessibilityService, prefs: Prefs, control: Control, hold: Boolean): Press {
+        val tiles = runCatching { readTiles(service) }.getOrDefault(emptyList())
+        saveStates(prefs, statesOf(tiles))
+        val tile = tiles.firstOrNull { control.matches(it.normalized) }
+        if (tile == null) {
+            DebugLog.w("controls", "\"${control.label}\" not found in the Control Center (${tiles.size} tiles: ${tiles.joinToString { it.label }})")
+            return Press(found = false, pressed = false, before = null)
+        }
+        val action = if (hold) AccessibilityNodeInfo.ACTION_LONG_CLICK else AccessibilityNodeInfo.ACTION_CLICK
+        val pressed = pressable(tile.node, hold)?.performAction(action) == true
+        DebugLog.i("controls", "${if (hold) "hold" else "tap"} \"${tile.label}\" (was ${tile.on?.let { if (it) "on" else "off" } ?: "?"}) -> $pressed")
+        return Press(found = true, pressed = pressed, before = tile.on)
+    }
+
+    class Press(val found: Boolean, val pressed: Boolean, val before: Boolean?)
+
+    /**
+     * After a tap on a toggle: reads its new state. Some switches (Wi-Fi) take a
+     * few seconds, so an unchanged state is taken as "still switching" and the
+     * flipped state is recorded. Returns the state to show.
+     */
+    fun settle(service: AccessibilityService, prefs: Prefs, control: Control, before: Boolean?): Boolean? {
+        val tiles = runCatching { readTiles(service) }.getOrDefault(emptyList())
+        val seen = statesOf(tiles).toMutableMap()
+        val now = tiles.firstOrNull { control.matches(it.normalized) }?.on
+        val result = when {
+            before == null -> now
+            now == null || now == before -> !before
+            else -> now
+        }
+        if (result != null) seen[control.id] = result
+        saveStates(prefs, seen)
+        DebugLog.i("controls", "\"${control.label}\" is now ${result?.let { if (it) "on" else "off" } ?: "?"}${if (now == before && before != null) " (still switching)" else ""}")
+        return result
+    }
+
+    fun close(service: AccessibilityService) = closeShade(service)
 
     private class Tile(val node: AccessibilityNodeInfo, val label: String, val normalized: String, val on: Boolean?)
 

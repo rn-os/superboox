@@ -26,7 +26,8 @@ class OpeningCover(private val service: AccessibilityService, private val wm: Wi
     private var token = 0
 
     /** Covers the screen as it looks now, then runs [then] (straight away if no cover is possible). */
-    fun show(then: () -> Unit) {
+    /** @param touchable swallow touches (so they can't reach what's being operated underneath). */
+    fun show(touchable: Boolean = false, then: () -> Unit) {
         hide()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return then()
         val t = ++token
@@ -49,7 +50,7 @@ class OpeningCover(private val service: AccessibilityService, private val wm: Wi
                         override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
                             val buffer = result.hardwareBuffer
                             try {
-                                if (t == token && !ran) attach(Bitmap.wrapHardwareBuffer(buffer, result.colorSpace))
+                                if (t == token && !ran) attach(Bitmap.wrapHardwareBuffer(buffer, result.colorSpace), touchable)
                             } catch (e: Exception) {
                                 DebugLog.w("cover", "couldn't show the still: ${e.javaClass.simpleName} ${e.message}")
                             } finally {
@@ -84,7 +85,7 @@ class OpeningCover(private val service: AccessibilityService, private val wm: Wi
         view = null
     }
 
-    private fun attach(hw: Bitmap?) {
+    private fun attach(hw: Bitmap?, touchable: Boolean) {
         // A software copy draws in any window, hardware-accelerated or not.
         val still = hw?.copy(Bitmap.Config.ARGB_8888, false) ?: return
         val (w, h) = wm.currentWindowMetrics.bounds.let { it.width() to it.height() }
@@ -101,7 +102,7 @@ class OpeningCover(private val service: AccessibilityService, private val wm: Wi
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                (if (touchable) 0 else WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.OPAQUE,

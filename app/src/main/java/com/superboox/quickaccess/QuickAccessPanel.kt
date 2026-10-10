@@ -201,6 +201,9 @@ class QuickAccessPanel(
 
     // ---- Quick Controls: one row of round tiles, paged ----------------------------------
 
+    /** Redraws in place (Quick Controls after a tap). */
+    fun refresh() = show(mode)
+
     private fun quickControlsRow(): View = with(ctx) {
         val controls = QuickControls.selected(prefs)
         val box = vbox().apply { setPadding(s(4), s(10), s(4), s(2)) }
@@ -211,7 +214,7 @@ class QuickAccessPanel(
         val pages = controls.chunked(QC_PER_PAGE)
         val page = service.quickControlsPage.coerceIn(0, pages.size - 1)
         service.quickControlsPage = page
-        val states = QuickControls.states(service, prefs)
+        val states = service.quickControlStates()
         fun go(to: Int) {
             if (to in pages.indices && to != page) {
                 service.quickControlsPage = to
@@ -678,8 +681,10 @@ class QuickAccessPanel(
     private fun dock(): View = with(ctx) {
         val apps = prefs.dock
         val box = vbox()
-        val previous = if (prefs.previousAppInDock) service.previousApp else null
-        val cells: List<View> = listOfNotNull(previous?.let { previousCell(it) }) + apps.map { appCell(it) }
+        // "Previous app" sits wherever it was placed; it's left out until there is one.
+        val cells: List<View> = apps.mapNotNull { app ->
+            if (app.value == Prefs.PREVIOUS_APP) service.previousApp?.let { previousCell(it) } else appCell(app)
+        }
         if (cells.isEmpty()) {
             box.addView(hint("Add apps in Settings."))
             return@with box

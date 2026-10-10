@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 20)
+# SuperBoox: handoff / status (as of build 22)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -81,11 +81,17 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - Recents: NeoReader window events record the document 1.5 s later, with `path`. Last Opened Document and Recent Files open the path directly when they have it.
 - The debug report line `NeoReader last opened: "<title>" (.ext)` checks the lookup. The build 17/18 probes (`openHelpers`, `readers`, `deep`) no longer run, but their code is kept.
 
+## Builds 21–22
+- Build 21: Last Opened Document and Recent Files skip the document that's open. That's the newest remembered DOCUMENT from the app in front (`QuickAccessPanel.currentDocument` / `isCurrent`).
+- Build 22: Settings uses bordered cards (mockups 15–16, approved).
+  - `SettingsActivity.card(rows)`: a 2dp black outline with 8dp corners, 1dp rules between rows, 12dp side margins.
+  - `heading()` puts a bold uppercase name above each card. `note()` adds help text below a card; `cardText()` is text inside one.
+  - The adb tip in Advanced is gone. The Quick Access hint now reads "open it, swipe the panel open and tap Add".
+
 ## Next step
-- Core features all confirmed working as of build 20. Waiting on what the user wants next.
-- Possible: Last Opened Document skips the document currently open (like notes already do).
+- All requested features are built and confirmed except build 22's look on device. Wait for user feedback.
 
 ## Open ideas / backlog
 - Store the note id in pins when pinning, so lookup by title isn't needed.
 - Last Opened Document only returns to the last reading app; titles depend on that app.
-- Mockups `docs/mockups/10–14` show the approved Supernote design; `01–09` show the older design.
+- Mockups `docs/mockups/10–14` show the approved Supernote design, `15–16` the approved bordered Settings (`settings-borders.html`); `01–09` show the older design.

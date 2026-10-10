@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 30)
+# SuperBoox: handoff / status (as of build 31)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -117,6 +117,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - Build 27: BOOX's Auto-rotate tile always opens its rotation menu.
   - Tap now flips `Settings.System.ACCELEROMETER_ROTATION` directly. This needs `WRITE_SETTINGS`; the first tap opens `ACTION_MANAGE_WRITE_SETTINGS`, and no adb is needed.
   - Hold taps the tile (`Control.holdTaps`), which shows the menu, and the shade is left open.
+
+## Build 31
+- Full Refresh is `momentary`: never shown filled; a tap spins the icon (500 ms) and keeps the panel up.
+- Alerts: on BOOX, `GLOBAL_ACTION_NOTIFICATIONS` opened the Control Center. `QuickControls.openNotifications()` detects that (3 or more known tiles), taps a "notif…" switch if there is one, else closes the shade and swipes down from the top-left. It logs the shade tree (`[alerts] shade:`). **Read that in the next report** to see how BOOX splits notifications from the Control Center.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

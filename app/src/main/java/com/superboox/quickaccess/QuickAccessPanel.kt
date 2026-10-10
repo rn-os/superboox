@@ -250,6 +250,9 @@ class QuickAccessPanel(
     /** Levels being edited under the presets: "custom" (BOOX's Custom) or one of your presets' ids. */
     private var lightEdit: String? = null
     private var editLevels: QuickControls.Levels? = null
+
+    /** Your preset whose Remove is waiting to be confirmed. */
+    private var confirmRemove: String? = null
     private val commitLevels = Runnable { applyEditLevels() }
 
     /**
@@ -393,7 +396,50 @@ class QuickAccessPanel(
             ).apply { setPadding(s(6), 0, s(6), s(4)) })
             addView(levelRow("Light", levels.brightness) { editLevel(levels.copy(brightness = it)) })
             addView(levelRow("Warm", levels.warmth) { editLevel(levels.copy(warmth = it)) })
+            if (preset != null) addView(presetActions(preset), lp(MATCH, WRAP))
         }
+    }
+
+    /** Rename (in Settings, where typing works) and Remove (confirmed in place) for one of your presets. */
+    private fun presetActions(preset: QuickControls.LightPreset): View = with(ctx) {
+        if (confirmRemove == preset.id) {
+            return@with vbox().apply {
+                background = outline(2, 8)
+                setPadding(s(10), s(8), s(10), s(8))
+                addView(text("Remove “${preset.name}”?", sp(14f), bold = true).apply { setPadding(0, 0, 0, s(6)) })
+                addView(hbox().apply {
+                    addView(inkButton("Cancel", sp(14f)) { confirmRemove = null; show(mode) }, lp(0, WRAP, 1f).apply { marginEnd = s(8) })
+                    addView(inkButton("Remove", sp(14f)) { removePreset(preset) }.apply {
+                        setTextColor(Ink.PAPER)
+                        background = android.graphics.drawable.GradientDrawable().apply { setColor(Ink.INK); cornerRadius = dp(6).toFloat() }
+                    }, lp(0, WRAP, 1f))
+                }, lp(MATCH, WRAP))
+            }.let { box -> FrameLayout(ctx).apply { setPadding(s(4), s(8), s(4), s(2)); addView(box, FrameLayout.LayoutParams(MATCH, WRAP)) } }
+        }
+        hbox().apply {
+            setPadding(s(4), s(8), s(4), s(2))
+            addView(inkButton("Rename", sp(14f)) {
+                commitNow()
+                service.hidePanel()
+                Launcher.start(service, Intent(service, SettingsActivity::class.java)
+                    .putExtra(SettingsActivity.EXTRA_PAGE, "CONTROLS")
+                    .putExtra(SettingsActivity.EXTRA_EDIT_PRESET, preset.id)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+            }, lp(0, WRAP, 1f).apply { marginEnd = s(8) })
+            addView(inkButton("Remove", sp(14f)) { confirmRemove = preset.id; show(mode) }, lp(0, WRAP, 1f))
+        }
+    }
+
+    private fun removePreset(preset: QuickControls.LightPreset) {
+        root.removeCallbacks(commitLevels)
+        editLevels = null
+        // In use: put back the BOOX preset that was on before it.
+        if (QuickControls.activeMine(prefs) == preset.id) service.frontLight(QuickControls.savedPreset(prefs) ?: "Bright")
+        QuickControls.saveMyPresets(prefs, QuickControls.myPresets(prefs).filterNot { it.id == preset.id })
+        DebugLog.i("controls", "front light preset removed: ${preset.name}")
+        confirmRemove = null
+        lightEdit = null
+        show(mode)
     }
 
     private fun levelRow(label: String, value: Int, onChange: (Int) -> Unit): View = with(ctx) {

@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 47)
+# SuperBoox: handoff / status (as of build 48)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -201,7 +201,12 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 
 ## Build 47
 - `QuickAccessService.wakeReceiver` (SCREEN_ON / USER_PRESENT): if a SuperBoox preset is active and independent presets are available, it reapplies the preset 0.9 s and 2.5 s after waking.
-- Mockup `30-preset-actions.png` (`preset-actions.html`) proposes Rename (opens the Settings edit dialog) and Remove (confirmed in place) under a held preset in the panel. Awaiting approval.
+- Mockup `30-preset-actions.png` (`preset-actions.html`) proposes Rename (opens the Settings edit dialog) and Remove (confirmed in place) under a held preset in the panel. Approved; built in 48.
+- Build 47 log: wake reapply works (17:58:30 SCREEN_ON, then USER_PRESENT, re-sets Preset 1). The user saw the panel stay over BOOX's screensaver.
+
+## Build 48
+- `wakeReceiver` also takes SCREEN_OFF and closes the panel.
+- Panel: holding one of your presets shows Rename and Remove under its levels (`presetActions`). Rename opens Settings with `EXTRA_EDIT_PRESET` → `editLightPreset(p, backToPanel = true)`, which closes Settings and reopens the panel when the dialog is dismissed. Remove asks in place (`confirmRemove`); removing the preset in use puts back the BOOX preset it replaced.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

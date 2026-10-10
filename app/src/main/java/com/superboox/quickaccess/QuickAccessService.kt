@@ -59,6 +59,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         NoteIds.capture(this, prefs)
         val filter = android.content.IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_USER_PRESENT)
         }
         runCatching { registerReceiver(wakeReceiver, filter) }
@@ -70,6 +71,12 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
      */
     private val wakeReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context, intent: Intent) {
+            // Going to sleep: close the panel so it doesn't sit on top of BOOX's screensaver.
+            if (intent.action == Intent.ACTION_SCREEN_OFF) {
+                if (isPanelShowing) DebugLog.i("panel", "closed: screen off")
+                hidePanel()
+                return
+            }
             val id = QuickControls.activeMine(prefs) ?: return
             if (!AdvancedAccess.independentPresets(prefs)) return
             val preset = QuickControls.myPresets(prefs).firstOrNull { it.id == id } ?: return

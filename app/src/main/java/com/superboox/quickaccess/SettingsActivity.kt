@@ -58,6 +58,11 @@ class SettingsActivity : Activity() {
     /** The panel can send the user straight to a page (Advanced access). */
     private fun openRequestedPage(intent: Intent?) {
         intent?.getStringExtra(EXTRA_PAGE)?.let { name -> runCatching { Page.valueOf(name) }.getOrNull() }?.let { page = it }
+        // From the panel's Rename: open that preset's edit dialog.
+        intent?.getStringExtra(EXTRA_EDIT_PRESET)?.let { id ->
+            intent.removeExtra(EXTRA_EDIT_PRESET)
+            QuickControls.myPresets(prefs).firstOrNull { it.id == id }?.let { p -> list.post { editLightPreset(p, backToPanel = true) } }
+        }
     }
 
     private val shizukuResult = rikka.shizuku.Shizuku.OnRequestPermissionResultListener { code, result ->
@@ -253,7 +258,7 @@ class SettingsActivity : Activity() {
     }
 
     /** Name and levels; the light follows the sliders while the dialog is open, and goes back on Cancel. */
-    private fun editLightPreset(existing: QuickControls.LightPreset?) {
+    private fun editLightPreset(existing: QuickControls.LightPreset?, backToPanel: Boolean = false) {
         val service = QuickAccessService.instance
         // The preview borrows Custom as this preset, so your BOOX Custom is never overwritten.
         val id = existing?.id ?: QuickControls.newPresetId()
@@ -326,6 +331,8 @@ class SettingsActivity : Activity() {
                     else mine.map { if (it.id == existing.id) it.copy(name = label, levels = levels) else it })
                 render()
             }
+            // Opened from the panel's Rename: go back to the panel when done.
+            .setOnDismissListener { if (backToPanel) { finish(); QuickAccessService.instance?.showPanel() } }
             .show()
     }
 
@@ -1162,6 +1169,7 @@ class SettingsActivity : Activity() {
     companion object {
         const val K_PAGE = "page"
         const val EXTRA_PAGE = "page"
+        const val EXTRA_EDIT_PRESET = "edit_preset"
         const val REQ_FILE = 1
         const val REQ_FOLDER = 2
         const val REQ_RECENT = 3

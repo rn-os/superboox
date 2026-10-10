@@ -51,6 +51,7 @@ class QuickAccessPanel(
     private val expandedFolders = HashSet<String>()
     private var mode = Mode.MAIN
     private var dockPage = 0
+    private var dockCellCount = 0
 
     /** What BOOX Notes is showing, if it's the app behind the panel. */
     private val notesState: NotesScreen.State? = if (service.isNotesInFront) service.notesState() else null
@@ -680,7 +681,15 @@ class QuickAccessPanel(
 
     private fun dock(): View = with(ctx) {
         val apps = prefs.dock
-        val box = vbox()
+        // Swipe sideways to page, like Quick Controls.
+        val box = SwipeRow(ctx, s(40), vertical = true) { dir ->
+            val pageCount = (dockCellCount + DOCK_PER_PAGE - 1) / DOCK_PER_PAGE
+            val to = dockPage + dir
+            if (to in 0 until pageCount) {
+                dockPage = to
+                show(mode)
+            }
+        }
         // "Previous app" sits wherever it was placed; it's left out until there is one.
         val cells: List<View> = apps.mapNotNull { app ->
             if (app.value == Prefs.PREVIOUS_APP) service.previousApp?.let { previousCell(it) } else appCell(app)
@@ -689,6 +698,7 @@ class QuickAccessPanel(
             box.addView(hint("Add apps in Settings."))
             return@with box
         }
+        dockCellCount = cells.size
         val pages = cells.chunked(DOCK_PER_PAGE)
         dockPage = dockPage.coerceIn(0, pages.size - 1)
         pages[dockPage].chunked(2).forEachIndexed { r, pair ->
@@ -813,13 +823,17 @@ class QuickAccessPanel(
  * A row that turns a sideways swipe into a page change, while taps and long
  * presses still reach its children.
  */
-private class SwipeRow(context: android.content.Context, private val threshold: Int, private val onSwipe: (Int) -> Unit) :
-    android.widget.LinearLayout(context) {
+private class SwipeRow(
+    context: android.content.Context,
+    private val threshold: Int,
+    vertical: Boolean = false,
+    private val onSwipe: (Int) -> Unit,
+) : android.widget.LinearLayout(context) {
     private var downX = 0f
     private var downY = 0f
 
     init {
-        orientation = HORIZONTAL
+        orientation = if (vertical) VERTICAL else HORIZONTAL
     }
 
     override fun onInterceptTouchEvent(e: android.view.MotionEvent): Boolean {

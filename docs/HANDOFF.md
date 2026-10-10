@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 44)
+# SuperBoox: handoff / status (as of build 45)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -188,6 +188,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - **Your presets are gated**: page 2 of the panel's Front Light box shows `advancedPrompt()` unless `AdvancedAccess.independentPresets(prefs)` is true. If access worked during an earlier boot (`K_ADV_BOOT` vs the current boot time) and Shizuku isn't running, it says the tablet restarted. The button opens Settings on that page (`SettingsActivity.EXTRA_PAGE`).
 - When on, `service.frontLightLevels(levels, mine)` writes `screen_ctm_*` directly, keeps the light it replaced (`K_FL_DIRECT_BEFORE`), and puts that back if the user picks the BOOX preset already showing.
 - **Unknown until tested on device**: whether BOOX's light follows `screen_ctm_brightness`.
+- Build 44 report: Shizuku works (permission granted; `settings put system screen_ctm_brightness 4` → exit 0, reads back 4), but **the light did not change**. `screen_ctm_*` is only BOOX's record of the light, not a control. Independent presets stay locked (test failed).
+
+## Build 45
+- The debug report has an "Advanced access" section: Shizuku state, light test result, and a read-only probe via Shizuku (`AdvancedAccess.lightProbe`). It runs `id`, lists `/sys/class/backlight`, shows each device's brightness/max and permissions, `service list` filtered for light/onyx, and getprop filtered. Next: if a backlight file is writable by shell, try it as the light test's direct method.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

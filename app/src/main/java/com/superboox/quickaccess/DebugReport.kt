@@ -60,6 +60,11 @@ object DebugReport {
         section("Control Center (Quick Controls test)")
         controlCenter().forEach { line(it) }
 
+        section("Advanced access")
+        line("Shizuku installed: ${AdvancedAccess.installed(context)} running: ${AdvancedAccess.running()} allowed: ${AdvancedAccess.allowed()}")
+        line("light test: ${if (!prefs.lightTestRun) "not run" else if (prefs.lightTestPassed) "passed" else "failed"}; independent presets: ${prefs.independentPresets}; restarted since use: ${AdvancedAccess.restartedSinceUse(prefs)}")
+        runCatching { AdvancedAccess.lightProbe() }.getOrElse { listOf("probe failed: ${it.message}") }.forEach { line(it) }
+
         section("Front light: system settings")
         lightSettings(context).forEach { line(it) }
 

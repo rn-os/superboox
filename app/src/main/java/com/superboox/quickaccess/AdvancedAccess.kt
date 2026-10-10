@@ -61,6 +61,35 @@ object AdvancedAccess {
 
     // ---- Commands ---------------------------------------------------------------------------
 
+    /** Runs a shell command as ADB would, on the calling (background) thread. */
+    fun shellNow(command: String): Pair<Int, String> = runCatching {
+        val m = Shizuku::class.java.getDeclaredMethod("newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java)
+        m.isAccessible = true
+        val p = m.invoke(null, arrayOf("sh", "-c", command), null, null) as Process
+        val text = (p.inputStream.bufferedReader().readText() + p.errorStream.bufferedReader().readText()).trim()
+        p.waitFor() to text
+    }.getOrElse { -1 to "${it.javaClass.simpleName}: ${(it.cause ?: it).message}" }
+
+    /**
+     * Read-only look at where BOOX's front light lives (for the debug report):
+     * the backlight devices, their values and permissions, and related services.
+     */
+    fun lightProbe(): List<String> {
+        if (!allowed()) return listOf("not available (Advanced access isn't connected)")
+        val out = ArrayList<String>()
+        fun run(label: String, cmd: String) {
+            val (code, text) = shellNow(cmd)
+            out += "$label (exit $code):"
+            text.lines().take(60).forEach { out += "  $it" }
+        }
+        run("id", "id")
+        run("backlight devices", "ls -l /sys/class/backlight/ 2>&1")
+        run("backlight values", "for d in /sys/class/backlight/*; do echo \"== \$d\"; ls -lL \$d/brightness \$d/max_brightness 2>&1; echo \"brightness=\$(cat \$d/brightness 2>&1) max=\$(cat \$d/max_brightness 2>&1)\"; done")
+        run("light services", "service list 2>&1 | grep -i -E 'light|onyx|bright|ctm|eink'")
+        run("light properties", "getprop | grep -i -E 'light|bright|ctm|warm|cold' | head -40")
+        return out
+    }
+
     /** Runs a shell command as ADB would (off the main thread); [done] gets the exit code and output. */
     fun shell(vararg command: String, done: (Int, String) -> Unit = { _, _ -> }) {
         io.execute {

@@ -27,19 +27,24 @@ jobs:
         with:
           name: superboox-build-${{ github.run_number }}
           path: superboox-build-*.apk
-      # Each push becomes a pre-release with a direct .apk link that opens in the BOOX browser.
-      - name: Publish test release
+      # Each push becomes a GitHub release with the APK attached: a direct .apk link
+      # for the BOOX browser, and an update source for Obtainium. The tag equals the
+      # APK's versionName (0.1.0-build.N, see app/build.gradle.kts) so Obtainium's
+      # version detection matches installed and released builds.
+      - name: Publish release
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-${{ github.run_number }}
+          tag_name: 0.1.0-build.${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: SuperBoox test build ${{ github.run_number }}
-          prerelease: true
+          name: SuperBoox 0.1.0-build.${{ github.run_number }}
+          prerelease: false
+          make_latest: true
           files: superboox-build-*.apk
           body: |
             Test build from `${{ github.ref_name }}` at ${{ github.sha }}.
 
             **Install:** download the `.apk` below on your BOOX, open it, and allow installs from the browser or file manager if asked. It installs over earlier test builds and keeps your settings.
+            **Updates with Obtainium:** add `https://github.com/rn-os/superboox` as an app source.
             **First run:** SuperBoox → Accessibility settings → turn on "SuperBoox Quick Access", then allow SuperBoox to run in the background in BOOX App Management.
             **Found a bug?** SuperBoox → Troubleshooting → Copy debug report.

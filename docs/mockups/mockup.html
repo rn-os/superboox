@@ -8,7 +8,7 @@
   1 CSS px = 1 dp. Rendered at 2x (≈1404×1872 px panel) by render.mjs.
   Every size, padding and font size mirrors QuickAccessPanel.kt / SettingsActivity.kt,
   so changes tried here translate 1:1 into the Kotlin code.
-  Pick a screen with #closed, #panel, #notes-picker, #remove, #settings-1..3, #add-note, #app-picker.
+  Pick a screen with #closed, #panel, #editor-pin, #library-pin, #edit, #panel-large, #settings-1..3.
 -->
 <style>
   @font-face { font-family: Roboto; font-weight: 400; src: url(fonts/roboto-latin-400-normal.woff2) format("woff2"); }
@@ -155,7 +155,6 @@
 </div>
 
 <script>
-// ---- Icons: identical path data to app/src/main/res/drawable/*.xml ----
 const P = {
   back: "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z",
   home: "M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z",
@@ -209,59 +208,140 @@ function scribble(seed) { // fake handwriting lines for note thumbnails
   }
   return `<svg viewBox="0 0 150 196" preserveAspectRatio="none">${out}</svg>`;
 }
+// Icons added in build 6 (same path data as res/drawable).
+Object.assign(P, {
+  arrow_up: "M4,12l1.41,1.41L11,7.83V20h2V7.83l5.58,5.59L20,12l-8,-8 -8,8z",
+  arrow_down: "M20,12l-1.41,-1.41L13,16.17V4h-2v12.17l-5.58,-5.59L4,12l8,8 8,-8z",
+  delete: "M6,19c0,1.1 0.9,2 2,2h8c1.1,0 2,-0.9 2,-2V7H6v12zM19,4h-3.5l-1,-1h-5l-1,1H5v2h14V4z",
+  edit: "M3,17.25V21h3.75L17.81,9.94l-3.75,-3.75L3,17.25zM20.71,7.04c0.39,-0.39 0.39,-1.02 0,-1.41l-2.34,-2.34c-0.39,-0.39 -1.02,-0.39 -1.41,0l-1.83,1.83 3.75,3.75 1.830,-1.83z",
+  chevron_left: "M15.41,7.41L14,6l-6,6 6,6 1.41,-1.41L10.83,12z",
+  chevron_right: "M10,6L8.59,7.41 13.17,12l-4.58,4.59L10,18l6,-6z",
+});
+Object.assign(APPS, {
+  Mail:  { g: `<rect x="11" y="15" width="26" height="18" rx="2" fill="#fff"/><path d="M11 16l13 10 13-10" fill="none" stroke="#444" stroke-width="2.5"/>`, bg: "#333" },
+  Todo:  { g: `<rect x="13" y="12" width="22" height="24" rx="2" fill="#fff"/><path d="M16 19l2 2 4-4M16 27l2 2 4-4" fill="none" stroke="#333" stroke-width="2"/><path d="M25 20h7M25 28h7" stroke="#333" stroke-width="2"/>`, bg: "#2a2a2a" },
+  Files: { g: `<path d="M12 15h9l3 3h12v15H12z" fill="#fff"/>`, bg: "#3a3a3a" },
+});
+
+// ---- BOOX Notes editor (from the on-device screenshot) ----
+function editorPage() {
+  const tools = ["Tem…", "Layer", "Mar…", "AI", "Shar…", "Insert", "Lasso", "Pag…", "Text…", "Rec…", "Gest…"];
+  const lines = [];
+  for (let y = 200; y < 900; y += 32) lines.push(`<div style="position:absolute;left:62px;right:20px;top:${y}px;height:1px;background:#bbb"></div>`);
+  let ink = "";
+  let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const rows = [[94, 0.55], [126, 0.95], [158, 0.6], [222, 0.85], [254, 0.7], [286, 0.92], [318, 0.6], [350, 0.95], [382, 0.4], [414, 0.9], [446, 0.95], [478, 0.85]];
+  rows.forEach(([y, len]) => {
+    let x = 80, d = `M${x} ${y}`;
+    while (x < 80 + len * 560) { x += 3 + rnd() * 6; d += ` L${x.toFixed(1)} ${(y + (rnd() - .5) * 12).toFixed(1)}`; }
+    ink += `<path d="${d}" fill="none" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/>`;
+  });
+  return statusbar() + `<div style="position:absolute;inset:24px 0 0 0">
+    <div style="height:56px;border-bottom:1.5px solid #000;display:flex;align-items:center;gap:14px;padding:0 12px">
+      ${ic("back", 24)}<span style="font-size:15px;border-bottom:1.5px solid #000;padding-bottom:2px">SuperB…x Notes</span>
+      <span style="flex:1"></span><span style="font-size:11px">0.50</span><span style="font-size:11px">0.30</span>
+      <span style="font-size:13px;color:#333">1/2</span>
+    </div>
+    <div style="position:absolute;left:0;top:57px;bottom:0;width:58px;border-right:1.5px solid #000;display:flex;flex-direction:column;align-items:center;gap:15px;padding-top:12px">
+      ${tools.map(t => `<div style="display:flex;flex-direction:column;align-items:center;font-size:11px"><div style="width:22px;height:22px;border:2px solid #000;border-radius:3px"></div>${t}</div>`).join("")}
+    </div>
+    <div style="position:absolute;left:62px;right:20px;top:66px;height:2px;background:#d33"></div>
+    ${lines.join("")}
+    <svg style="position:absolute;inset:0" width="702" height="912">${ink}</svg>
+  </div>`;
+}
+
 const NOTES = [
-  ["Work", "Folder · 6 notes", "folder"], ["Daily Journal", "Oct 9, 2026"], ["Reading notes", "Oct 7, 2026"], ["Sketches", "Oct 2, 2026"],
-  ["Ideas", "Sep 28, 2026"], ["Grocery list", "Sep 27, 2026"], ["Book outline", "Sep 21, 2026"], ["Lecture 4", "Sep 15, 2026"],
+  ["Work", "Folder · 6 notes", "folder"], ["SuperBoox Notes", "Oct 10, 2026"], ["Daily Journal", "Oct 9, 2026"], ["Reading notes", "Oct 7, 2026"],
+  ["Sketches", "Oct 2, 2026"], ["Ideas", "Sep 28, 2026"], ["Grocery list", "Sep 27, 2026"], ["Lecture 4", "Sep 15, 2026"],
 ];
 const notesLib = () => statusbar() + `<div class="notes">
   <div class="top"><b>Notes</b>${ic("add", 26)}${ic("settings", 24)}</div>
   <div class="tabs"><span class="on">All</span><span>Recent</span><span>Starred</span><span style="flex:1"></span><span>Sort: Modified ▾</span></div>
   <div class="grid">${NOTES.map(([n, d, f], i) => `<div class="note-card ${f || ""}"><div class="thumb">${f ? ic("folder", 64) : scribble(i * 77 + 13)}</div><div class="name">${n}</div><div class="date">${d}</div></div>`).join("")}</div></div>`;
 
-// ---- Panel (mirrors QuickAccessPanel.build) ----
-const W = 702, H = 936, PANEL_W = Math.min(W, Math.max(300, Math.floor(W * 45 / 100)));
-const row = (icon, t1, t2, indent = 16) =>
-  `<div class="row" style="padding-left:${indent}px">${icon}<div class="t"><div class="t1">${t1}</div>${t2 ? `<div class="t2">${t2}</div>` : ""}</div></div>`;
-const section = (s) => `<div class="section">${s.toUpperCase()}</div>`;
+// ---- Panel (mirrors QuickAccessPanel.kt, build 6) ----
+const W = 702, H = 936;
+let K = 1; // Menu size scale
+const s = (v) => +(v * K).toFixed(2);
 
-function panel(bodyHtml, dock = ["Notes", "NeoReader", "Calendar", "Library", "Settings"]) {
+function row(icon, t1, t2, indent = 16) {
+  return `<div class="row" style="padding:${s(13)}px ${s(16)}px ${s(13)}px ${s(indent)}px">${icon}
+    <div class="t" style="padding-left:${s(14)}px"><div class="t1" style="font-size:${s(18)}px">${t1}</div>${t2 ? `<div class="t2" style="font-size:${s(13)}px">${t2}</div>` : ""}</div></div>`;
+}
+const rule = () => `<div style="height:1px;background:#000;margin:0 ${s(16)}px"></div>`;
+const section = (t) => `<div style="padding:${s(18)}px ${s(16)}px ${s(6)}px"><div style="font-size:${s(14)}px;font-weight:700;letter-spacing:.06em">${t.toUpperCase()}</div><div style="height:2px;background:#000;margin-top:${s(4)}px"></div></div>`;
+const hint = (t, indent = 16) => `<div style="font-size:${s(14)}px;color:#333;padding:${s(8)}px ${s(16)}px ${s(10)}px ${s(indent)}px;line-height:1.35">${t}</div>`;
+const pic = (k) => ic(k, Math.round(30 * K));
+const iconBtn = (k, dim) => `<div style="padding:${s(10)}px;display:flex;${dim ? "opacity:.3" : ""}">${ic(k, Math.round(28 * K))}</div>`;
+const inkIconBtn = (k, disabled) => {
+  const b = Math.round(44 * K), pad = Math.floor(b / 5);
+  return `<div style="width:${b}px;height:${b}px;margin-left:6px;border:2px solid ${disabled ? "#888" : "#000"};border-radius:6px;display:flex;align-items:center;justify-content:center;flex:none">
+    <svg width="${b - 2 * pad}" height="${b - 2 * pad}" viewBox="0 0 24 24"><path fill="${disabled ? "#888" : "#000"}" d="${P[k]}"/></svg></div>`;
+};
+const inkBtn = (t, size = 15) => `<div style="border:2px solid #000;border-radius:6px;min-height:44px;padding:8px 12px;font-weight:700;font-size:${size}px;display:flex;align-items:center;justify-content:center;text-align:center">${t}</div>`;
+
+const DOCK10 = ["Notes", "NeoReader", "Library", "Calendar", "Mail", "Todo", "Files", "Settings", "Browser", "Calculator"];
+
+function dock(apps = DOCK10, page = 0) {
+  const pages = []; for (let i = 0; i < apps.length; i += 8) pages.push(apps.slice(i, i + 8));
+  const cur = pages[page] || [];
+  const cells = cur.map(a => `<div style="display:flex;flex-direction:column;align-items:center;padding:${s(8)}px ${s(2)}px;min-width:0">${appIcon(a, Math.round(52 * K))}
+      <span style="font-size:${s(13)}px;font-weight:500;padding-top:${s(4)}px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${a}</span></div>`).join("");
+  const pager = pages.length > 1 ? `<div style="display:flex;align-items:center;justify-content:center;padding-top:${s(4)}px">
+      ${iconBtn("chevron_left", page === 0)}<span style="font-size:${s(14)}px;font-weight:700;padding:0 ${s(16)}px">${page + 1} / ${pages.length}</span>${iconBtn("chevron_right", page === pages.length - 1)}</div>` : "";
+  return `<div style="padding:${s(8)}px ${s(8)}px ${s(10)}px"><div style="display:grid;grid-template-columns:repeat(4,1fr)">${cells}</div>${pager}</div>`;
+}
+
+function panel(bodyHtml, opts = {}) {
+  const width = Math.min(W, Math.max(s(300), Math.floor(W * (opts.widthPct || 45) / 100)));
   const sys = [["back", "Back"], ["home", "Home"], ["recents", "Recents"], ["notifications", "Alerts"], ["screenshot", "Capture"]];
-  return `<div class="sheet" style="width:${PANEL_W}px"><div class="line"></div><div class="content">
-    <div class="header"><div class="title">Quick Access</div><div class="iconbtn">${ic("settings")}</div><div class="iconbtn">${ic("close")}</div></div>
-    <div class="div1"></div>
-    <div class="sysrow">${sys.map(([k, l]) => `<div class="cell">${ic(k)}<span>${l}</span></div>`).join("")}</div>
-    <div class="div2"></div>
+  return `<div class="sheet" style="width:${width}px"><div style="width:4px;background:#000;flex:none"></div><div class="content">
+    <div style="display:flex;align-items:center;padding:${s(12)}px ${s(8)}px ${s(12)}px ${s(16)}px">
+      <div style="flex:1;font-size:${s(24)}px;font-weight:700">Quick Access</div>${iconBtn("settings")}${iconBtn("close")}</div>
+    <div style="height:3px;background:#000;flex:none"></div>
+    <div style="display:flex;padding:${s(6)}px ${s(4)}px">${sys.map(([k, l]) => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;padding:${s(6)}px 0">${ic(k, Math.round(28 * K))}<span style="font-size:${s(13)}px;font-weight:500">${l}</span></div>`).join("")}</div>
+    <div style="height:3px;background:#000;flex:none"></div>
     <div class="body">${bodyHtml}</div>
-    <div class="div2"></div>
-    <div class="dock">${section("Apps")}<div class="grid">${dock.map(a => `<div class="app">${appIcon(a)}<span>${a}</span></div>`).join("")}</div></div>
+    <div style="height:3px;background:#000;flex:none"></div>
+    ${dock(opts.dock, opts.page || 0)}
   </div></div>`;
 }
 
-const mainBody = () =>
-  section("Quick Access") +
-  row(ic("note"), "Daily Journal", "BOOX Notes") +
-  row(ic("note"), "Standup", "BOOX Notes · Work / Standup") +
-  row(ic("file"), "Reading list.pdf", "Document") +
-  row(ic("folder"), "Projects", "Folder · tap to collapse") +
-  row(ic("file"), "Kitchen remodel.pdf", "2 hours ago", 40) +
-  row(ic("file"), "Budget 2027.xlsx", "Yesterday", 40) +
-  row(ic("file"), "Garden plan.png", "Oct 3", 40) +
-  row(appIcon("Dictionary", 26), "Dictionary", "App") +
-  row(ic("add"), "Pin NeoReader", "Add the current app to Quick Access") +
-  section("Recent") +
-  row(ic("file"), "Daily Journal.pdf", "10 minutes ago") +
-  row(ic("file"), "Reading notes.pdf", "3 days ago");
+const PINS = [
+  ["note", "Daily Journal", "BOOX Notes"],
+  ["note", "Standup", "BOOX Notes · Work / Standup"],
+  ["file", "Reading list.pdf", "Document"],
+  ["folder", "Projects", "Folder"],
+  ["app", "Dictionary", "App"],
+];
+const pinIcon = (k, label) => k === "app" ? appIcon(label, Math.round(30 * K)) : pic(k);
 
-const pickerBody = () =>
-  section("Tap the note to pin") +
-  `<div class="hint" style="font-size:13px;padding:0 16px 8px">Showing the text BOOX Notes has on screen. Notes inside a folder can be renamed to "Folder / Note" in Settings so they open from the library.</div>` +
-  ["Notes", "All", "Recent", "Starred", "Sort: Modified", "Work", "Folder · 6 notes", "Daily Journal", "Oct 9, 2026", "Reading notes"]
-    .map(t => row(ic("note"), t)).join("") + row(ic("back"), "Back");
+function mainBody(extraRow) {
+  let h = section("Quick Access");
+  PINS.forEach(([k, t, sub], i) => { if (i) h += rule(); h += row(pinIcon(k, t), t, sub); });
+  if (extraRow) h += rule() + extraRow;
+  h += hint("Long-press an item to rearrange or remove.");
+  h += section("Recent") + row(pic("file"), "SuperBoox Notes.pdf", "12 minutes ago") + row(pic("file"), "Daily Journal.pdf", "Yesterday");
+  return h;
+}
 
-const removeBody = () =>
-  section("Remove from Quick Access?") +
-  `<div style="font-size:18px;font-weight:700;padding:4px 16px 12px">Reading list.pdf</div>` +
-  row(ic("close"), "Remove") + row(ic("back"), "Back");
+function editBody() {
+  let h = `<div style="display:flex;align-items:center;padding:${s(14)}px ${s(12)}px ${s(10)}px ${s(16)}px"><div style="flex:1;font-size:${s(18)}px;font-weight:700">Edit Quick Access</div>${inkBtn("Done", s(15))}</div>`;
+  PINS.forEach(([k, t], i) => {
+    h += `<div style="display:flex;align-items:center;padding:${s(8)}px ${s(10)}px ${s(8)}px ${s(16)}px">${k === "app" ? appIcon(t, Math.round(28 * K)) : ic(k, Math.round(28 * K))}
+      <div style="flex:1;font-size:${s(17)}px;font-weight:500;padding:0 ${s(4)}px 0 ${s(12)}px">${t}</div>
+      ${inkIconBtn("arrow_up", i === 0)}${inkIconBtn("arrow_down", i === PINS.length - 1)}${inkIconBtn("delete")}</div>`;
+  });
+  return h;
+}
+
+function pickerBody() {
+  const cards = ["Work", "Daily Journal", "Reading notes", "Sketches", "Ideas", "Grocery list", "Lecture 4"].filter(c => c !== "Daily Journal");
+  let h = section("Tap a note to pin");
+  cards.forEach((c, i) => { if (i) h += rule(); h += row(pic("note"), c); });
+  return h + rule() + row(pic("back"), "Back");
+}
 
 const handle = (outline) => {
   const top = Math.floor(H * .30), h = Math.floor(H * .35);
@@ -269,24 +349,26 @@ const handle = (outline) => {
     (outline ? `<div class="strip-outline" style="top:${top}px;height:${h}px"></div>` : "");
 };
 
-// ---- Settings (mirrors SettingsActivity.render) ----
+// ---- Settings (mirrors SettingsActivity.kt, build 6) ----
 const slider = (lbl, v, min, max, unit) =>
-  `<div class="slider"><div class="lbl">${lbl}: ${v}${unit ? " " + unit : ""}</div><div class="track"><div class="bg"></div><div class="fg" style="width:${(v - min) / (max - min) * 100}%"></div><div class="thumb" style="left:${(v - min) / (max - min) * 100}%"></div></div></div>`;
+  `<div class="slider"><div class="lbl">${lbl}: ${v}${unit ? " " + unit : ""}</div><div class="track"><div class="bg" style="background:#888"></div><div class="fg" style="width:${(v - min) / (max - min) * 100}%"></div><div class="thumb" style="left:${(v - min) / (max - min) * 100}%"></div></div></div>`;
 const check = (lbl, on) => `<div class="check"><div class="box ${on ? "on" : ""}"></div>${lbl}</div>`;
-const choice = (k, v) => `<div class="choice"><div class="k">${k}</div><div class="v">${v}</div></div>`;
-const btns = (...l) => `<div class="btnrow">${l.map(b => `<div class="btn">${b}</div>`).join("")}</div>`;
-const para = (s) => `<div class="para">${s}</div>`;
-const item = (t1, t2, i, n, edit = true) => `<div class="item"><div class="t"><div class="t1">${t1}</div><div class="t2">${t2}</div></div>
-  <div class="btn small ${i === 0 ? "disabled" : ""}">↑</div><div class="btn small ${i === n - 1 ? "disabled" : ""}">↓</div>${edit ? `<div class="btn small">Edit</div>` : ""}<div class="btn small">✕</div></div>`;
+const choice = (k, v) => `<div class="choice"><div class="k" style="font-weight:500">${k}</div><div style="font-size:15px;font-weight:700">${v}&nbsp; ›</div></div>`;
+const btns = (...l) => `<div style="display:flex;padding:6px 12px;gap:8px">${l.map(b => `<div style="flex:1">${inkBtn(b)}</div>`).join("")}</div>`;
+const para = (t) => `<div class="para" style="color:#333">${t}</div>`;
+const item = (t1, t2, i, n, edit = true) => `<div style="display:flex;align-items:center;padding:8px 12px 8px 16px"><div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:500">${t1}</div><div style="font-size:13px;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t2}</div></div>
+  ${inkIconBtn("arrow_up", i === 0)}${inkIconBtn("arrow_down", i === n - 1)}${edit ? inkIconBtn("edit") : ""}${inkIconBtn("delete")}</div>`;
+const sectionS = (t) => { const k = K; K = 1; const r = section(t); K = k; return r; };
 
 const settingsInner = () => `
-  <div class="s-h1">SuperBoox</div>
+  <div style="font-size:28px;font-weight:700;padding:20px 16px 10px">SuperBoox</div>
+  <div style="height:3px;background:#000"></div><div style="height:8px"></div>
   ${para("A Supernote-style Quick Access panel for BOOX. Swipe from the screen edge on any page to open it.")}
   <div class="status">● Service is running</div>
   ${btns("Accessibility settings", "Open panel")}
-  ${section("Gesture")}
+  ${sectionS("Gesture")}
   ${choice("Screen edge", "Right")}
-  ${choice("Trigger", "Swipe in from the edge")}
+  ${choice("Trigger", "Swipe up or down along the edge")}
   ${check("Edge gesture enabled", true)}
   ${check("Show a small marker on the edge", true)}
   ${slider("Touch strip width", 16, 6, 48, "dp")}
@@ -294,88 +376,93 @@ const settingsInner = () => `
   ${slider("Touch strip position from top", 30, 0, 90, "%")}
   ${slider("Panel width", 45, 25, 100, "% of screen")}
   ${check("Show Back / Home / Recents / Capture row", true)}
+  ${choice("Menu size", "Standard")}
   ${para('Tip: the "Quick Access" app icon opens the panel too. Assign it to a BOOX gesture or the Navigation Ball if you\'d rather not reserve a strip of the screen edge. There\'s also a Quick Settings tile.')}
-  ${section("Quick Access items")}
-  ${item("Daily Journal", "BOOX note · Daily Journal", 0, 5)}
-  ${item("Standup", "BOOX note · Work / Standup", 1, 5)}
-  ${item("Reading list.pdf", "Document", 2, 5)}
-  ${item("Projects", "Folder", 3, 5)}
-  ${item("Dictionary", "App · com.onyx.dict", 4, 5)}
+  ${sectionS("Quick Access items")}
+  ${PINS.map(([k, t, sub], i) => item(t, k === "note" ? "BOOX note · " + (sub.split("· ")[1] || t) : k === "app" ? "App · com.onyx.dict" : sub, i, PINS.length)).join("")}
   ${btns("+ BOOX note", "+ Document", "+ Folder")}
   ${btns("+ App", "+ Custom intent")}
   ${para('BOOX notes open by name: SuperBoox starts BOOX Notes at its library and taps the note for you. Use "Folder / Note" for notes in folders. The easiest way to add one is to open BOOX Notes, swipe the panel open and tap "Pin a note from this screen".')}
-  ${section("Apps at the bottom")}
-  ${item("Notes", "App · com.onyx.android.note", 0, 5, false)}
-  ${item("NeoReader", "App · com.onyx.kreader", 1, 5, false)}
-  ${item("Calendar", "App · com.onyx.calendar", 2, 5, false)}
-  ${item("Library", "App · com.onyx", 3, 5, false)}
-  ${item("Settings", "App · com.android.settings", 4, 5, false)}
+  ${sectionS("Apps at the bottom")}
+  ${DOCK10.slice(0, 5).map((a, i) => item(a, "App", i, 10, false)).join("")}
+  <div style="padding:4px 16px;font-size:14px;color:#333">…5 more</div>
   ${btns("+ Add app")}
-  ${section("Recent files")}
+  ${sectionS("Recent files")}
   ${para("Folder: note")}
   ${slider("Files shown", 5, 1, 20, "")}
   ${btns("Change folder", "Don't show")}
-  ${section("Advanced")}
+  ${sectionS("Advanced")}
   ${choice("BOOX Notes package", "com.onyx.android.note")}
-  ${para("Find a firmware-specific deep link with: adb shell dumpsys activity activities | grep -i onyx while the note is open, then add it as a Custom intent (e.g. intent:#Intent;component=com.onyx.android.note/.SomeActivity;S.extra=value;end).")}`;
+  ${para("Find a firmware-specific deep link with: adb shell dumpsys activity activities | grep -i onyx while the note is open, then add it as a Custom intent.")}
+  ${sectionS("Troubleshooting")}
+  ${para("SuperBoox keeps a log of what it does on this device (214 entries): gestures, the app in front, launches, and each step of opening a BOOX note. It never leaves the device unless you copy or share the report.")}
+  ${btns("Copy debug report", "Share…")}
+  ${btns("Clear log")}`;
 
-const settings = (scroll) => statusbar(true) + `<div class="actionbar">SuperBoox</div>
-  <div class="settings"><div class="inner" style="transform:translateY(${-scroll}px)">${settingsInner()}</div></div>`;
-
+const settings = (scroll) => statusbar() + `<div class="settings" style="top:24px"><div class="inner" style="transform:translateY(${-scroll}px)">${settingsInner()}</div></div>`;
 const dialog = (inner) => `<div class="scrim"></div><div class="dialog">${inner}</div>`;
+
+const swipeArrow = () => `<svg class="swipe-arrow" style="right:24px;top:${Math.floor(H * .30) + 40}px" width="30" height="250" viewBox="0 0 30 250">
+  <path d="M15 10 V240" stroke="#000" stroke-width="3" stroke-dasharray="7 6"/><path d="M5 22 L15 6 L25 22 M5 228 L15 244 L25 228" fill="none" stroke="#000" stroke-width="3"/></svg>`;
 
 // ---- Screens ----
 const SCREENS = {
   closed: {
-    html: () => reader() + handle(true),
-    notes: ["<h3>1 · Panel closed</h3><ol>",
-      "Swipe in (←) from the marker. The only always-on UI is the 4dp marker on the right edge (dashed box = the invisible 16dp touch strip, 35% tall, starting 30% down).",
-      "Everything outside the strip passes touches through to the page normally.",
-      "</ol>"],
+    html: () => reader() + handle(true) + swipeArrow(),
+    notes: ["1 · Opening the panel", [
+      "New default: swipe <b>up or down along the right edge</b> (dashed arrow), like the Supernote side bar.",
+      "The 4dp marker shows where the touch strip is (dashed box: 16dp wide, 35% tall, starting 30% down).",
+      "Swipe-in and double-tap are still options in Settings.",
+    ]],
   },
   panel: {
-    html: () => reader() + handle(false) + panel(mainBody()),
-    notes: ["<h3>2 · Panel open (over NeoReader)</h3><ol>",
-      `Sheet is ${PANEL_W}dp wide (45% of a ${W}dp-wide screen) with a 3dp ink rule on its inner edge.`,
-      "Pins: two BOOX notes, a document, an expanded folder, an app.",
-      "“Pin NeoReader” appears because NeoReader was in front when the panel opened.",
-      "Recent = newest files in the chosen export folder.",
-      "Apps dock: 5 per row.",
-      "Tap outside, ✕ or Back to close.",
-      "</ol>"],
+    html: () => reader() + handle(false) + panel(mainBody(row(pic("add"), "Pin NeoReader", "Add the current app to Quick Access"))),
+    notes: ["2 · Panel over a book (Standard size)", [
+      "Heavier look: 24sp bold title, 3dp rules, bold section headings with a 2dp underline, 18sp medium rows, 30dp icons, rules between items.",
+      "Secondary text is dark gray (#333) instead of light gray, which washes out on e-ink.",
+      "Apps: 4 × 2 grid, 8 per page like Supernote. With 10 apps there are two pages (‹ 1 / 2 ›).",
+    ]],
   },
-  "notes-picker": {
+  "editor-pin": {
+    html: () => editorPage() + handle(false) + panel(mainBody(row(pic("add"), "Pin this note", "SuperB…x Notes"))),
+    notes: ["3 · Inside a note: one-tap pin", [
+      "Opened over the note from your screenshot.",
+      "The panel reads the note's name from the top bar and offers a single <b>Pin this note</b> row. No tool labels, pen sizes or page numbers.",
+      "Once it's pinned, the row reads “This note is pinned”.",
+      "BOOX shortens long names (“SuperB…x Notes”). Matching handles that when the pin is opened later.",
+    ]],
+  },
+  "library-pin": {
     html: () => notesLib() + handle(false) + panel(pickerBody()),
-    notes: ["<h3>3 · Pin a note from BOOX Notes</h3><ol>",
-      "Opened while BOOX Notes was in front, then “Pin a note from this screen”.",
-      "Lists every text label Notes is showing. Note the noise (tabs, dates, “Sort”). A filtering pass is a likely refinement.",
-      "</ol>"],
+    notes: ["4 · In the Notes library", [
+      "After tapping “Pin a note from this screen”.",
+      "Only note and folder cards are listed. Tabs (All / Recent / Starred), “Sort”, dates and note counts are filtered out.",
+      "Notes that are already pinned (Daily Journal) are left out.",
+    ]],
   },
-  remove: {
-    html: () => reader() + handle(false) + panel(removeBody()),
-    notes: ["<h3>4 · Long-press a pin</h3><ol>", "The list is swapped in place for a remove confirmation.", "</ol>"],
+  edit: {
+    html: () => reader() + handle(false) + panel(editBody()),
+    notes: ["5 · Edit mode (long-press any item)", [
+      "Each item gets ↑ ↓ and a trash can (44dp outlined buttons). The first item's ↑ and the last item's ↓ are grayed out.",
+      "<b>Done</b> or the Back key leaves edit mode.",
+    ]],
   },
-  "settings-1": { html: () => settings(0), notes: ["<h3>5 · Settings (top)</h3><ol>", "Service status, gesture and panel options.", "Platform DeviceDefault.Light theme, so the action bar and status bar are solid black.", "</ol>"] },
-  "settings-2": { html: () => settings(780), notes: ["<h3>6 · Settings (pins &amp; dock)</h3><ol>", "Reorder with ↑ ↓, edit, remove.", "Add notes, documents, folders, apps, custom intents.", "</ol>"] },
-  "settings-3": { html: () => settings(1450), notes: ["<h3>7 · Settings (bottom)</h3><ol>", "Recent-files folder, Notes package override and deep-link help.", "</ol>"] },
-  "add-note": {
-    html: () => settings(780) + dialog(`<div class="dt">Add BOOX note</div>
-      <div class="field">Work / Meetings / Standup</div><div class="field empty">Label (optional)</div>
-      <div class="dbtns"><div>Cancel</div><div>Save</div></div>`),
-    notes: ["<h3>8 · “+ BOOX note” dialog</h3><ol>", "Path uses “ / ” between folder levels.", "The label defaults to the last segment.", "</ol>"],
+  "panel-large": {
+    html: () => { K = 1.2; const h = reader() + handle(false) + panel(mainBody(), { widthPct: 55 }); K = 1; return h; },
+    notes: ["6 · Menu size: Large (+20%)", [
+      "Settings → Menu size: Small 85%, Standard, Large 120%, Extra large 140%.",
+      "Text, icons, padding and touch targets all scale. Shown at a 55% panel width, which suits Large.",
+    ]],
   },
-  "app-picker": {
-    html: () => settings(780) + dialog(`<div class="dt">Choose an app</div>
-      ${["Browser", "Calculator", "Calendar", "Dictionary", "Library", "NeoReader", "Notes", "Settings"].map(a => `<div class="picker-row">${appIcon(a, 36)}${a}</div>`).join("")}
-      <div class="dbtns"><div>Cancel</div></div>`),
-    notes: ["<h3>9 · App picker</h3><ol>", "Used by “+ App” and “+ Add app”.", "Lists every launchable app, alphabetical.", "</ol>"],
-  },
+  "settings-1": { html: () => settings(0), notes: ["7 · Settings (top)", ["White title bar with a 3dp rule (no black action bar).", "White status bar with dark icons.", "Outlined black buttons, bold section headings.", "New: Menu size."]] },
+  "settings-2": { html: () => settings(860), notes: ["8 · Settings (items & apps)", ["Reorder, edit and remove with the same outlined icon buttons as the panel's edit mode."]] },
+  "settings-3": { html: () => settings(1560), notes: ["9 · Settings (bottom)", ["Recent files, Advanced, and Troubleshooting (Copy debug report / Share / Clear log)."]] },
 };
 
 const key = (location.hash || "#panel").slice(1);
-const s = SCREENS[key] || SCREENS.panel;
-document.getElementById("eink").innerHTML = s.html();
-document.getElementById("annot").innerHTML = s.notes.map((n, i) => i === 0 || n.startsWith("</") ? n : `<li>${n}</li>`).join("").replace("<ol><li>", "<ol><li>");
+const scr = SCREENS[key] || SCREENS.panel;
+document.getElementById("eink").innerHTML = scr.html();
+document.getElementById("annot").innerHTML = `<h3>${scr.notes[0]}</h3><ol>${scr.notes[1].map(n => `<li>${n}</li>`).join("")}</ol>`;
 window.SCREENS = Object.keys(SCREENS);
 </script>
 </body>

@@ -19,6 +19,16 @@ It's black on white with no animations, so it draws cleanly on e-ink.
 4. **BOOX only:** go to *Settings → Apps → App Management → SuperBoox* and allow it to run in the background (turn off freezing). Otherwise BOOX may stop the service after the device sleeps.
 5. Swipe up or down along the right edge of the screen, like the Supernote side bar. The touch strip covers the middle third of the right edge, and a small black marker shows where it is. You can switch to swiping inward or double-tapping in Settings.
 
+## Updates with Obtainium
+
+[Obtainium](https://github.com/ImranR98/Obtainium) installs SuperBoox from this repo's releases and notifies you when a new build is out.
+
+1. Install Obtainium on the BOOX.
+2. In Obtainium, tap **Add App** and paste `https://github.com/rn-os/superboox`. Or open `obtainium://add/https://github.com/rn-os/superboox` on the device to jump straight there.
+3. Tap **Add**, then **Install**.
+
+Each release is tagged with the APK's own version (`0.1.0-build.N`), so Obtainium's version check works without extra settings. Builds 1 to 6 were pre-releases with `build-N` tags, and Obtainium ignores them.
+
 ## Ways to open the panel
 
 | Method | Notes |

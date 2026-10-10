@@ -102,6 +102,19 @@ fun View.pressable(normal: Drawable = ColorDrawable(Color.TRANSPARENT)) {
     isFocusable = true
 }
 
+/** Round outlined button (Front Light − / +): black ring, gray while pressed. */
+fun Context.ovalButton(strokeDp: Int = 2): StateListDrawable {
+    fun oval(fill: Int) = GradientDrawable().apply {
+        shape = GradientDrawable.OVAL
+        setColor(fill)
+        setStroke(dp(strokeDp), Ink.INK)
+    }
+    return StateListDrawable().apply {
+        addState(intArrayOf(android.R.attr.state_pressed), oval(Ink.PRESSED))
+        addState(intArrayOf(), oval(Ink.PAPER))
+    }
+}
+
 /** Same, for outlined shapes: keeps the black border while pressed. */
 private fun Context.outlinedStates(radiusDp: Int): StateListDrawable = StateListDrawable().apply {
     addState(intArrayOf(android.R.attr.state_pressed), outline(2, radiusDp, Ink.PRESSED))

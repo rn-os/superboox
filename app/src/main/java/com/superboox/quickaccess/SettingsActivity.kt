@@ -226,7 +226,18 @@ class SettingsActivity : Activity() {
         fun bar(label: String, value: Int, onChange: (Int) -> Unit): View = vbox().apply {
             val title = text("$label: $value", 15f, bold = true).apply { setPadding(dp(4), dp(12), 0, 0) }
             addView(title)
-            addView(SeekBar(context).apply {
+            lateinit var seek: SeekBar
+            fun step(sign: String, by: Int) = android.widget.FrameLayout(context).apply {
+                contentDescription = "$label ${if (by < 0) "down" else "up"}"
+                addView(text(sign, 20f, bold = true).apply { gravity = Gravity.CENTER },
+                    android.widget.FrameLayout.LayoutParams(MATCH, MATCH))
+                pressable()
+                background = ovalButton()
+                setOnClickListener { seek.progress = (seek.progress + by).coerceIn(0, QuickControls.LEVEL_MAX) }
+            }
+            val row = hbox().apply { gravity = Gravity.CENTER_VERTICAL }
+            row.addView(step("−", -1), lp(dp(40), dp(40)))
+            seek = SeekBar(context).apply {
                 max = QuickControls.LEVEL_MAX
                 progress = value
                 progressTintList = android.content.res.ColorStateList.valueOf(Ink.INK)
@@ -241,7 +252,10 @@ class SettingsActivity : Activity() {
                     override fun onStartTrackingTouch(sb: SeekBar) = Unit
                     override fun onStopTrackingTouch(sb: SeekBar) = Unit
                 })
-            })
+            }
+            row.addView(seek, lp(0, WRAP, 1f))
+            row.addView(step("+", 1), lp(dp(40), dp(40)))
+            addView(row, lp(MATCH, WRAP))
         }
         val body = vbox().apply {
             setPadding(dp(20), dp(8), dp(20), 0)

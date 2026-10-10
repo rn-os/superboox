@@ -378,13 +378,10 @@ class QuickAccessPanel(
             addView(text(label, sp(13f), bold = true), lp(s(44), WRAP))
             fun step(sign: String, by: Int) = FrameLayout(ctx).apply {
                 contentDescription = "$label ${if (by < 0) "down" else "up"}"
-                background = android.graphics.drawable.GradientDrawable().apply {
-                    shape = android.graphics.drawable.GradientDrawable.OVAL
-                    setColor(Ink.PAPER)
-                    setStroke(dp(2), Ink.INK)
-                }
                 addView(text(sign, sp(20f), bold = true).apply { gravity = Gravity.CENTER }, FrameLayout.LayoutParams(MATCH, MATCH))
                 pressable()
+                // After pressable(), which would otherwise replace the ring with a plain background.
+                background = ovalButton()
                 setOnClickListener { onChange((value + by).coerceIn(0, QuickControls.LEVEL_MAX)) }
             }
             addView(step("−", -1), lp(s(34), s(34)))

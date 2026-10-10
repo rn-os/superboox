@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 23)
+# SuperBoox: handoff / status (as of build 24)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -95,10 +95,19 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - `Prefs.appOwnIcons` (Settings → Gesture card, "Use apps' own icons for pinned apps") is off by default.
 - `Launcher.appLabel` drops a trailing version ("NeoReader V3.0" → "NeoReader").
 
+## Quick Controls (in progress, internal test)
+- The user wants the Back/Home/Recents/Capture row to grow into **Quick Controls**: round toggle tiles like the BOOX Control Center (black = on), **one row of 5 with ‹ n / m › paging (the user rejected 2 rows)**, tap to toggle, hold to open that setting's page. Customize it in Settings with a list (↑ ↓ 🗑), "+ Add control" (a grouped picker: Switches / BOOX / Actions) and Reset. It stays off by default.
+- Mockups: `docs/mockups/quick-controls.html` → 18, 20, 21. The user liked the toggles; a final OK on the mockups isn't given yet.
+- Feasibility:
+  - direct: global actions (Back, Home, Recents, Notifications, Screenshot, Lock, Split screen);
+  - direct after a one-time permission: DND (notification policy access), auto-rotate and brightness (WRITE_SETTINGS);
+  - not directly: Android blocks apps from switching Wi-Fi, Bluetooth and airplane mode, and BOOX-only tiles have no API. Plan: open the Control Center behind `OpeningCover`, tap the real tile, close it.
+- Build 24 is a probe only. `ControlCenterProbe` runs from the debug report (`QuickAccessService.probeControlCenter`, behind the cover). It opens Quick Settings, logs the windows and each tile's label, checked/selected/stateDescription and view id, then dismisses the shade. It taps nothing. Report section: "Control Center (Quick Controls test)".
+
 ## Next step
-- Wait for user feedback on build 23.
+- Read the build 24 report's Control Center section. If tiles and states are readable, build Quick Controls as in the mockups.
 
 ## Open ideas / backlog
 - Store the note id in pins when pinning, so lookup by title isn't needed.
 - Last Opened Document only returns to the last reading app; titles depend on that app.
-- Mockups `docs/mockups/10–14` show the approved Supernote design, `15–16` the approved bordered Settings (`settings-borders.html`), `17` the approved icons (`panel-icons.html`); `01–09` show the older design.
+- Mockups `docs/mockups/10–14` show the approved Supernote design, `15–16` the approved bordered Settings (`settings-borders.html`), `17` the approved icons (`panel-icons.html`), `18/20/21` Quick Controls (`quick-controls.html`); `01–09` show the older design.

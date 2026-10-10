@@ -65,6 +65,11 @@ class Prefs(context: Context) {
         get() = enumOr(sp.getString(K_MENU_SIZE, null), MenuSize.LARGE) // easier to hit on e-ink
         set(v) = sp.edit().putString(K_MENU_SIZE, v.name).apply()
 
+    /** Quick Controls and apps reopen on the page last shown instead of page 1. */
+    var rememberPages: Boolean
+        get() = sp.getBoolean(K_REMEMBER_PAGES, false)
+        set(v) = sp.edit().putBoolean(K_REMEMBER_PAGES, v).apply()
+
     /** Pinned apps show the app's own (color) icon instead of the uniform black app glyph. */
     var appOwnIcons: Boolean
         get() = sp.getBoolean(K_APP_OWN_ICONS, false)
@@ -182,6 +187,7 @@ class Prefs(context: Context) {
         const val K_RECENT_COUNT = "recent_count"
         const val K_PINS = "pins"
         const val K_DOCK = "dock"
+        const val K_REMEMBER_PAGES = "remember_pages"
 
         /** Keys whose change requires the edge handle window to be rebuilt. */
         val HANDLE_KEYS = setOf(K_EDGE, K_TRIGGER, K_HANDLE_WIDTH, K_HANDLE_HEIGHT, K_HANDLE_TOP, K_SHOW_HANDLE, K_HANDLE_ENABLED)

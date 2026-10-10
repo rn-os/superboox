@@ -51,7 +51,9 @@ class QuickAccessPanel(
     private val scale = prefs.menuSize.scale
     private val expandedFolders = HashSet<String>()
     private var mode = Mode.MAIN
-    private var dockPage = 0
+    private var dockPage: Int
+        get() = service.dockPage
+        set(v) { service.dockPage = v }
     private var dockCellCount = 0
 
     /** What BOOX Notes is showing, if it's the app behind the panel. */

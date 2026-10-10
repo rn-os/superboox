@@ -89,7 +89,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         attachHandle()
         if (panel != null) {
             hidePanel()
-            showPanel()
+            showPanel(fresh = false)
         }
     }
 
@@ -202,10 +202,18 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     fun togglePanel() = if (isPanelShowing) hidePanel() else showPanel()
 
-    /** @param keepCover leave the screen hold up (it's lifted by whoever put it there). */
-    fun showPanel(keepCover: Boolean = false) {
+    /**
+     * @param keepCover leave the screen hold up (it's lifted by whoever put it there).
+     * @param fresh the user is opening it: start Quick Controls and apps on page 1
+     *   unless "Remember last page" is on. False when it's only being rebuilt.
+     */
+    fun showPanel(keepCover: Boolean = false, fresh: Boolean = true) {
         if (panel != null) return
         if (!keepCover) cover.hide()
+        if (fresh && !prefs.rememberPages) {
+            quickControlsPage = 0
+            dockPage = 0
+        }
         val p = QuickAccessPanel(this, prefs, foregroundPackage)
         val params = overlayParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT, focusable = true)
         runCatching { wm.addView(p.root, params) }
@@ -228,7 +236,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     fun refreshPanel() {
         if (panel == null) return
         hidePanel()
-        showPanel()
+        showPanel(fresh = false)
     }
 
     // ---- Actions used by the panel ------------------------------------------------------
@@ -276,8 +284,9 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     // ---- Quick Controls -----------------------------------------------------------------
 
-    /** The Quick Controls page shown, kept while the panel is rebuilt. */
+    /** The Quick Controls and apps pages shown, kept while the panel is rebuilt. */
     var quickControlsPage = 0
+    var dockPage = 0
 
     /**
      * Runs a Quick Control. Actions go straight to Android. Control Center

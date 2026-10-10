@@ -157,6 +157,7 @@ object QuickControls {
     const val AFTER_TAP_MS = 600L
     private const val SWITCH_MS = 1_000L
     private val CONTROL_CENTER_IDS = listOf("control_center_ll", "tablet_control_title")
+    private val NOTIFICATION_IDS = listOf("onyx_notification_manager_view", "notification_stack_scroller")
 
     /**
      * Opens the Control Center and calls [ready] once its tiles can be read
@@ -177,10 +178,9 @@ object QuickControls {
         fun check() {
             if (runCatching { controlCenterShowing(service) }.getOrDefault(false)) return ready(true)
             val now = System.currentTimeMillis()
-            if (!pulled && now - start >= SWITCH_MS) {
+            if (!pulled && (now - start >= SWITCH_MS || runCatching { notificationsShowing(service) }.getOrDefault(false))) {
                 pulled = true
-                DebugLog.w("controls", "the Control Center didn't open (notifications instead?); pulling down from the top-right")
-                logShade(service, "controls")
+                DebugLog.w("controls", "notifications opened instead of the Control Center; pulling down from the top-right")
                 closeShade(service)
                 handler.postDelayed({ pullDown(service, 0.8f, "controls") }, 500)
                 deadline = now + 500 + FIND_TIMEOUT_MS
@@ -199,13 +199,7 @@ object QuickControls {
     fun controlCenterShowing(service: AccessibilityService): Boolean {
         val tiles = runCatching { readTiles(service) }.getOrDefault(emptyList())
         if (tiles.count { t -> ALL.any { it.kind != Kind.ACTION && it.matches(t.normalized) } } >= 3) return true
-        for (w in service.windows) {
-            val root = w.root ?: continue
-            val pkg = root.packageName?.toString() ?: continue
-            if (!pkg.contains("systemui")) continue
-            if (CONTROL_CENTER_IDS.any { root.findAccessibilityNodeInfosByViewId("$pkg:id/$it").isNotEmpty() }) return true
-        }
-        return false
+        return shadeHas(service, CONTROL_CENTER_IDS)
     }
 
     /**
@@ -253,27 +247,36 @@ object QuickControls {
     fun close(service: AccessibilityService) = closeShade(service)
 
     /**
-     * The notification shade. On BOOX, Android's "open notifications" can bring
-     * up the Control Center instead (seen after Quick Controls used it). If it
-     * does: look for a way across to notifications; failing that, close it and
-     * pull down from the top-left, where BOOX keeps notifications. What the
-     * shade showed is logged, for the debug report.
+     * The notification shade. On BOOX, Android's "open notifications" brings back
+     * whichever side of the shade was used last, usually the Control Center after
+     * Quick Controls. So pull down from the top-left, where BOOX keeps
+     * notifications; if they still aren't showing, fall back to Android's action.
      */
     fun openNotifications(service: AccessibilityService) {
         val handler = Handler(Looper.getMainLooper())
-        service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS)
+        if (runCatching { notificationsShowing(service) }.getOrDefault(false)) return DebugLog.i("alerts", "notifications already open")
+        val ccOpen = runCatching { controlCenterShowing(service) }.getOrDefault(false)
+        if (ccOpen) closeShade(service)
+        handler.postDelayed({ pullDown(service, 0.2f, "alerts") }, if (ccOpen) 500 else 200)
         handler.postDelayed({
-            val tiles = runCatching { readTiles(service) }.getOrDefault(emptyList())
-            val controlCenter = tiles.count { t -> ALL.any { it.kind != Kind.ACTION && it.matches(t.normalized) } } >= 3
-            if (!controlCenter) return@postDelayed DebugLog.i("alerts", "notifications opened")
-            val toNotifications = tiles.firstOrNull { "notif" in it.normalized && !it.normalized.startsWith("mute") }
-            DebugLog.w("alerts", "the Control Center opened instead; ${if (toNotifications != null) "tapping \"${toNotifications.label}\"" else "no notifications switch in it"}")
+            if (runCatching { notificationsShowing(service) }.getOrDefault(false)) return@postDelayed DebugLog.i("alerts", "notifications opened")
+            DebugLog.w("alerts", "pull-down didn't show notifications; using Android's action")
             logShade(service, "alerts")
-            if (toNotifications != null && pressable(toNotifications.node, false)?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return@postDelayed
-            closeShade(service)
-            handler.postDelayed({ pullDown(service, 0.2f, "alerts") }, 500)
-            handler.postDelayed({ logShade(service, "alerts") }, 1_400)
-        }, 700)
+            service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS)
+        }, if (ccOpen) 1_500 else 1_200)
+    }
+
+    /** True when BOOX's notification list is on screen. */
+    private fun notificationsShowing(service: AccessibilityService): Boolean = shadeHas(service, NOTIFICATION_IDS)
+
+    private fun shadeHas(service: AccessibilityService, ids: List<String>): Boolean {
+        for (w in service.windows) {
+            val root = w.root ?: continue
+            val pkg = root.packageName?.toString() ?: continue
+            if (!pkg.contains("systemui")) continue
+            if (ids.any { id -> root.findAccessibilityNodeInfosByViewId("$pkg:id/$id").any { it.isVisibleToUser } }) return true
+        }
+        return false
     }
 
     /** Swipes down from the top edge at [xFraction] of the width: BOOX opens notifications on the left, the Control Center on the right. */

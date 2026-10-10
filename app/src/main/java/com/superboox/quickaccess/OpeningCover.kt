@@ -113,7 +113,7 @@ class OpeningCover(private val service: AccessibilityService, private val wm: Wi
         }
         wm.addView(v, params)
         view = v
-        DebugLog.i("cover", "screen held while the note opens")
+        DebugLog.i("cover", "screen held")
         // Never leave the screen frozen, whatever happens underneath.
         val t = token
         handler.postDelayed({

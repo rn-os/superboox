@@ -49,6 +49,8 @@ object QuickControls {
         val not: List<String> = emptyList(),
         val globalAction: Int = 0,
         val group: String,
+        /** Hold taps the tile instead of long-pressing it (its tap opens the menu wanted on hold). */
+        val holdTaps: Boolean = false,
     ) {
         fun matches(normalized: String): Boolean =
             keys.any { normalized.startsWith(it) } && not.none { normalized.startsWith(it) }
@@ -63,7 +65,9 @@ object QuickControls {
         Control("bluetooth", "Bluetooth", R.drawable.ic_qc_bluetooth, Kind.TOGGLE, listOf("bluetooth"), group = SWITCHES),
         Control("airplane", "Airplane", R.drawable.ic_qc_airplane, Kind.TOGGLE, listOf("airplane", "aeroplane", "flight"), group = SWITCHES),
         Control("dnd", "Do Not Disturb", R.drawable.ic_qc_dnd, Kind.TOGGLE, listOf("do not disturb"), group = SWITCHES),
-        Control("rotate", "Auto‑rotate", R.drawable.ic_qc_rotate, Kind.TOGGLE, listOf("auto rotate", "autorotate"), group = SWITCHES),
+        // Tap switches rotation directly (BOOX's tile tap always opens its rotation menu);
+        // hold opens that menu.
+        Control("rotate", "Auto‑rotate", R.drawable.ic_qc_rotate, Kind.TOGGLE, listOf("auto rotate", "autorotate"), group = SWITCHES, holdTaps = true),
         Control("mute", "Mute", R.drawable.ic_qc_mute, Kind.TOGGLE, listOf("mute"), group = SWITCHES),
         Control("location", "Location", R.drawable.ic_qc_location, Kind.TOGGLE, listOf("location"), group = SWITCHES),
         Control("einkwise", "EinkWise", R.drawable.ic_settings, Kind.TOGGLE, listOf("einkwise", "eink wise"), group = BOOX),
@@ -178,8 +182,9 @@ object QuickControls {
             DebugLog.w("controls", "\"${control.label}\" not found in the Control Center (${tiles.size} tiles: ${tiles.joinToString { it.label }})")
             return Press(found = false, pressed = false, before = null)
         }
-        val action = if (hold) AccessibilityNodeInfo.ACTION_LONG_CLICK else AccessibilityNodeInfo.ACTION_CLICK
-        val pressed = pressable(tile.node, hold)?.performAction(action) == true
+        val long = hold && !control.holdTaps
+        val action = if (long) AccessibilityNodeInfo.ACTION_LONG_CLICK else AccessibilityNodeInfo.ACTION_CLICK
+        val pressed = pressable(tile.node, long)?.performAction(action) == true
         DebugLog.i("controls", "${if (hold) "hold" else "tap"} \"${tile.label}\" (was ${tile.on?.let { if (it) "on" else "off" } ?: "?"}) -> $pressed")
         return Press(found = true, pressed = pressed, before = tile.on)
     }
@@ -207,6 +212,20 @@ object QuickControls {
     }
 
     fun close(service: AccessibilityService) = closeShade(service)
+
+    /**
+     * Auto-rotate without BOOX's rotation menu: flips Android's own setting.
+     * Needs "Modify system settings" (granted once in Android settings); returns
+     * the new state, or null when that isn't granted yet.
+     */
+    fun toggleRotation(context: Context): Boolean? {
+        if (!Settings.System.canWrite(context)) return null
+        val cr = context.contentResolver
+        val on = runCatching { Settings.System.getInt(cr, Settings.System.ACCELEROMETER_ROTATION) }.getOrDefault(0) != 0
+        val ok = runCatching { Settings.System.putInt(cr, Settings.System.ACCELEROMETER_ROTATION, if (on) 0 else 1) }.getOrDefault(false)
+        DebugLog.i("controls", "auto-rotate set directly: ${if (on) "off" else "on"} -> $ok")
+        return if (ok) !on else on
+    }
 
     private class Tile(val node: AccessibilityNodeInfo, val label: String, val normalized: String, val on: Boolean?)
 

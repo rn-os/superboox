@@ -55,7 +55,7 @@ Tested on a Note Air 6C (Android 16, firmware 4.3). Other BOOX models and firmwa
 
 ## Privacy
 
-- No permissions beyond the accessibility service you turn on. That includes **no internet access**.
+- No permissions beyond the accessibility service you turn on, plus an optional "Modify system settings" that the Auto-rotate Quick Control asks for so it can switch rotation in one tap. **No internet access.**
 - Everything stays on the device: pins, recents and the troubleshooting log.
 
 ## Reporting bugs

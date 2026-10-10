@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Needed to list launchable apps (dock + app pins) on Android 11+. -->
+    <!-- Optional, granted by the user in Android settings: lets the Auto-rotate Quick
+         Control switch rotation directly (BOOX's own tile always opens its rotation menu). -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+
     <queries>
         <!-- BOOX Notes: the editor has no launcher icon on newer firmware, and the
              library lives in the BOOX launcher. Needed to find their activities. -->

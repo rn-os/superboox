@@ -184,7 +184,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun describe(c: QuickControls.Control): String = when (c.kind) {
-        QuickControls.Kind.TOGGLE -> "Tap: on/off · hold: its settings"
+        QuickControls.Kind.TOGGLE -> if (c.id == "rotate") "Tap: on/off · hold: rotation menu" else "Tap: on/off · hold: its settings"
         QuickControls.Kind.TILE -> "Tap: open · hold: its settings"
         QuickControls.Kind.ACTION -> "Tap: ${c.label.lowercase()}"
     }

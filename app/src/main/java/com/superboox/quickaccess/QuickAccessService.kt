@@ -291,6 +291,23 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             if (qcBusy) afterSession.addLast(control) else systemAction(control.globalAction)
             return
         }
+        if (control.id == "rotate" && !hold && !qcBusy) {
+            val on = QuickControls.toggleRotation(this)
+            if (on != null) {
+                optimistic[control.id] = on to SystemClock.uptimeMillis() + OPTIMISTIC_MS
+                panel?.refresh()
+            } else {
+                // One-time Android permission so tapping skips BOOX's rotation menu.
+                hidePanel()
+                Toast.makeText(this, "Allow \"Modify system settings\" so Auto-rotate switches in one tap", Toast.LENGTH_LONG).show()
+                Launcher.start(
+                    this,
+                    Intent(android.provider.Settings.ACTION_MANAGE_WRITE_SETTINGS, android.net.Uri.parse("package:$packageName"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
+            return
+        }
         if (control.kind == QuickControls.Kind.TOGGLE && !hold) {
             val now = quickControlStates()[control.id] ?: false
             optimistic[control.id] = !now to SystemClock.uptimeMillis() + OPTIMISTIC_MS

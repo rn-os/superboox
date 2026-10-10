@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SuperBoox mockups</title>
+<!--
+  Pixel mockups of the SuperBoox UI on a BOOX Note Air-class screen.
+  1 CSS px = 1 dp. Rendered at 2x (≈1404×1872 px panel) by render.mjs.
+  Every size, padding and font size mirrors QuickAccessPanel.kt / SettingsActivity.kt,
+  so changes tried here translate 1:1 into the Kotlin code.
+  Pick a screen with #closed, #panel, #notes-picker, #remove, #settings-1..3, #add-note, #app-picker.
+-->
+<style>
+  @font-face { font-family: Roboto; font-weight: 400; src: url(fonts/roboto-latin-400-normal.woff2) format("woff2"); }
+  @font-face { font-family: Roboto; font-weight: 500; src: url(fonts/roboto-latin-500-normal.woff2) format("woff2"); }
+  @font-face { font-family: Roboto; font-weight: 700; src: url(fonts/roboto-latin-700-normal.woff2) format("woff2"); }
+
+  :root {
+    --ink: #000; --paper: #fff; --muted: #555; --screen-w: 702px; --screen-h: 936px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #d9d9d6; font-family: Roboto, sans-serif; color: var(--ink); }
+  .stage { display: flex; align-items: center; gap: 28px; padding: 28px; width: max-content; }
+
+  /* ---- Device ---- */
+  .device {
+    background: #2b2b2b; border-radius: 28px; padding: 26px 26px 26px 64px; /* wide grip bezel on the left */
+    box-shadow: 0 1px 0 #555 inset, 0 18px 40px rgba(0,0,0,.25);
+    position: relative;
+  }
+  .device::before { /* power button */
+    content: ""; position: absolute; top: -4px; right: 90px; width: 56px; height: 5px; background: #2b2b2b; border-radius: 3px 3px 0 0;
+  }
+  .screen {
+    width: var(--screen-w); height: var(--screen-h); position: relative; overflow: hidden;
+    background: var(--paper);
+  }
+  /* E-ink look: everything grayscale, slightly warm paper, a touch less contrast. */
+  .eink { position: absolute; inset: 0; filter: grayscale(1) contrast(.96); }
+  .paper-tint { position: absolute; inset: 0; background: #ecebe6; mix-blend-mode: multiply; pointer-events: none; z-index: 50; }
+
+  /* ---- System status bar (BOOX) ---- */
+  .statusbar { height: 24px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; font-size: 13px; }
+  .statusbar .r { display: flex; gap: 10px; align-items: center; }
+  .batt { width: 22px; height: 11px; border: 1.5px solid #000; border-radius: 2px; position: relative; }
+  .batt::after { content: ""; position: absolute; inset: 1px 4px 1px 1px; background: #000; }
+
+  /* ---- Reader page underneath ---- */
+  .reader { position: absolute; inset: 24px 0 0 0; padding: 36px 56px 0; font-family: "DejaVu Serif", Georgia, serif; }
+  .reader h1 { font-size: 15px; font-weight: normal; letter-spacing: .2em; text-transform: uppercase; text-align: center; margin: 0 0 6px; color: #333; }
+  .reader h2 { font-size: 30px; font-weight: normal; text-align: center; margin: 0 0 30px; }
+  .reader p { font-size: 18.5px; line-height: 1.62; text-align: justify; hyphens: auto; margin: 0 0 14px; text-indent: 1.6em; }
+  .reader .foot { position: absolute; left: 56px; right: 56px; bottom: 18px; display: flex; justify-content: space-between; font-family: Roboto; font-size: 12px; color: #444; }
+  .reader .body { height: 740px; overflow: hidden; }
+
+  /* ---- BOOX Notes library underneath ---- */
+  .notes { position: absolute; inset: 24px 0 0 0; }
+  .notes .top { height: 56px; display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid #000; gap: 18px; }
+  .notes .top b { font-size: 22px; font-weight: 500; flex: 1; }
+  .notes .tabs { display: flex; gap: 22px; padding: 12px 20px; font-size: 15px; border-bottom: 1px solid #bbb; }
+  .notes .tabs .on { font-weight: 700; border-bottom: 2px solid #000; padding-bottom: 4px; }
+  .notes .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px 18px; padding: 22px 20px; }
+  .note-card .thumb { height: 196px; border: 1.5px solid #000; border-radius: 4px; background: #fff; position: relative; overflow: hidden; }
+  .note-card .thumb svg { position: absolute; inset: 0; }
+  .note-card.folder .thumb { background: #e9e9e9; display: flex; align-items: center; justify-content: center; }
+  .note-card .name { font-size: 14px; margin-top: 8px; }
+  .note-card .date { font-size: 11px; color: #555; margin-top: 2px; }
+
+  /* ---- Edge handle (EdgeHandleView) ---- */
+  .handle { position: absolute; right: 0; width: 16px; z-index: 10; }
+  .handle .pill { position: absolute; right: 2px; width: 4px; top: 20%; bottom: 20%; background: #000; border-radius: 2px; }
+
+  /* ---- Panel (QuickAccessPanel) ---- */
+  .sheet { position: absolute; top: 0; bottom: 0; right: 0; display: flex; background: var(--paper); z-index: 20; }
+  .sheet .line { width: 3px; background: var(--ink); flex: none; }
+  .content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .header { display: flex; align-items: center; padding: 10px 8px 10px 16px; }
+  .header .title { flex: 1; font-size: 22px; font-weight: 700; }
+  .iconbtn { padding: 10px; display: flex; }
+  .div1 { height: 1px; background: var(--ink); flex: none; }
+  .div2 { height: 2px; background: var(--ink); flex: none; }
+  .sysrow { display: flex; padding: 6px 4px; }
+  .sysrow .cell { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 6px 0; }
+  .sysrow .cell span { font-size: 12px; margin-top: 1px; }
+  .body { flex: 1; overflow: hidden; }
+  .section { font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: .08em; padding: 16px 16px 6px; }
+  .row { display: flex; align-items: center; padding: 12px 16px; }
+  .row .t { padding-left: 14px; flex: 1; min-width: 0; }
+  .row .t1 { font-size: 17px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .row .t2 { font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .hint { font-size: 14px; color: var(--muted); padding: 4px 16px 12px; line-height: 1.35; }
+  .dock { padding: 6px 8px 10px; }
+  .dock .section { padding: 4px 8px 4px; }
+  .dock .grid { display: grid; grid-template-columns: repeat(5, 1fr); }
+  .dock .app { display: flex; flex-direction: column; align-items: center; padding: 6px 2px; min-width: 0; }
+  .dock .app span { font-size: 12px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  svg.i { flex: none; display: block; }
+
+  /* ---- Settings (platform DeviceDefault.Light) ---- */
+  .actionbar { height: 56px; background: #000; color: #fff; display: flex; align-items: center; padding: 0 16px; font-size: 20px; font-weight: 500; }
+  .statusbar.dark { background: #000; color: #fff; }
+  .statusbar.dark .batt { border-color: #fff; } .statusbar.dark .batt::after { background: #fff; }
+  .settings { position: absolute; top: 80px; left: 0; right: 0; bottom: 0; overflow: hidden; }
+  .settings .inner { padding-bottom: 48px; }
+  .s-h1 { font-size: 28px; font-weight: 700; padding: 20px 16px 4px; }
+  .para { font-size: 14px; color: var(--muted); padding: 4px 16px 8px; line-height: 1.4; }
+  .status { font-size: 17px; font-weight: 700; padding: 12px 16px 4px; }
+  .btnrow { display: flex; padding: 4px 12px; gap: 0; }
+  .btn {
+    flex: 1; margin: 6px 4px; min-height: 36px; background: #d6d7d7; border-radius: 2px; font-size: 14px; font-weight: 500;
+    display: flex; align-items: center; justify-content: center; padding: 0 12px; box-shadow: 0 1px 2px rgba(0,0,0,.35); text-align: center;
+  }
+  .btn.small { flex: none; min-width: 44px; padding: 0 10px; text-transform: uppercase; margin: 6px 3px; }
+  .btn.disabled { color: #999; background: #e6e6e6; box-shadow: none; }
+  .choice { display: flex; align-items: center; padding: 12px 16px; }
+  .choice .k { flex: 1; font-size: 17px; } .choice .v { font-size: 15px; color: var(--muted); }
+  .check { display: flex; align-items: center; padding: 8px 16px 8px 16px; font-size: 17px; gap: 14px; }
+  .box { width: 18px; height: 18px; border: 2px solid #000; border-radius: 2px; flex: none; position: relative; }
+  .box.on { background: #000; }
+  .box.on::after { content: ""; position: absolute; left: 4px; top: 0px; width: 5px; height: 10px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .slider { padding: 8px 16px; }
+  .slider .lbl { font-size: 15px; }
+  .track { position: relative; height: 32px; margin: 0 8px; }
+  .track .bg { position: absolute; left: 0; right: 0; top: 15px; height: 2px; background: #bbb; }
+  .track .fg { position: absolute; left: 0; top: 15px; height: 2px; background: #000; }
+  .track .thumb { position: absolute; top: 9px; width: 14px; height: 14px; border-radius: 50%; background: #000; margin-left: -7px; }
+  .item { display: flex; align-items: center; padding: 6px 8px 6px 16px; }
+  .item .t { flex: 1; min-width: 0; }
+  .item .t1 { font-size: 17px; } .item .t2 { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ---- Dialogs ---- */
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.6); z-index: 30; }
+  .dialog { position: absolute; z-index: 31; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 560px; background: #fff; border-radius: 2px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+  .dialog .dt { font-size: 20px; font-weight: 500; padding: 24px 24px 12px; }
+  .field { margin: 8px 20px 0; padding: 10px 4px 8px; border-bottom: 2px solid #000; font-size: 18px; }
+  .field.empty { color: #888; border-bottom-color: #888; border-bottom-width: 1px; }
+  .dbtns { display: flex; justify-content: flex-end; padding: 18px 12px 10px; gap: 6px; }
+  .dbtns div { font-size: 14px; font-weight: 500; text-transform: uppercase; padding: 10px 12px; letter-spacing: .03em; }
+  .picker-row { display: flex; align-items: center; padding: 10px 20px; font-size: 17px; gap: 16px; }
+
+  /* ---- Annotations (outside the device) ---- */
+  .notes-col { width: 270px; font-size: 14px; line-height: 1.45; color: #222; }
+  .notes-col h3 { font-size: 17px; margin: 0 0 8px; }
+  .notes-col ol { padding-left: 20px; margin: 0; }
+  .notes-col li { margin-bottom: 8px; }
+  .callout { position: absolute; z-index: 40; background: #fff; border: 2px solid #000; border-radius: 14px; font: 600 12px Roboto; padding: 2px 8px; }
+  .strip-outline { position: absolute; right: 0; width: 16px; border: 2px dashed #000; z-index: 11; }
+  .swipe-arrow { position: absolute; z-index: 12; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="device"><div class="screen"><div class="eink" id="eink"></div><div class="paper-tint"></div></div></div>
+  <div class="notes-col" id="annot"></div>
+</div>
+
+<script>
+// ---- Icons: identical path data to app/src/main/res/drawable/*.xml ----
+const P = {
+  back: "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z",
+  home: "M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z",
+  recents: "M3,5v14h18V5H3zM19,17H5V7h14v10z",
+  screenshot: "M17,15h2V7c0,-1.1 -0.9,-2 -2,-2H9v2h8v8zM7,17V1H5v4H1v2h4v10c0,1.1 0.9,2 2,2h10v4h2v-4h4v-2H7z",
+  notifications: "M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.89,2 2,2zM18,16v-5c0,-3.07 -1.64,-5.64 -4.5,-6.32V4c0,-0.83 -0.67,-1.5 -1.5,-1.5s-1.5,0.67 -1.5,1.5v0.68C7.630,5.36 6,7.92 6,11v5l-2,2v1h16v-1l-2,-2z",
+  close: "M19,6.41L17.59,5 12,10.59 6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 12,13.41 17.59,19 19,17.59 13.41,12z",
+  settings: "M3,17v2h6v-2H3zM3,5v2h10V5H3zM13,21v-2h8v-2h-8v-2h-2v6h2zM7,9v2H3v2h4v2h2V9H7zM21,13v-2H11v2h10zM15,9h2V7h4V5h-4V3h-2v6z",
+  note: "M3,17.25V21h3.75L17.81,9.94l-3.75,-3.75L3,17.25zM20.710,7.04c0.39,-0.39 0.39,-1.02 0,-1.41l-2.34,-2.34c-0.39,-0.39 -1.02,-0.39 -1.41,0l-1.83,1.83 3.75,3.75 1.83,-1.83z",
+  file: "M14,2H6c-1.1,0 -2,0.9 -2,2v16c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V8l-6,-6zM16,18H8v-2h8v2zM16,14H8v-2h8v2zM13,9V3.5L18.5,9H13z",
+  folder: "M10,4H4c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V8c0,-1.1 -0.9,-2 -2,-2h-8l-2,-2z",
+  link: "M3.9,12c0,-1.71 1.39,-3.1 3.1,-3.1h4V7H7c-2.76,0 -5,2.24 -5,5s2.240,5 5,5h4v-1.9H7c-1.71,0 -3.1,-1.39 -3.1,-3.1zM8,13h8v-2H8v2zM17,7h-4v1.9h4c1.71,0 3.1,1.39 3.1,3.1s-1.39,3.1 -3.1,3.1h-4V17h4c2.76,0 5,-2.24 5,-5s-2.24,-5 -5,-5z",
+  add: "M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z",
+};
+const ic = (k, s = 26) => `<svg class="i" width="${s}" height="${s}" viewBox="0 0 24 24"><path fill="#000" d="${P[k]}"/></svg>`;
+
+// Stand-in app icons (real ones come from PackageManager and are untinted).
+const APPS = {
+  Notes:      { g: `<path d="M14 34 L30 18 l4 4 L18 38 h-4z" fill="#fff"/><path d="M14 40h20" stroke="#fff" stroke-width="2"/>`, bg: "#222" },
+  NeoReader:  { g: `<path d="M10 14h11c2 0 3 1 3 3v19c0-2-1-3-3-3H10zM38 14H27c-2 0-3 1-3 3v19c0-2 1-3 3-3h11z" fill="#fff"/>`, bg: "#3a3a3a" },
+  Calendar:   { g: `<rect x="11" y="13" width="26" height="24" rx="2" fill="#fff"/><rect x="11" y="13" width="26" height="6" fill="#999"/><text x="24" y="33" font-size="13" text-anchor="middle" font-family="Roboto" font-weight="700">10</text>`, bg: "#555" },
+  Settings:   { g: `<circle cx="24" cy="24" r="11" fill="none" stroke="#fff" stroke-width="5" stroke-dasharray="5 3.6"/><circle cx="24" cy="24" r="5" fill="#fff"/>`, bg: "#444" },
+  Library:    { g: `<rect x="12" y="12" width="6" height="24" fill="#fff"/><rect x="20" y="15" width="6" height="21" fill="#fff"/><rect x="28" y="12" width="7" height="24" fill="#ccc" transform="rotate(12 31 24)"/>`, bg: "#2e2e2e" },
+  Browser:    { g: `<circle cx="24" cy="24" r="12" fill="none" stroke="#fff" stroke-width="2.5"/><ellipse cx="24" cy="24" rx="5" ry="12" fill="none" stroke="#fff" stroke-width="2"/><path d="M12 24h24" stroke="#fff" stroke-width="2"/>`, bg: "#4a4a4a" },
+  Calculator: { g: `<rect x="14" y="11" width="20" height="26" rx="2" fill="#fff"/><rect x="17" y="14" width="14" height="6" fill="#666"/><g fill="#666"><rect x="17" y="23" width="4" height="4"/><rect x="22" y="23" width="4" height="4"/><rect x="27" y="23" width="4" height="4"/><rect x="17" y="29" width="4" height="4"/><rect x="22" y="29" width="4" height="4"/><rect x="27" y="29" width="4" height="4"/></g>`, bg: "#333" },
+  Dictionary: { g: `<rect x="13" y="11" width="22" height="26" rx="2" fill="#fff"/><text x="24" y="30" font-size="14" text-anchor="middle" font-family="DejaVu Serif" font-weight="700">Aa</text>`, bg: "#3d3d3d" },
+};
+const appIcon = (name, s = 44) =>
+  `<svg class="i" width="${s}" height="${s}" viewBox="0 0 48 48"><rect width="48" height="48" rx="11" fill="${APPS[name].bg}"/>${APPS[name].g}</svg>`;
+
+const statusbar = (dark) => `<div class="statusbar${dark ? " dark" : ""}"><span>10:42</span><span class="r"><span>Wi‑Fi</span><span>87%</span><span class="batt"></span></span></div>`;
+
+// ---- Underlying pages ----
+const WALDEN = [
+  "When I wrote the following pages, or rather the bulk of them, I lived alone, in the woods, a mile from any neighbor, in a house which I had built myself, on the shore of Walden Pond, in Concord, Massachusetts, and earned my living by the labor of my hands only. I lived there two years and two months. At present I am a sojourner in civilized life again.",
+  "I should not obtrude my affairs so much on the notice of my readers if very particular inquiries had not been made by my townsmen concerning my mode of life, which some would call impertinent, though they do not appear to me at all impertinent, but, considering the circumstances, very natural and pertinent. Some have asked what I got to eat; if I did not feel lonesome; if I was not afraid; and the like.",
+  "Others have been curious to learn what portion of my income I devoted to charitable purposes; and some, who have large families, how many poor children I maintained. I will therefore ask those of my readers who feel no particular interest in me to pardon me if I undertake to answer some of these questions in this book.",
+  "In most books, the I, or first person, is omitted; in this it will be retained; that, in respect to egotism, is the main difference. We commonly do not remember that it is, after all, always the first person that is speaking. I should not talk so much about myself if there were anybody else whom I knew as well.",
+];
+const reader = () => statusbar() + `<div class="reader"><h1>Walden</h1><h2>Economy</h2><div class="body">${WALDEN.map(p => `<p>${p}</p>`).join("")}</div>
+  <div class="foot"><span>Walden — Henry David Thoreau</span><span>12 / 284</span></div></div>`;
+
+function scribble(seed) { // fake handwriting lines for note thumbnails
+  let s = seed, out = "";
+  const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280;
+  for (let y = 22; y < 180; y += 18) {
+    let x = 12, d = `M${x} ${y}`;
+    const end = 60 + rnd() * 70;
+    while (x < end) { x += 4 + rnd() * 5; d += ` L${x.toFixed(1)} ${(y + (rnd() - .5) * 7).toFixed(1)}`; }
+    out += `<path d="${d}" fill="none" stroke="#222" stroke-width="1.3" stroke-linejoin="round"/>`;
+  }
+  return `<svg viewBox="0 0 150 196" preserveAspectRatio="none">${out}</svg>`;
+}
+const NOTES = [
+  ["Work", "Folder · 6 notes", "folder"], ["Daily Journal", "Oct 9, 2026"], ["Reading notes", "Oct 7, 2026"], ["Sketches", "Oct 2, 2026"],
+  ["Ideas", "Sep 28, 2026"], ["Grocery list", "Sep 27, 2026"], ["Book outline", "Sep 21, 2026"], ["Lecture 4", "Sep 15, 2026"],
+];
+const notesLib = () => statusbar() + `<div class="notes">
+  <div class="top"><b>Notes</b>${ic("add", 26)}${ic("settings", 24)}</div>
+  <div class="tabs"><span class="on">All</span><span>Recent</span><span>Starred</span><span style="flex:1"></span><span>Sort: Modified ▾</span></div>
+  <div class="grid">${NOTES.map(([n, d, f], i) => `<div class="note-card ${f || ""}"><div class="thumb">${f ? ic("folder", 64) : scribble(i * 77 + 13)}</div><div class="name">${n}</div><div class="date">${d}</div></div>`).join("")}</div></div>`;
+
+// ---- Panel (mirrors QuickAccessPanel.build) ----
+const W = 702, H = 936, PANEL_W = Math.min(W, Math.max(300, Math.floor(W * 45 / 100)));
+const row = (icon, t1, t2, indent = 16) =>
+  `<div class="row" style="padding-left:${indent}px">${icon}<div class="t"><div class="t1">${t1}</div>${t2 ? `<div class="t2">${t2}</div>` : ""}</div></div>`;
+const section = (s) => `<div class="section">${s.toUpperCase()}</div>`;
+
+function panel(bodyHtml, dock = ["Notes", "NeoReader", "Calendar", "Library", "Settings"]) {
+  const sys = [["back", "Back"], ["home", "Home"], ["recents", "Recents"], ["notifications", "Alerts"], ["screenshot", "Capture"]];
+  return `<div class="sheet" style="width:${PANEL_W}px"><div class="line"></div><div class="content">
+    <div class="header"><div class="title">Quick Access</div><div class="iconbtn">${ic("settings")}</div><div class="iconbtn">${ic("close")}</div></div>
+    <div class="div1"></div>
+    <div class="sysrow">${sys.map(([k, l]) => `<div class="cell">${ic(k)}<span>${l}</span></div>`).join("")}</div>
+    <div class="div2"></div>
+    <div class="body">${bodyHtml}</div>
+    <div class="div2"></div>
+    <div class="dock">${section("Apps")}<div class="grid">${dock.map(a => `<div class="app">${appIcon(a)}<span>${a}</span></div>`).join("")}</div></div>
+  </div></div>`;
+}
+
+const mainBody = () =>
+  section("Quick Access") +
+  row(ic("note"), "Daily Journal", "BOOX Notes") +
+  row(ic("note"), "Standup", "BOOX Notes · Work / Standup") +
+  row(ic("file"), "Reading list.pdf", "Document") +
+  row(ic("folder"), "Projects", "Folder · tap to collapse") +
+  row(ic("file"), "Kitchen remodel.pdf", "2 hours ago", 40) +
+  row(ic("file"), "Budget 2027.xlsx", "Yesterday", 40) +
+  row(ic("file"), "Garden plan.png", "Oct 3", 40) +
+  row(appIcon("Dictionary", 26), "Dictionary", "App") +
+  row(ic("add"), "Pin NeoReader", "Add the current app to Quick Access") +
+  section("Recent") +
+  row(ic("file"), "Daily Journal.pdf", "10 minutes ago") +
+  row(ic("file"), "Reading notes.pdf", "3 days ago");
+
+const pickerBody = () =>
+  section("Tap the note to pin") +
+  `<div class="hint" style="font-size:13px;padding:0 16px 8px">Showing the text BOOX Notes has on screen. Notes inside a folder can be renamed to "Folder / Note" in Settings so they open from the library.</div>` +
+  ["Notes", "All", "Recent", "Starred", "Sort: Modified", "Work", "Folder · 6 notes", "Daily Journal", "Oct 9, 2026", "Reading notes"]
+    .map(t => row(ic("note"), t)).join("") + row(ic("back"), "Back");
+
+const removeBody = () =>
+  section("Remove from Quick Access?") +
+  `<div style="font-size:18px;font-weight:700;padding:4px 16px 12px">Reading list.pdf</div>` +
+  row(ic("close"), "Remove") + row(ic("back"), "Back");
+
+const handle = (outline) => {
+  const top = Math.floor(H * .30), h = Math.floor(H * .35);
+  return `<div class="handle" style="top:${top}px;height:${h}px"><div class="pill"></div></div>` +
+    (outline ? `<div class="strip-outline" style="top:${top}px;height:${h}px"></div>` : "");
+};
+
+// ---- Settings (mirrors SettingsActivity.render) ----
+const slider = (lbl, v, min, max, unit) =>
+  `<div class="slider"><div class="lbl">${lbl}: ${v}${unit ? " " + unit : ""}</div><div class="track"><div class="bg"></div><div class="fg" style="width:${(v - min) / (max - min) * 100}%"></div><div class="thumb" style="left:${(v - min) / (max - min) * 100}%"></div></div></div>`;
+const check = (lbl, on) => `<div class="check"><div class="box ${on ? "on" : ""}"></div>${lbl}</div>`;
+const choice = (k, v) => `<div class="choice"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+const btns = (...l) => `<div class="btnrow">${l.map(b => `<div class="btn">${b}</div>`).join("")}</div>`;
+const para = (s) => `<div class="para">${s}</div>`;
+const item = (t1, t2, i, n, edit = true) => `<div class="item"><div class="t"><div class="t1">${t1}</div><div class="t2">${t2}</div></div>
+  <div class="btn small ${i === 0 ? "disabled" : ""}">↑</div><div class="btn small ${i === n - 1 ? "disabled" : ""}">↓</div>${edit ? `<div class="btn small">Edit</div>` : ""}<div class="btn small">✕</div></div>`;
+
+const settingsInner = () => `
+  <div class="s-h1">SuperBoox</div>
+  ${para("A Supernote-style Quick Access panel for BOOX. Swipe from the screen edge on any page to open it.")}
+  <div class="status">● Service is running</div>
+  ${btns("Accessibility settings", "Open panel")}
+  ${section("Gesture")}
+  ${choice("Screen edge", "Right")}
+  ${choice("Trigger", "Swipe in from the edge")}
+  ${check("Edge gesture enabled", true)}
+  ${check("Show a small marker on the edge", true)}
+  ${slider("Touch strip width", 16, 6, 48, "dp")}
+  ${slider("Touch strip height", 35, 10, 100, "% of screen")}
+  ${slider("Touch strip position from top", 30, 0, 90, "%")}
+  ${slider("Panel width", 45, 25, 100, "% of screen")}
+  ${check("Show Back / Home / Recents / Capture row", true)}
+  ${para('Tip: the "Quick Access" app icon opens the panel too. Assign it to a BOOX gesture or the Navigation Ball if you\'d rather not reserve a strip of the screen edge. There\'s also a Quick Settings tile.')}
+  ${section("Quick Access items")}
+  ${item("Daily Journal", "BOOX note · Daily Journal", 0, 5)}
+  ${item("Standup", "BOOX note · Work / Standup", 1, 5)}
+  ${item("Reading list.pdf", "Document", 2, 5)}
+  ${item("Projects", "Folder", 3, 5)}
+  ${item("Dictionary", "App · com.onyx.dict", 4, 5)}
+  ${btns("+ BOOX note", "+ Document", "+ Folder")}
+  ${btns("+ App", "+ Custom intent")}
+  ${para('BOOX notes open by name: SuperBoox starts BOOX Notes at its library and taps the note for you. Use "Folder / Note" for notes in folders. The easiest way to add one is to open BOOX Notes, swipe the panel open and tap "Pin a note from this screen".')}
+  ${section("Apps at the bottom")}
+  ${item("Notes", "App · com.onyx.android.note", 0, 5, false)}
+  ${item("NeoReader", "App · com.onyx.kreader", 1, 5, false)}
+  ${item("Calendar", "App · com.onyx.calendar", 2, 5, false)}
+  ${item("Library", "App · com.onyx", 3, 5, false)}
+  ${item("Settings", "App · com.android.settings", 4, 5, false)}
+  ${btns("+ Add app")}
+  ${section("Recent files")}
+  ${para("Folder: note")}
+  ${slider("Files shown", 5, 1, 20, "")}
+  ${btns("Change folder", "Don't show")}
+  ${section("Advanced")}
+  ${choice("BOOX Notes package", "com.onyx.android.note")}
+  ${para("Find a firmware-specific deep link with: adb shell dumpsys activity activities | grep -i onyx while the note is open, then add it as a Custom intent (e.g. intent:#Intent;component=com.onyx.android.note/.SomeActivity;S.extra=value;end).")}`;
+
+const settings = (scroll) => statusbar(true) + `<div class="actionbar">SuperBoox</div>
+  <div class="settings"><div class="inner" style="transform:translateY(${-scroll}px)">${settingsInner()}</div></div>`;
+
+const dialog = (inner) => `<div class="scrim"></div><div class="dialog">${inner}</div>`;
+
+// ---- Screens ----
+const SCREENS = {
+  closed: {
+    html: () => reader() + handle(true),
+    notes: ["<h3>1 · Panel closed</h3><ol>",
+      "Swipe in (←) from the marker. The only always-on UI is the 4dp marker on the right edge (dashed box = the invisible 16dp touch strip, 35% tall, starting 30% down).",
+      "Everything outside the strip passes touches through to the page normally.",
+      "</ol>"],
+  },
+  panel: {
+    html: () => reader() + handle(false) + panel(mainBody()),
+    notes: ["<h3>2 · Panel open (over NeoReader)</h3><ol>",
+      `Sheet is ${PANEL_W}dp wide (45% of a ${W}dp-wide screen) with a 3dp ink rule on its inner edge.`,
+      "Pins: two BOOX notes, a document, an expanded folder, an app.",
+      "“Pin NeoReader” appears because NeoReader was in front when the panel opened.",
+      "Recent = newest files in the chosen export folder.",
+      "Apps dock: 5 per row.",
+      "Tap outside, ✕ or Back to close.",
+      "</ol>"],
+  },
+  "notes-picker": {
+    html: () => notesLib() + handle(false) + panel(pickerBody()),
+    notes: ["<h3>3 · Pin a note from BOOX Notes</h3><ol>",
+      "Opened while BOOX Notes was in front, then “Pin a note from this screen”.",
+      "Lists every text label Notes is showing. Note the noise (tabs, dates, “Sort”). A filtering pass is a likely refinement.",
+      "</ol>"],
+  },
+  remove: {
+    html: () => reader() + handle(false) + panel(removeBody()),
+    notes: ["<h3>4 · Long-press a pin</h3><ol>", "The list is swapped in place for a remove confirmation.", "</ol>"],
+  },
+  "settings-1": { html: () => settings(0), notes: ["<h3>5 · Settings (top)</h3><ol>", "Service status, gesture and panel options.", "Platform DeviceDefault.Light theme, so the action bar and status bar are solid black.", "</ol>"] },
+  "settings-2": { html: () => settings(780), notes: ["<h3>6 · Settings (pins &amp; dock)</h3><ol>", "Reorder with ↑ ↓, edit, remove.", "Add notes, documents, folders, apps, custom intents.", "</ol>"] },
+  "settings-3": { html: () => settings(1450), notes: ["<h3>7 · Settings (bottom)</h3><ol>", "Recent-files folder, Notes package override and deep-link help.", "</ol>"] },
+  "add-note": {
+    html: () => settings(780) + dialog(`<div class="dt">Add BOOX note</div>
+      <div class="field">Work / Meetings / Standup</div><div class="field empty">Label (optional)</div>
+      <div class="dbtns"><div>Cancel</div><div>Save</div></div>`),
+    notes: ["<h3>8 · “+ BOOX note” dialog</h3><ol>", "Path uses “ / ” between folder levels.", "The label defaults to the last segment.", "</ol>"],
+  },
+  "app-picker": {
+    html: () => settings(780) + dialog(`<div class="dt">Choose an app</div>
+      ${["Browser", "Calculator", "Calendar", "Dictionary", "Library", "NeoReader", "Notes", "Settings"].map(a => `<div class="picker-row">${appIcon(a, 36)}${a}</div>`).join("")}
+      <div class="dbtns"><div>Cancel</div></div>`),
+    notes: ["<h3>9 · App picker</h3><ol>", "Used by “+ App” and “+ Add app”.", "Lists every launchable app, alphabetical.", "</ol>"],
+  },
+};
+
+const key = (location.hash || "#panel").slice(1);
+const s = SCREENS[key] || SCREENS.panel;
+document.getElementById("eink").innerHTML = s.html();
+document.getElementById("annot").innerHTML = s.notes.map((n, i) => i === 0 || n.startsWith("</") ? n : `<li>${n}</li>`).join("").replace("<ol><li>", "<ol><li>");
+window.SCREENS = Object.keys(SCREENS);
+</script>
+</body>
+</html>

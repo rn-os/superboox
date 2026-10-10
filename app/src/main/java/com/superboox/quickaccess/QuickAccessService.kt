@@ -57,6 +57,28 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         attachHandle()
         instance = this
         NoteIds.capture(this, prefs)
+        val filter = android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        runCatching { registerReceiver(wakeReceiver, filter) }
+    }
+
+    /**
+     * BOOX puts its own front light level back when the screen wakes. If one of
+     * your presets was on, set it again once BOOX has done that.
+     */
+    private val wakeReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: Intent) {
+            val id = QuickControls.activeMine(prefs) ?: return
+            if (!AdvancedAccess.independentPresets(prefs)) return
+            val preset = QuickControls.myPresets(prefs).firstOrNull { it.id == id } ?: return
+            DebugLog.i("controls", "screen on (${intent.action?.substringAfterLast('.')}): reapplying ${preset.name}")
+            // BOOX restores its level a moment after waking; apply after it, then once more to be sure.
+            listOf(900L, 2_500L).forEach { delay ->
+                handler.postDelayed({ AdvancedAccess.setLight(preset.levels, AdvancedAccess.lightMethod(prefs)) }, delay)
+            }
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
@@ -111,6 +133,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     private fun teardown() {
         if (instance === this) instance = null
+        runCatching { unregisterReceiver(wakeReceiver) }
         if (::prefs.isInitialized) prefs.sp.unregisterOnSharedPreferenceChangeListener(this)
         if (::noteOpener.isInitialized) noteOpener.cancel()
         if (::cover.isInitialized) cover.hide()

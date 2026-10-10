@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 16)
+# SuperBoox: handoff / status (as of build 17)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -60,10 +60,13 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - Known gap: opening a note **shows the BOOX home screen for about 2 seconds**, because there's no exported way into the library.
 
 ## Next step (in progress)
-1. The user installs **build 16** and sends a debug report. Read the lines starting with **`code strings …`**:
-   - the extra keys and actions used by `OpenNoteByDocIdActivity`;
-   - what `MiddlewareActivity` passes to `ScribbleActivity`.
-2. Set `NotesDb.openIntent()` to the right extra key, value and action. Alternatively, launch the exported `ScribbleActivity` directly with the extras that `MiddlewareActivity` uses.
+1. The user installs **build 17** and sends a debug report. Read the lines starting with **`deep …`**, which come from `DexProbe.deepScan`:
+   - `bean …OpenNoteBean: …` shows the field names a JSON `OPEN_NOTE_BEAN_JSON` extra for `ScribbleActivity` would use.
+   - `reads …` and `constants: Owner.FIELD="value"` show the extra keys read through non-inlined String constants. These matter for `OpenNoteByDocIdActivity` and `MiddlewareActivity`.
+   - `initializer strings …` covers constants set in `<clinit>` instead of static values.
+   - `calls …` lists the app methods each screen calls. Look for an intent helper that reads the doc id.
+   - `MiddlewareActivity: exported=…` and `ScribbleActivity: exported=…` appear in the note-id access section.
+2. Implement the direct open in `NotesDb.openIntent()`. Preferred order: `OpenNoteByDocIdActivity` with the correct key; then `MiddlewareActivity` (action `com.onyx.action.MIDDLEWARE`, type `note`) if it is exported; then `ScribbleActivity` with `OPEN_NOTE_BEAN_JSON`. Never send anything that could create a note.
 3. Flip `NoteOpener.DIRECT_OPEN = true`. Keep the 3.5-second confirmation and library fallback. Then ship and confirm through a report that the log shows `opened by id`.
 
 ## Open ideas / backlog

@@ -84,7 +84,8 @@ class QuickAccessPanel(
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
             if (event.keyCode == KeyEvent.KEYCODE_BACK) {
                 if (event.action == KeyEvent.ACTION_UP) {
-                    if (mode != Mode.MAIN) show(Mode.MAIN) else service.hidePanel()
+                    if (renaming != null) endRename(save = false)
+                    else if (mode != Mode.MAIN) show(Mode.MAIN) else service.hidePanel()
                 }
                 return true
             }
@@ -253,6 +254,10 @@ class QuickAccessPanel(
 
     /** Your preset whose Remove is waiting to be confirmed. */
     private var confirmRemove: String? = null
+
+    /** Your preset being renamed in place, and its name field (kept across redraws so typing isn't lost). */
+    private var renaming: String? = null
+    private var renameField: android.widget.EditText? = null
     private val commitLevels = Runnable { applyEditLevels() }
 
     /**
@@ -373,7 +378,17 @@ class QuickAccessPanel(
         }
     }
 
+    /** The Front Light page holding the preset in use: 0 for BOOX's, else the page with yours. */
+    private fun activeLightPage(): Int {
+        val id = QuickControls.activeMine(prefs) ?: return 0
+        val direct = AdvancedAccess.independentPresets(prefs)
+        if (!direct && service.frontLightPreset() != "Custom") return 0
+        val i = QuickControls.myPresets(prefs).indexOfFirst { it.id == id }
+        return if (i < 0) 0 else 1 + i / LIGHT_PER_PAGE
+    }
+
     private fun closeLightMenu() {
+        endRename(save = false)
         commitNow()
         lightMenu = false
         lightEdit = null
@@ -400,7 +415,7 @@ class QuickAccessPanel(
         }
     }
 
-    /** Rename (in Settings, where typing works) and Remove (confirmed in place) for one of your presets. */
+    /** Rename and Remove for one of your presets, both in place in the panel. */
     private fun presetActions(preset: QuickControls.LightPreset): View = with(ctx) {
         if (confirmRemove == preset.id) {
             return@with vbox().apply {
@@ -416,18 +431,72 @@ class QuickAccessPanel(
                 }, lp(MATCH, WRAP))
             }.let { box -> FrameLayout(ctx).apply { setPadding(s(4), s(8), s(4), s(2)); addView(box, FrameLayout.LayoutParams(MATCH, WRAP)) } }
         }
+        if (renaming == preset.id) {
+            val field = renameField ?: android.widget.EditText(ctx).apply {
+                setText(preset.name)
+                setSelection(text.length)
+                textSize = 16f
+                setTextColor(Ink.INK)
+                isSingleLine = true
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+                background = outline(2, 6)
+                setPadding(s(10), s(8), s(10), s(8))
+                setOnEditorActionListener { _, _, _ -> endRename(save = true); true }
+                renameField = this
+            }
+            (field.parent as? ViewGroup)?.removeView(field)
+            return@with vbox().apply {
+                background = outline(2, 8)
+                setPadding(s(10), s(8), s(10), s(8))
+                addView(text("Rename “${preset.name}”", sp(14f), bold = true).apply { setPadding(0, 0, 0, s(6)) })
+                addView(field, lp(MATCH, WRAP).apply { bottomMargin = s(8) })
+                addView(hbox().apply {
+                    addView(inkButton("Cancel", sp(14f)) { endRename(save = false) }, lp(0, WRAP, 1f).apply { marginEnd = s(8) })
+                    addView(inkButton("Save", sp(14f)) { endRename(save = true) }.apply {
+                        setTextColor(Ink.PAPER)
+                        background = android.graphics.drawable.GradientDrawable().apply { setColor(Ink.INK); cornerRadius = dp(6).toFloat() }
+                    }, lp(0, WRAP, 1f))
+                }, lp(MATCH, WRAP))
+                field.post {
+                    field.requestFocus()
+                    (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                        .showSoftInput(field, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                }
+            }.let { box -> FrameLayout(ctx).apply { setPadding(s(4), s(8), s(4), s(2)); addView(box, FrameLayout.LayoutParams(MATCH, WRAP)) } }
+        }
         hbox().apply {
             setPadding(s(4), s(8), s(4), s(2))
             addView(inkButton("Rename", sp(14f)) {
                 commitNow()
-                service.hidePanel()
-                Launcher.start(service, Intent(service, SettingsActivity::class.java)
-                    .putExtra(SettingsActivity.EXTRA_PAGE, "CONTROLS")
-                    .putExtra(SettingsActivity.EXTRA_EDIT_PRESET, preset.id)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+                confirmRemove = null
+                renaming = preset.id
+                renameField = null
+                show(mode)
             }, lp(0, WRAP, 1f).apply { marginEnd = s(8) })
             addView(inkButton("Remove", sp(14f)) { confirmRemove = preset.id; show(mode) }, lp(0, WRAP, 1f))
         }
+    }
+
+    /** Closes the name field, keeping the new name when [save] (an empty name keeps the old one). */
+    private fun endRename(save: Boolean) {
+        val id = renaming ?: return
+        val field = renameField
+        val name = field?.text?.toString()?.trim().orEmpty()
+        field?.let {
+            (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                .hideSoftInputFromWindow(it.windowToken, 0)
+        }
+        renaming = null
+        renameField = null
+        if (save && name.isNotEmpty()) {
+            val mine = QuickControls.myPresets(prefs)
+            mine.firstOrNull { it.id == id }?.takeIf { it.name != name }?.let { old ->
+                QuickControls.saveMyPresets(prefs, mine.map { if (it.id == id) it.copy(name = name) else it })
+                DebugLog.i("controls", "front light preset renamed: ${old.name} -> $name")
+            }
+        }
+        show(mode)
     }
 
     private fun removePreset(preset: QuickControls.LightPreset) {
@@ -562,6 +631,7 @@ class QuickAccessPanel(
                 if (control.id == QuickControls.FRONT_LIGHT) {
                     if (lightMenu) closeLightMenu() else {
                         lightMenu = true
+                        lightPage = activeLightPage()
                         show(mode)
                     }
                 } else {

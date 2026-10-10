@@ -658,6 +658,8 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         PixelFormat.TRANSLUCENT,
     ).apply {
         windowAnimations = 0
+        // Typing in the panel (renaming a Front Light preset): slide it up if the keyboard would cover the field.
+        if (focusable) softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }

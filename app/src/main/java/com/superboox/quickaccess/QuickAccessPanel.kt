@@ -312,7 +312,9 @@ class QuickAccessPanel(
     private fun controlTile(control: QuickControls.Control, on: Boolean): View = with(ctx) {
         val lit = on && control.kind == QuickControls.Kind.TOGGLE && !control.momentary
         val description = "${control.label}${if (control.kind == QuickControls.Kind.TOGGLE) if (on) ", on" else ", off" else ""}"
-        roundTile(control.label, control.icon, lit, description).apply {
+        // Stepping through presets: the tile is named after the one in use.
+        val label = if (control.id == QuickControls.FRONT_LIGHT && prefs.frontLightCycle) service.frontLightPreset() ?: control.label else control.label
+        roundTile(label, control.icon, lit, description).apply {
             setOnClickListener {
                 // One-shot controls (Full Refresh) give a quick spin of the icon instead of filling.
                 if (control.momentary) (getChildAt(0) as? ViewGroup)?.getChildAt(0)?.animate()?.rotationBy(360f)?.setDuration(500)?.start()

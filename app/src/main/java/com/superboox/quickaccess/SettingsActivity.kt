@@ -143,6 +143,24 @@ class SettingsActivity : Activity() {
         list.addView(View(this), lp(MATCH, dp(24)))
     }
 
+    /** One choice of several: a round radio, a title and what it does. */
+    private fun radioRow(title: String, detail: String, selected: Boolean, onPick: () -> Unit): View = hbox().apply {
+        setPadding(dp(16), dp(12), dp(16), dp(12))
+        addView(android.widget.RadioButton(context).apply {
+            buttonTintList = android.content.res.ColorStateList.valueOf(Ink.INK)
+            isChecked = selected
+            isClickable = false
+            isFocusable = false
+        })
+        addView(vbox().apply {
+            setPadding(dp(8), dp(4), 0, 0)
+            addView(text(title, 17f, medium = true))
+            addView(text(detail, 13f, color = Ink.MUTED))
+        }, lp(0, WRAP, 1f))
+        pressable()
+        setOnClickListener { if (!selected) onPick() }
+    }
+
     /** Home row: round icon, the page's name with what's set under it, and ›. */
     private fun menuRow(iconRes: Int, to: Page, summary: String): View = hbox().apply {
         gravity = Gravity.CENTER_VERTICAL
@@ -268,6 +286,18 @@ class SettingsActivity : Activity() {
         list.addView(card(listOf(
             check("Show Quick Controls in the panel", prefs.showSystemActions) { prefs.showSystemActions = it },
         )))
+        if (controls.any { it.id == QuickControls.FRONT_LIGHT }) {
+            list.addView(heading("Front Light"))
+            list.addView(card(listOf(
+                text("Tapping Front Light", 15f, bold = true).apply { setPadding(dp(16), dp(10), dp(16), 0) },
+                radioRow("Switches it on and off", "Off, then back to the preset you last used. Hold for Bright · Soft · Custom · Off in the panel.", !prefs.frontLightCycle) {
+                    prefs.frontLightCycle = false; render()
+                },
+                radioRow("Steps through the presets", "Bright → Soft → Custom → Off → Bright. The name under the tile shows where you are. Hold still shows all four.", prefs.frontLightCycle) {
+                    prefs.frontLightCycle = true; render()
+                },
+            )))
+        }
         list.addView(heading("Controls · ${QuickAccessPanel.QC_PER_PAGE} per page"))
         val rows = mutableListOf<View>()
         controls.forEachIndexed { i, c ->
@@ -304,7 +334,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun describe(c: QuickControls.Control): String = when {
-        c.id == QuickControls.FRONT_LIGHT -> "Tap: on/off · hold: Bright, Soft, Custom, Off"
+        c.id == QuickControls.FRONT_LIGHT -> "Tap: ${if (prefs.frontLightCycle) "next preset" else "on/off"} · hold: Bright, Soft, Custom, Off"
         c.id == "rotate" -> "Tap: on/off · hold: rotation menu"
         c.momentary -> "Tap: ${c.label.lowercase()} · hold: its settings"
         else -> describeKind(c)

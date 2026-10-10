@@ -70,6 +70,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(K_REMEMBER_PAGES, false)
         set(v) = sp.edit().putBoolean(K_REMEMBER_PAGES, v).apply()
 
+    /** Tapping Front Light steps through the presets instead of switching it off and on. */
+    var frontLightCycle: Boolean
+        get() = sp.getBoolean(K_FL_CYCLE, false)
+        set(v) = sp.edit().putBoolean(K_FL_CYCLE, v).apply()
+
     /** Pinned apps show the app's own (color) icon instead of the uniform black app glyph. */
     var appOwnIcons: Boolean
         get() = sp.getBoolean(K_APP_OWN_ICONS, false)
@@ -189,6 +194,7 @@ class Prefs(context: Context) {
         const val K_DOCK = "dock"
         const val K_REMEMBER_PAGES = "remember_pages"
         const val K_FL_PRESET = "front_light_preset"
+        const val K_FL_CYCLE = "front_light_cycle"
         const val K_FL_LAST_ON = "front_light_last_on"
 
         /** Keys whose change requires the edge handle window to be rebuilt. */

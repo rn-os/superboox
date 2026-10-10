@@ -325,8 +325,14 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         // Front Light: hold shows the presets in the panel; tap goes off, or back to the last preset.
         if (control.id == QuickControls.FRONT_LIGHT) {
             if (hold) return
-            val on = quickControlStates()[control.id] ?: true
-            frontLight(if (on) QuickControls.PRESET_OFF else QuickControls.lastOnPreset(prefs))
+            if (prefs.frontLightCycle) {
+                val presets = QuickControls.PRESETS
+                val now = presets.indexOf(frontLightPreset() ?: QuickControls.PRESET_OFF)
+                frontLight(presets[(now + 1) % presets.size])
+            } else {
+                val on = quickControlStates()[control.id] ?: true
+                frontLight(if (on) QuickControls.PRESET_OFF else QuickControls.lastOnPreset(prefs))
+            }
             return
         }
         if (control.kind == QuickControls.Kind.TOGGLE && !hold && !control.momentary) {

@@ -53,7 +53,7 @@ object ControlCenterProbe {
             }
             walk(root, 0)
             out += "  tiles (${tiles.size}): " + tiles.joinToString(" | ").ifEmpty { "none readable" }
-            frontLight(root, out)
+            if (pkg?.contains("systemui") == true) frontLight(root, out)
         }
     }
 

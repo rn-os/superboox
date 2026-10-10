@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 36)
+# SuperBoox: handoff / status (as of build 37)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -148,6 +148,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - **Front Light** Quick Control (`QuickControls.FRONT_LIGHT`, BOOX group, not in the default set). Tap goes to BOOX's Off preset, or back to the last preset that wasn't Off (`K_FL_LAST_ON`, Bright if never seen). Hold toggles a Bright · Soft · Custom · Off box under the Quick Controls row (`QuickAccessPanel.lightMenu`); tapping a preset calls `service.frontLight(preset)`.
 - Presses go through the session queue (`QcTask.preset`). `QuickControls.pressPreset` finds the row from the exact "Soft" label up to the ancestor holding all four labels. The selected preset is any selected/checked node in a button. If the row isn't found, it scrolls `expanded_qs_scroll_view` once and retries. **Not yet confirmed on device**: check the build 35/36 report's `front light area:` and the `front light: tap` log lines.
 - Quick Controls descriptions: Full Refresh now says "Tap: full refresh".
+- Build 36 log: Front Light works on device. BOOX's rows are `#brightness_style_area` › FrameLayout [click, selected] › `#brightness_radio_text_view`. Presses and selected-state reads all landed. Under them are `#brightness_bright_panel` (`#brightness_bright_slider` SeekBar 0–32, `_down`/`_up`, `#brightness_bright_text`) and `#warm_panel` (`#brightness_temp_*`), hidden unless Custom is selected.
+
+## Build 37 (approved mockup 25)
+- `Prefs.frontLightCycle`: tap steps Bright → Soft → Custom → Off. The tile is labelled with the current preset. The Front Light card on the Quick Controls page (only when it's added) has a radio for the two modes.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

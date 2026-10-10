@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SuperBoox</string>
+    <string name="open_panel_label">Quick Access</string>
+    <string name="service_label">SuperBoox Quick Access</string>
+    <string name="tile_label">Quick Access</string>
+    <string name="a11y_description">Shows a Supernote-style Quick Access panel when you swipe from the screen edge. Used to draw the edge handle and panel over other apps, run Back/Home/Screenshot actions, and (optionally) open a specific note inside BOOX Notes by finding it by name on screen. SuperBoox does not collect or transmit anything.</string>
+</resources>

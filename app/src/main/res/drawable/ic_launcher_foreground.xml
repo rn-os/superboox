@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 108dp adaptive foreground: a page with a side panel. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF000000"
+        android:fillType="evenOdd"
+        android:pathData="M30,28h48v52h-48zM34,32v44h22v-44zM60,32v44h14v-44z" />
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M38,40h14v3h-14zM38,48h14v3h-14zM38,56h10v3h-10zM63,36h8v8h-8zM63,48h8v8h-8zM63,60h8v8h-8z" />
+</vector>

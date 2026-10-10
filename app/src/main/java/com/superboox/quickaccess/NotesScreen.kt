@@ -42,7 +42,10 @@ object NotesScreen {
         val screen = Rect().also(root::getBoundsInScreen)
         // The editor names its title view note_name (seen on firmware 4.3); trust it first.
         // Its tool column can look like a grid of cards ("Layer", "Margin", … seen in build 17).
-        noteNameView(root)?.let { return State.Editor(it) }
+        noteNameView(root)?.let { title ->
+            // Blank while a note is still loading: not the library, just not ready yet.
+            return if (title.isEmpty()) State.Unknown else State.Editor(title)
+        }
         val list = mainList(root, screen)
         val cards = cards(root, screen)
         if (cards.isNotEmpty()) return State.Library(cards, list)
@@ -130,7 +133,6 @@ object NotesScreen {
         runCatching { root.findAccessibilityNodeInfosByViewId("com.onyx.android.note:id/note_name") }.getOrNull()
             ?.firstOrNull { it.isVisibleToUser }
             ?.let { textOf(it) }
-            ?.takeIf { it.isNotEmpty() }
 
     /** Left-most real text in the top bar: the note's name (next to the back arrow). */
     private fun editorTitle(root: AccessibilityNodeInfo, screen: Rect): String? =

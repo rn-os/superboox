@@ -14,20 +14,19 @@ import android.net.Uri
  *    `title`, `parentUniqueId`, `pageCount` and `status`;
  *  - `OpenNoteByDocIdActivity` is exported and opens a note by that id.
  *
- * The extra name the activity reads isn't documented, so the id is passed
- * under every candidate name found in the Notes app. [NoteOpener] confirms
- * the right note actually appeared and falls back to navigating the library
- * if it didn't. Only titles and ids are read, never note contents.
+ * The activity takes the id in the `note_document_id` extra. It only opens
+ * existing notes (an unknown id shows "note not found"), and [NoteOpener]
+ * confirms the right note appeared, falling back to the library if not. Only titles and ids are read, never note contents.
  */
 object NotesDb {
     private val NOTES_URI: Uri = Uri.parse("content://com.onyx.android.sdk.note.ContentProvider/NoteModel")
     private const val OPEN_BY_ID = "com.onyx.android.note.note.ui.OpenNoteByDocIdActivity"
 
-    /** Extra names seen in the Notes app that could carry the note id. */
-    private val ID_EXTRAS = listOf(
-        "docId", "documentId", "document_id", "doc_id", "args.documentId", "uniqueId", "noteId",
-        "DOC_ID", "DOCUMENT_ID", "KEY_DOCUMENT_ID", "ARGS_DOC_ID", "DOCUMENT_UNIQUE_ID", "UNIQUE_ID",
-    )
+    /**
+     * The extra OpenNoteByDocIdActivity reads the id from (its helper
+     * OpenNoteIntentsKt.noteDocIdFromIntent, found via the build 18 report).
+     */
+    private const val ID_EXTRA = "note_document_id"
 
     private class Row(val id: String, val title: String, val parent: String?, val pages: Int, val status: Int, val updated: Long)
 
@@ -64,7 +63,7 @@ object NotesDb {
         val info = runCatching { context.packageManager.getActivityInfo(cn, 0) }.getOrNull() ?: return null
         if (!info.exported) return null
         return Intent(Intent.ACTION_VIEW).setComponent(cn).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).apply {
-            ID_EXTRAS.forEach { putExtra(it, id) }
+            putExtra(ID_EXTRA, id)
         }
     }
 

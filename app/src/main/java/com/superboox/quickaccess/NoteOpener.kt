@@ -38,6 +38,9 @@ class NoteOpener(private val service: AccessibilityService) {
         /** While > 0: we asked BOOX to open the note by id and are waiting for it to appear. */
         var directUntil = 0L
 
+        /** "Open by id" held back until the note that's open has been closed (so it's saved first). */
+        var pendingDirect: android.content.Intent? = null
+
         /** Set when we opened the BOOX launcher and still need to tap its "Notes" tab. */
         var needsNotesTab = false
         var index = 0
@@ -97,10 +100,11 @@ class NoteOpener(private val service: AccessibilityService) {
     private fun start(notesPackage: String, steps: List<String>, inNotes: Boolean, id: String?) {
         val j = Job(BooxNotes.packages(notesPackage), notesPackage, steps, SystemClock.uptimeMillis() + TIMEOUT_MS)
         val direct = id?.let { NotesDb.openIntent(service, notesPackage, it) }
-        if (direct != null && Launcher.tryStart(service, direct)) {
+        if (direct != null && inNotes) {
+            // Leave the open note the normal way first (Back saves it), then open by id.
+            j.pendingDirect = direct
+        } else if (direct != null && openDirect(j, direct)) {
             // Fast path: BOOX opens the note itself. The loop confirms it, or falls back.
-            DebugLog.i("note", "opening by id")
-            j.directUntil = SystemClock.uptimeMillis() + DIRECT_WAIT_MS
         } else if (!inNotes && !launchNotes(j)) {
             toast("Couldn't open BOOX Notes on this device")
             return
@@ -108,6 +112,14 @@ class NoteOpener(private val service: AccessibilityService) {
         val now = SystemClock.uptimeMillis()
         job = j.also { it.notBefore = now + FIRST_DELAY_MS }
         handler.postDelayed(::tick, FIRST_DELAY_MS)
+    }
+
+    private fun openDirect(j: Job, intent: android.content.Intent): Boolean {
+        j.pendingDirect = null
+        if (!Launcher.tryStart(service, intent)) return false
+        DebugLog.i("note", "opening by id")
+        j.directUntil = SystemClock.uptimeMillis() + DIRECT_WAIT_MS
+        return true
     }
 
     /**
@@ -154,6 +166,11 @@ class NoteOpener(private val service: AccessibilityService) {
         }
 
         val root = notesRoot(j.packages)
+        // The open note has been closed (we're in the library, or out of Notes): open by id now.
+        j.pendingDirect?.let { intent ->
+            val closed = root == null || NotesScreen.read(root).let { it !is NotesScreen.State.Editor && it !is NotesScreen.State.Unknown }
+            if (closed && openDirect(j, intent)) return later(POLL_MS)
+        }
         if (root == null) {
             // Backed out of Notes entirely (or it's still starting): bring it back once or twice.
             if (j.missingSince == 0L) j.missingSince = now
@@ -455,7 +472,7 @@ class NoteOpener(private val service: AccessibilityService) {
          * Open-by-id is off until we know the extra OpenNoteByDocIdActivity reads:
          * with guessed extras (build 15) BOOX accepted the launch but opened nothing.
          */
-        private const val DIRECT_OPEN = false
+        private const val DIRECT_OPEN = true
         private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
 
         fun findFirst(root: AccessibilityNodeInfo, predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {

@@ -265,7 +265,8 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             is NotesScreen.State.Library -> "library, ${state.cards.size} cards: ${state.cards.joinToString { it.label }.take(300)}"
             NotesScreen.State.Unknown -> "unrecognised screen"
         }
-        if (log) DebugLog.i("picker", "$pkg: $summary\n" + DebugReport.describeTree(root))
+        // The screen layout only when it wasn't recognised; otherwise the summary says enough.
+        if (log) DebugLog.i("picker", "$pkg: $summary" + if (state is NotesScreen.State.Unknown) "\n" + DebugReport.describeTree(root) else "")
         return state
     }
 

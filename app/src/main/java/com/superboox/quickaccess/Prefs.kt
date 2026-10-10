@@ -62,7 +62,7 @@ class Prefs(context: Context) {
         set(v) = sp.edit().putInt(K_PANEL_WIDTH, v).apply()
 
     var menuSize: MenuSize
-        get() = enumOr(sp.getString(K_MENU_SIZE, null), MenuSize.STANDARD)
+        get() = enumOr(sp.getString(K_MENU_SIZE, null), MenuSize.LARGE) // easier to hit on e-ink
         set(v) = sp.edit().putString(K_MENU_SIZE, v.name).apply()
 
     var showSystemActions: Boolean

@@ -53,7 +53,7 @@ The panel follows the Supernote sidebar:
   - anywhere else, Add pins the current app.
 - **Long-press** an item to enter edit mode, with ↑ ↓ to reorder, 🗑 to remove, and **Done** to finish.
 - **Apps** show 4 per page (2 × 2). Use ‹ › to page through them.
-- **Menu size** (Settings → Gesture) scales text, icons and touch targets. The Back / Home / Recents / Capture row is off by default and can be turned on in Settings.
+- **Menu size** (Settings → Gesture) scales text, icons and touch targets. Large is the default. The Back / Home / Recents / Capture row is off by default and can be turned on in Settings.
 
 ## BOOX Notes integration
 

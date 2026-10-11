@@ -355,3 +355,8 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - shows a toast
 
   More than 6 errors within 10 s are rethrown, so a persistent fault still shows up as a crash in the report.
+
+## Build 68: auto-rotate off kept the screen's orientation
+
+- Writing only `ACCELEROMETER_ROTATION=0` locked the screen to the stored `USER_ROTATION`, which flipped it 180° on the user's tablet.
+- `QuickControls.toggleRotation` now writes `USER_ROTATION` = the current display rotation first (as Android's `RotationPolicy` does), and logs "locked at N°".

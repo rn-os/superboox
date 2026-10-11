@@ -327,8 +327,19 @@ object QuickControls {
         if (!Settings.System.canWrite(context)) return null
         val cr = context.contentResolver
         val on = runCatching { Settings.System.getInt(cr, Settings.System.ACCELEROMETER_ROTATION) }.getOrDefault(0) != 0
+        // Turning it off locks the screen to Android's saved "user rotation", which can be another way
+        // round (build 67: the screen flipped 180°). Like Android's own switch, lock to the way it's
+        // facing now first.
+        var locked: Int? = null
+        if (on) {
+            locked = runCatching {
+                context.getSystemService(android.hardware.display.DisplayManager::class.java)
+                    .getDisplay(android.view.Display.DEFAULT_DISPLAY).rotation
+            }.getOrNull()
+            locked?.let { r -> runCatching { Settings.System.putInt(cr, Settings.System.USER_ROTATION, r) } }
+        }
         val ok = runCatching { Settings.System.putInt(cr, Settings.System.ACCELEROMETER_ROTATION, if (on) 0 else 1) }.getOrDefault(false)
-        DebugLog.i("controls", "auto-rotate set directly: ${if (on) "off" else "on"} -> $ok")
+        DebugLog.i("controls", "auto-rotate set directly: ${if (on) "off" else "on"} -> $ok" + (locked?.let { " (locked at ${it * 90}°)" } ?: ""))
         return if (ok) !on else on
     }
 

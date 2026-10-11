@@ -926,6 +926,9 @@ class QuickAccessPanel(
     private var clipQuery = ""
     private var clipPage = 0
 
+    /** Handwriting pictures are being drawn in the background. */
+    private var drawing = false
+
     /** The clip whose actions are showing (it was tapped or held). */
     private var clipOpen: String? = null
     private var clipSearch: android.widget.EditText? = null
@@ -1011,8 +1014,20 @@ class QuickAccessPanel(
     private fun fillClips() {
         val body = clipBody ?: return
         body.removeAllViews()
-        // Handwriting kept before it could be drawn gets its picture now.
+        // Handwriting kept before it could be drawn gets its picture: drawn in the background (finding
+        // the strokes can take a while), then shown on the next redraw.
         val all = ClipHistory.list(service).map { ClipHistory.ensurePreview(service, it) }
+        val undrawn = all.filter { ClipHistory.needsDrawing(service, it) }
+        if (undrawn.isNotEmpty() && !drawing) {
+            drawing = true
+            io.execute {
+                undrawn.forEach { c -> runCatching { ClipHistory.draw(service, c) }.onFailure { DebugLog.w("clipboard", "drawing handwriting failed: $it") } }
+                root.post {
+                    drawing = false
+                    if (mode == Mode.CLIPBOARD && root.isAttachedToWindow) fillClips()
+                }
+            }
+        }
         clipCount?.text = "· ${all.size} ${if (all.size == 1) "item" else "items"}"
         with(ctx) {
             // Filter chips; the row scrolls sideways if they don't all fit (narrow panel, large menu size).
@@ -1064,7 +1079,10 @@ class QuickAccessPanel(
                 })
             }
             lastPinned = c.pinned
-            list.addView(clipRow(c, c.id == current), lp(MATCH, WRAP).apply { setMargins(s(10), s(4), s(10), s(4)) })
+            // One clip that can't be shown is left out rather than taking the panel (and the service) down.
+            val row = runCatching { clipRow(c, c.id == current) }
+                .onFailure { DebugLog.e("clipboard", "clip ${c.id} (${c.kind}) couldn't be shown", it) }.getOrNull() ?: return@forEach
+            list.addView(row, lp(MATCH, WRAP).apply { setMargins(s(10), s(4), s(10), s(4)) })
         }
         // Pages, like the rest of the panel; scrolls only if an opened clip makes the page too tall.
         val swipe = SwipeRow(ctx, s(40), vertical = true) { dir ->
@@ -1143,14 +1161,7 @@ class QuickAccessPanel(
     }
 
     private fun clipThumb(c: ClipHistory.Clip, heightDp: Int): View = with(ctx) {
-        val f = ClipHistory.imageFile(service, c)
-        val bmp = f?.takeIf { it.exists() }?.let { file ->
-            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            android.graphics.BitmapFactory.decodeFile(file.path, bounds)
-            var sample = 1
-            while (bounds.outHeight / sample > s(heightDp) * 2) sample *= 2
-            android.graphics.BitmapFactory.decodeFile(file.path, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
-        }
+        val bmp = ClipHistory.imageFile(service, c)?.takeIf { it.exists() }?.let { thumbnail(it, sheetWidth(ctx, prefs, service.screenWidth()), s(heightDp)) }
         if (bmp == null) return@with text("Image no longer available", sp(14f), color = Ink.MUTED)
         ImageView(ctx).apply {
             setImageBitmap(bmp)
@@ -1161,6 +1172,25 @@ class QuickAccessPanel(
             setPadding(s(2), s(2), s(2), s(2))
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
         }
+    }
+
+    /**
+     * A clip's picture, scaled down on both sides to what the row can show, and kept between redraws:
+     * every change in Settings rebuilds the preview panel, and full-size pictures each time ran out
+     * of memory or were too large to draw, which stopped the service.
+     */
+    private fun thumbnail(file: java.io.File, maxW: Int, maxH: Int): android.graphics.Bitmap? {
+        val key = "${file.path}|${file.lastModified()}|$maxW|$maxH"
+        synchronized(thumbs) { thumbs.get(key) }?.let { return it }
+        return runCatching {
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(file.path, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            var sample = 1
+            while (bounds.outWidth / sample > maxW * 2 || bounds.outHeight / sample > maxH * 2) sample *= 2
+            android.graphics.BitmapFactory.decodeFile(file.path, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+        }.onFailure { DebugLog.w("clipboard", "picture not shown: ${it.javaClass.simpleName} ${it.message}") }
+            .getOrNull()?.also { synchronized(thumbs) { thumbs.put(key, it) } }
     }
 
     /** Copy · Paste in app · Share… / Pin · Delete (· Open, for links), in place under the clip. */
@@ -1643,6 +1673,11 @@ class QuickAccessPanel(
             maxOf(context.dp(300 * prefs.menuSize.scale), screenW * prefs.panelWidthPct.coerceIn(25, 100) / 100).coerceAtMost(screenW)
         const val CLIPS_PER_PAGE_FULL = 7
         private val io = Executors.newSingleThreadExecutor()
+
+        /** Clip pictures already scaled for the panel, by file and size (about 16 MB at most). */
+        private val thumbs = object : android.util.LruCache<String, android.graphics.Bitmap>(16 * 1024 * 1024) {
+            override fun sizeOf(key: String, value: android.graphics.Bitmap) = value.allocationByteCount
+        }
     }
 }
 

@@ -174,6 +174,12 @@ Tested on a Note Air 6C (Android 16, firmware 4.3). Other BOOX models and firmwa
     - All files access (handwriting pictures). This is used only to read the copy BOOX Notes makes when you lasso-copy.
     - Shizuku (Advanced access)
 
+## If the panel stops opening
+
+The top of Settings shows whether the service is running.
+- **Running but misbehaving:** tap **Restart service**.
+- **Turned on, but stopped:** Android keeps an accessibility service stopped after an error until it's switched off and on again. **Restart service** does that for you with Advanced access. Without it, Restart service opens SuperBoox's switch so you can turn it off and on.
+
 ## Reporting bugs
 
 Open **SuperBoox → Troubleshooting → Copy debug report** (or **Share…**) and paste it into a [GitHub issue](https://github.com/rn-os/superboox/issues).

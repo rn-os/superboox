@@ -287,6 +287,8 @@ class Prefs(context: Context) {
         const val K_CLIP_IGNORED = "clip_ignored"
         const val K_CLIP_MODE = "clip_mode"
         const val K_TOUR_DONE = "tour_done"
+        /** When SuperBoox last stopped on an error (written as it stops), for Settings' status. */
+        const val K_LAST_CRASH = "last_crash"
         const val K_CLIP_TEXT = "clip_text"
         const val K_CLIP_LINKS = "clip_links"
         const val K_CLIP_CODES = "clip_codes"

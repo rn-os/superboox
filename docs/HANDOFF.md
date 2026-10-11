@@ -308,3 +308,17 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - `reopen` handles each kind of origin: Notes reopens the note, NeoReader its book, a launcher package gets a HOME intent, and anything else is launched as an app. `openPreviousApp` now uses `reopen` too.
   - The same check also catches Back out of the newly created note. Going to any other app, or 3 hours passing, cancels the watch.
 - Reddit stock images are in `docs/launch/reddit/` (hero with callouts, clipboard, light, tour, live, settings). They come from the same `launch.html` (`#hero`, `#tour`, `#live`) and are rendered by the scratchpad script `render-reddit.mjs`.
+
+## Build 64: service stopping from Clipboard settings
+
+- **User report.** Toggling Clipboard → "While the clipboard is open, still show" (which rebuilds the live preview each time) or opening the panel stopped the service. Settings still said "running", because it only checked the secure setting. Android doesn't rebind a crashed accessibility service until it's toggled.
+- **Fixes**
+  - Clip pictures are decoded scaled on **both** sides, so a wide picture is never full size. They're kept in an `LruCache` of up to 16 MB, guarded against OOM.
+  - Drawing handwriting from `shape.pb` (brute force can be slow) moved off the main thread. `ClipHistory.needsDrawing`/`draw` run on the panel's `io` executor and refill afterwards. `ensurePreview` is cheap now, and capture no longer draws.
+  - Building the panel or preview is guarded (`panelFailed`: logs and shows a toast). Each clip row is guarded too.
+  - The uncaught-exception handler stores `K_LAST_CRASH`.
+  - The Settings status card now has three states:
+    - **running:** Open panel / Restart service. `QuickAccessService.restart()` clears its overlays and re-adds the strip.
+    - **on but stopped:** shows the crash time. Restart service uses Shizuku if allowed (`settings put secure enabled_accessibility_services` without the service, then with it). Otherwise it opens `ACCESSIBILITY_DETAILS_SETTINGS` for the component.
+    - **off.**
+- **Still unknown.** The exact exception: the next debug report's `[crash]` entry has the stack.

@@ -277,8 +277,12 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     fun showPreview(clipboard: Boolean, lightPresets: Boolean = false) {
         hidePreview()
         if (panel != null) return
-        val p = QuickAccessPanel(this, prefs, foregroundPackage, previewOfClipboard = clipboard,
-            previewTag = if (clipboard) "PREVIEW · CLIPBOARD" else "PREVIEW · ${prefs.panelWidthPct}%", previewLightPresets = lightPresets)
+        // Built in a guard: an error here would stop the whole service, and Android then keeps it off
+        // until it's switched off and on in its settings.
+        val p = runCatching {
+            QuickAccessPanel(this, prefs, foregroundPackage, previewOfClipboard = clipboard,
+                previewTag = if (clipboard) "PREVIEW · CLIPBOARD" else "PREVIEW · ${prefs.panelWidthPct}%", previewLightPresets = lightPresets)
+        }.getOrElse { return panelFailed("preview", it) }
         val params = overlayParams(previewWidth(), WindowManager.LayoutParams.MATCH_PARENT, focusable = false).apply {
             flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
             gravity = Gravity.TOP or (if (prefs.edge == Edge.RIGHT) Gravity.RIGHT else Gravity.LEFT)
@@ -286,6 +290,27 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         runCatching { wm.addView(p.root, params) }
             .onSuccess { previewPanel = p; previewClipboard = clipboard; DebugLog.i("panel", "preview shown (${params.width}px${if (clipboard) ", clipboard" else ""})") }
             .onFailure { DebugLog.w("panel", "preview failed: ${it.message}") }
+    }
+
+    private fun panelFailed(what: String, error: Throwable) {
+        DebugLog.e("panel", "$what couldn't be built", error)
+        Toast.makeText(this, "SuperBoox couldn't show the panel. Copy a debug report from Settings → Troubleshooting.", Toast.LENGTH_LONG).show()
+    }
+
+    /**
+     * Settings → "Restart the service": clears everything the service has on screen and sets the
+     * edge strip up again, for when it's running but stuck.
+     */
+    fun restart() {
+        DebugLog.i("service", "restart from Settings")
+        if (::noteOpener.isInitialized) noteOpener.cancel()
+        if (::cover.isInitialized) cover.hide()
+        forgetNewNoteOrigin()
+        hidePanel()
+        hidePreview()
+        stripPreview = false
+        detachHandle()
+        attachHandle()
     }
 
     fun hidePreview() {
@@ -306,7 +331,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             quickControlsPage = 0
             dockPage = 0
         }
-        val p = QuickAccessPanel(this, prefs, foregroundPackage)
+        val p = runCatching { QuickAccessPanel(this, prefs, foregroundPackage) }.getOrElse { return panelFailed("panel", it) }
         val params = overlayParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT, focusable = true)
         runCatching { wm.addView(p.root, params) }
             .onSuccess {

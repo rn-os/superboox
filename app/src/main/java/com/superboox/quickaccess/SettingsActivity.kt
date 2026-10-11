@@ -867,25 +867,77 @@ class SettingsActivity : Activity() {
         list.addView(View(this), lp(MATCH, dp(8)))
         list.addView(paragraph("A Supernote-style Quick Access panel for BOOX. Swipe from the screen edge on any page to open it."))
 
+        val running = QuickAccessService.instance != null
         val on = isServiceEnabled()
         val rows = mutableListOf<View>(
-            text(if (on) "● Service is running" else "○ Service is off", 17f, bold = true)
-                .apply { setPadding(dp(16), dp(14), dp(16), dp(10)) },
+            text(when {
+                running -> "● Service is running"
+                on -> "◐ Turned on, but stopped"
+                else -> "○ Service is off"
+            }, 17f, bold = true).apply { setPadding(dp(16), dp(14), dp(16), dp(10)) },
         )
-        if (!on) {
-            rows += paragraph(
-                "Turn on \"SuperBoox Quick Access\" under Accessibility. On BOOX also open App Management for SuperBoox " +
-                    "and allow it to run in the background so the system doesn't freeze it.",
-            ).apply { setPadding(dp(16), dp(10), dp(16), dp(10)) }
+        when {
+            running -> rows += buttonRow(
+                "Open panel" to { QuickAccessService.instance?.showPanel() },
+                "Restart service" to {
+                    QuickAccessService.instance?.restart()
+                    toast("SuperBoox restarted")
+                    render()
+                },
+            )
+            on -> {
+                // Android keeps a service that stopped on an error off until it's switched off and on again.
+                val crashed = prefs.sp.getLong(Prefs.K_LAST_CRASH, 0L).takeIf { it > 0 }
+                rows += paragraph(
+                    (if (crashed != null) "SuperBoox stopped after an error (${android.text.format.DateUtils.getRelativeTimeSpanString(crashed)}). " else "SuperBoox isn't running. ") +
+                        "Android keeps it stopped until it's switched off and on again. " +
+                        if (AdvancedAccess.allowed()) "Restart does that for you." else "Restart opens its switch: turn it off, then on.",
+                ).apply { setPadding(dp(16), dp(4), dp(16), dp(6)) }
+                rows += buttonRow("Restart service" to { restartStoppedService() })
+                if (crashed != null) rows += paragraph("A debug report (Help → Troubleshooting) shows what went wrong; please send it.")
+                    .apply { setPadding(dp(16), 0, dp(16), dp(10)) }
+            }
+            else -> {
+                rows += paragraph(
+                    "Turn on \"SuperBoox Quick Access\" under Accessibility. On BOOX also open App Management for SuperBoox " +
+                        "and allow it to run in the background so the system doesn't freeze it.",
+                ).apply { setPadding(dp(16), dp(10), dp(16), dp(10)) }
+                rows += buttonRow("Accessibility settings" to { openServiceSwitch() })
+            }
         }
-        rows += buttonRow(
-            "Accessibility settings" to { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
-            "Open panel" to {
-                val s = QuickAccessService.instance
-                if (s == null) toast("Turn the service on first") else { s.showPanel() }
-            },
-        )
         list.addView(card(rows))
+    }
+
+    /**
+     * Switches the stopped service off and on: by itself with Advanced access (Android's own setting,
+     * as its switch writes it), otherwise by opening SuperBoox's switch in Android's settings.
+     */
+    private fun restartStoppedService() {
+        val cn = ComponentName(this, QuickAccessService::class.java)
+        val current = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+        if (!AdvancedAccess.allowed()) return openServiceSwitch()
+        val ours = setOf(cn.flattenToString().lowercase(), cn.flattenToShortString().lowercase())
+        val without = current.split(':').filter { it.isNotBlank() && it.lowercase() !in ours }.joinToString(":")
+        val withUs = (without.split(':').filter { it.isNotBlank() } + cn.flattenToString()).joinToString(":")
+        fun q(v: String) = "'" + v.replace("'", "") + "'"
+        val off = if (without.isEmpty()) "settings delete secure enabled_accessibility_services" else "settings put secure enabled_accessibility_services ${q(without)}"
+        DebugLog.i("service", "restarting through Advanced access")
+        AdvancedAccess.shell("sh", "-c", "$off; sleep 1; settings put secure enabled_accessibility_services ${q(withUs)}; settings put secure accessibility_enabled 1") { code, out ->
+            if (code != 0) {
+                DebugLog.w("service", "restart failed ($code): $out")
+                openServiceSwitch()
+            } else {
+                toast("SuperBoox restarted")
+                scroll.postDelayed({ render() }, 1500)
+            }
+        }
+    }
+
+    /** SuperBoox's own switch in Android's accessibility settings (or the list, where that page can't be opened directly). */
+    private fun openServiceSwitch() {
+        val cn = ComponentName(this, QuickAccessService::class.java)
+        val details = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS").putExtra(Intent.EXTRA_COMPONENT_NAME, cn.flattenToString())
+        if (runCatching { startActivity(details) }.isFailure) startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
     }
 
     private fun gestureSection() {

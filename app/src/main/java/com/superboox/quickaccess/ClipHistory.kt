@@ -268,17 +268,28 @@ object ClipHistory {
         return png
     }
 
-    /** Handwriting saved before it could be drawn: draws it from its kept files now (once). */
+    /** Handwriting saved before it could be drawn: points it at its picture once [draw] has made one. Cheap. */
     fun ensurePreview(context: Context, clip: Clip): Clip {
         val folder = clip.image?.takeIf { clip.kind == Kind.HANDWRITING && !it.endsWith(".png") } ?: return clip
-        val keep = File(dir(context), folder)
-        if (File(dir(context), "$folder.png").exists()) return clip.copy(image = "$folder.png").also { c -> save(context, list(context).map { if (it.id == c.id) c else it }) }
-        if (File(keep, "drawn-failed-2").exists()) return clip
-        val png = drawStrokes(keep, "$folder.png", context)
-        if (png == null) { runCatching { File(keep, "drawn-failed-2").createNewFile() }; return clip }
-        val updated = clip.copy(image = png)
-        save(context, list(context).map { if (it.id == clip.id) updated else it })
+        if (!File(dir(context), "$folder.png").exists()) return clip
+        val updated = clip.copy(image = "$folder.png")
+        save(context, list(context).map { if (it.id == updated.id) updated else it })
         return updated
+    }
+
+    /** Handwriting with kept files but no picture yet, and not already tried. */
+    fun needsDrawing(context: Context, clip: Clip): Boolean {
+        val folder = clip.image?.takeIf { clip.kind == Kind.HANDWRITING && !it.endsWith(".png") } ?: return false
+        return File(dir(context), folder).isDirectory && !File(dir(context), "$folder.png").exists() &&
+            !File(File(dir(context), folder), "drawn-failed-2").exists()
+    }
+
+    /** Draws [clip]'s handwriting to its picture (once; off the main thread). [ensurePreview] then uses it. */
+    fun draw(context: Context, clip: Clip) {
+        if (!needsDrawing(context, clip)) return
+        val folder = clip.image ?: return
+        val keep = File(dir(context), folder)
+        if (drawStrokes(keep, "$folder.png", context) == null) runCatching { File(keep, "drawn-failed-2").createNewFile() }
     }
 
     /** Android's "All files access" is on for SuperBoox: BOOX's copy folder can be read directly. */
@@ -331,7 +342,7 @@ object ClipHistory {
                 }
             }
         }
-        if (picture == null) picture = drawStrokes(keep, "h$stamp.png", context)
+        // The strokes are drawn later, off the main thread (the panel asks for it), since finding them can take a while.
         if (picture == null) DebugLog.i("clipboard", "handwriting: no picture in BOOX's copy (${files.size} files kept for drawing the strokes)")
         // No picture yet: the clip still points at its kept files (the folder), so they go when it's deleted.
         return picture ?: keep.name

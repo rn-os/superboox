@@ -254,36 +254,53 @@ object ClipHistory {
         return path.takeIf { Regex("[A-Za-z0-9._/-]+").matches(it) }
     }
 
+    /** Android's "All files access" is on for SuperBoox: BOOX's copy folder can be read directly. */
+    fun hasFileAccess(): Boolean = Build.VERSION.SDK_INT >= 30 && android.os.Environment.isExternalStorageManager()
+
     /**
-     * Through Advanced access (SuperBoox itself can't read BOOX's folder): logs
-     * what the copy folder holds, keeps a copy of its files so the strokes can be
-     * drawn later, and returns a picture from it for the preview if there is one.
+     * Reads BOOX's copy folder (directly with All files access, else through
+     * Advanced access): logs what it holds, keeps a copy of its files so the
+     * strokes can be drawn later, and returns a picture from it for the preview
+     * if there is one (else the kept folder's name).
      */
     private fun handwritingPreview(context: Context, folder: String): String? {
-        if (!AdvancedAccess.allowed()) {
-            DebugLog.i("clipboard", "handwriting preview needs Advanced access")
-            return null
+        val files: List<Pair<String, ByteArray>> = when {
+            hasFileAccess() -> {
+                val root = File(folder)
+                DebugLog.i("clipboard", "handwriting folder (file access): " + (root.walkTopDown().take(60).joinToString("\n  ", prefix = "\n  ") {
+                    "${if (it.isDirectory) "d" else "-"} ${it.length()} ${it.path.removePrefix(folder)}"
+                }))
+                root.walkTopDown().filter { it.isFile }.take(20).mapNotNull { f ->
+                    runCatching { f.path.removePrefix(folder) to f.readBytes() }.getOrNull()
+                }.toList()
+            }
+            AdvancedAccess.allowed() -> {
+                DebugLog.i("clipboard", "handwriting folder (Advanced access):\n" + AdvancedAccess.shellNow("ls -laR '$folder' 2>&1 | head -60").second)
+                AdvancedAccess.shellNow("find '$folder' -type f 2>/dev/null | head -20").second.lines().map { it.trim() }
+                    .filter { it.startsWith(folder) && Regex("[A-Za-z0-9._/ -]+").matches(it) }
+                    .mapNotNull { f -> AdvancedAccess.shellBytes("cat '$f'", max = 4 * 1024 * 1024)?.let { f.removePrefix(folder) to it } }
+            }
+            else -> {
+                DebugLog.i("clipboard", "handwriting preview needs All files access or Advanced access")
+                return null
+            }
         }
-        DebugLog.i("clipboard", "handwriting folder:\n" + AdvancedAccess.shellNow("ls -laR '$folder' 2>&1 | head -60").second)
-        val files = AdvancedAccess.shellNow("find '$folder' -type f 2>/dev/null | head -20").second.lines().map { it.trim() }.filter { it.startsWith(folder) }
         val stamp = System.currentTimeMillis()
         val keep = File(dir(context), "h$stamp").apply { mkdirs() }
         var picture: String? = null
-        for (f in files) {
-            if (!Regex("[A-Za-z0-9._/ -]+").matches(f)) continue
-            val bytes = AdvancedAccess.shellBytes("cat '$f'", max = 4 * 1024 * 1024) ?: continue
-            File(keep, f.removePrefix(folder).trim('/').replace('/', '_').ifEmpty { "file" }).writeBytes(bytes)
+        for ((name, bytes) in files) {
+            File(keep, name.trim('/').replace('/', '_').ifEmpty { "file" }).writeBytes(bytes)
             val hex = bytes.take(64).joinToString(" ") { "%02x".format(it) }
             val text = String(bytes.take(240).map { c -> if (c in 32..126) c.toInt().toChar() else '.' }.toCharArray())
-            DebugLog.i("clipboard", "handwriting file ${f.removePrefix(folder)} (${bytes.size} bytes)\n  hex: $hex\n  text: $text")
+            DebugLog.i("clipboard", "handwriting file $name (${bytes.size} bytes)\n  hex: $hex\n  text: $text")
             if (picture == null) {
                 val bmp = runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull()
                 if (bmp != null) {
-                    val name = "h$stamp.png"
-                    File(dir(context), name).outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
-                    DebugLog.i("clipboard", "handwriting preview from ${f.removePrefix(folder)} (${bmp.width}x${bmp.height})")
+                    val png = "h$stamp.png"
+                    File(dir(context), png).outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                    DebugLog.i("clipboard", "handwriting preview from $name (${bmp.width}x${bmp.height})")
                     bmp.recycle()
-                    picture = name
+                    picture = png
                 }
             }
         }

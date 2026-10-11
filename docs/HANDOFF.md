@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 55)
+# SuperBoox: handoff / status (as of build 56)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -252,6 +252,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - `ClipHistory.handwritingPreview`: through Shizuku (`AdvancedAccess.shellBytes`, raw output) lists the folder (`/storage/emulated/0/.noteCache/CopyPoints/<uuid>`), copies its files into `filesDir/clips/h<time>/`, logs each file's size, first 64 bytes (hex) and readable text, and uses the first file that decodes as a picture as the preview (`h<time>.png`). The clip's `image` is the png or, without one, the folder, so deleting the clip removes the kept files (`discardFiles`).
 - `putBack` for handwriting falls back to the link as text (`text/uri-list`, label kept) when Android refuses the link itself; whether BOOX pastes that is untested.
 - Next: from the logged file format, draw the strokes into a preview when BOOX's folder has no picture.
+
+## Build 56
+- Optional `MANAGE_EXTERNAL_STORAGE` ("All files access", user switch in Android settings; `tools:ignore="ScopedStorage"`). Settings › Clipboard › Handwriting previews explains it and opens the switch (`openAllFilesAccess`). `ClipHistory.handwritingPreview` reads BOOX's copy folder directly when `hasFileAccess()`, else through Shizuku, else logs that it needs one of them. Only that folder is read. Debug report shows both.
+- Stroke drawing still waits on a report with the logged file format.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Needed to list launchable apps (dock + app pins) on Android 11+. -->
     <!-- Optional, granted by the user in Android settings: lets the Auto-rotate Quick
          Control switch rotation directly (BOOX's own tile always opens its rotation menu). -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <!-- Optional, granted by the user in Android settings (All files access): lets the
+         Clipboard read BOOX Notes' handwriting copy folder for its preview without
+         Advanced access. Only that folder is read. -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
 
     <queries>
         <!-- BOOX Notes: the editor has no launcher icon on newer firmware, and the

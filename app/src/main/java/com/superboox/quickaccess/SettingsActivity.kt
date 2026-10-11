@@ -1006,6 +1006,14 @@ class SettingsActivity : Activity() {
             keepRow("Codes", "Short codes on their own, like a 6-digit sign-in code. Off by default; they're usually only needed once.", everyCopy, prefs.clipKeepCodes) { prefs.clipKeepCodes = it },
             keepRow("Passwords and private copies", "Never kept: copies from password managers and anything an app marks as private.", null, true, locked = true) {},
         )))
+        list.addView(heading("Handwriting previews"))
+        val files = ClipHistory.hasFileAccess()
+        list.addView(card(listOf(
+            cardText(if (files) "On: SuperBoox reads BOOX Notes' copy folder directly to show what handwriting you copied. It reads nothing else."
+                else "Handwriting copied in BOOX Notes is kept in a BOOX folder SuperBoox can't open on its own. Allow All files access to show a preview of it " +
+                    "even when Advanced access isn't running (e.g. after a restart). SuperBoox only reads BOOX's copy folder."),
+            buttonRow((if (files) "Change in Android settings" else "Allow file access") to { openAllFilesAccess() }),
+        )))
         list.addView(note("Every copy with Advanced access: caught as you copy while Advanced access is on; otherwise saved when you open the panel (only the latest copy). " +
             "Only when the panel opens: Android doesn't let SuperBoox fetch images in the background, even with Advanced access. Unticking a kind doesn't remove clips already saved."))
         list.addView(heading("While the clipboard is open, still show"))
@@ -1104,6 +1112,12 @@ class SettingsActivity : Activity() {
         addView(MiniPanel.view(context, listOfNotNull("Top bar", if (controls) "Quick Controls" else null, if (last) "Last Opened" else null),
             "Clipboard", listOfNotNull(if (apps) "Apps" else null)), lp(dp(78), dp(122)))
         addView(text(label, 12f).apply { gravity = Gravity.CENTER; setPadding(0, dp(4), 0, 0) })
+    }
+
+    /** Android's "All files access" switch for SuperBoox (Special app access). */
+    private fun openAllFilesAccess() {
+        val direct = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName"))
+        if (!Launcher.tryStart(this, direct)) Launcher.tryStart(this, Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
     }
 
     /** Ignored apps that are installed (the built-in password manager list stays ignored even when not shown). */

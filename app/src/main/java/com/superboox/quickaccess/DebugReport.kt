@@ -72,6 +72,7 @@ object DebugReport {
             line("clips: ${clips.size} (${clips.count { it.pinned }} pinned, ${clips.count { it.kind == ClipHistory.Kind.IMAGE }} images, ${clips.count { it.kind == ClipHistory.Kind.LINK }} links, ${clips.count { it.kind == ClipHistory.Kind.HANDWRITING }} handwriting)")
         }
         line("background read problem: ${ClipHistory.backgroundProblem() ?: "none"}")
+        line("all files access: ${ClipHistory.hasFileAccess()}; advanced access: ${AdvancedAccess.allowed()}")
 
         section("Front light: system settings")
         lightSettings(context).forEach { line(it) }

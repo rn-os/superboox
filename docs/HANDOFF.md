@@ -307,3 +307,4 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - When a window event brings `com.onyx` (BOOX home) to the front, `newNoteBackCheck` runs 300 ms later. If the active root is BOOX home and not the create-note screen, it calls `reopen(origin)`.
   - `reopen` handles each kind of origin: Notes reopens the note, NeoReader its book, a launcher package gets a HOME intent, and anything else is launched as an app. `openPreviousApp` now uses `reopen` too.
   - The same check also catches Back out of the newly created note. Going to any other app, or 3 hours passing, cancels the watch.
+- Reddit stock images are in `docs/launch/reddit/` (hero with callouts, clipboard, light, tour, live, settings). They come from the same `launch.html` (`#hero`, `#tour`, `#live`) and are rendered by the scratchpad script `render-reddit.mjs`.

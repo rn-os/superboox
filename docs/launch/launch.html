@@ -1,6 +1,6 @@
 <!doctype html>
 <html><head><meta charset="utf-8">
-<!-- Launch images: the panel as built (build 62), with made-up names and a public-domain book. Rendered at 2x. -->
+<!-- Launch and Reddit images: the panel as built (build 63), with made-up names and a public-domain book. Rendered at 2x. -->
 <style>
   @font-face { font-family: Roboto; src: url(../mockups/fonts/roboto-latin-400-normal.woff2); }
   @font-face { font-family: Roboto; font-weight: 500; src: url(../mockups/fonts/roboto-latin-500-normal.woff2); }
@@ -102,6 +102,30 @@
   .hs .menu .t { flex: 1; } .hs .menu .chev { font-size: 22px; font-weight: 700; }
   .hs .para { padding: 10px 20px 0; }
   .clip .thumb { width: 220px; height: 80px; }
+  .dim { position: absolute; top: 0; bottom: 0; left: 0; right: 480px; background: rgba(250,250,247,.97); }
+  .co { position: absolute; right: 500px; display: flex; align-items: center; gap: 12px; max-width: 560px; }
+  .co .n { width: 34px; height: 34px; border-radius: 50%; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 700; flex: none; }
+  .co .tx { border: 2px solid #000; background: #fff; border-radius: 10px; padding: 8px 14px; font-size: 16px; line-height: 1.35; }
+  .co .tx b { font-size: 18px; }
+  .co .ln { width: 24px; height: 2px; background: #000; flex: none; }
+  .hero-t { position: absolute; left: 60px; top: 530px; width: 600px; }
+  .hero-t h1 { font-size: 46px; margin: 0; } .hero-t div { font-size: 20px; color: #333; margin-top: 6px; }
+  .tset { position: absolute; inset: 26px 480px 0 0; background: #fff; display: flex; flex-direction: column; }
+  .tset .bar { display: flex; align-items: center; padding: 18px 24px 8px; font-size: 14px; font-weight: 700; letter-spacing: .05em; }
+  .tset .skip { margin-left: auto; font-size: 15px; letter-spacing: 0; border: 2px solid #000; border-radius: 6px; padding: 6px 12px; }
+  .tset h2 { font-size: 32px; margin: 6px 24px 10px; }
+  .tset p { font-size: 18px; line-height: 1.45; margin: 0 24px 14px; color: #222; }
+  .tset .steps { flex: 1; display: flex; flex-direction: column; gap: 16px; padding: 4px 24px; font-size: 17px; line-height: 1.4; }
+  .tset .steps > div { display: flex; gap: 12px; }
+  .tset .num { width: 28px; height: 28px; border-radius: 50%; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; flex: none; }
+  .tset .tfoot { display: flex; align-items: center; gap: 12px; padding: 16px 24px 22px; border-top: 2px solid #000; }
+  .tset .tfoot .btn { flex: none; min-width: 140px; min-height: 48px; font-size: 17px; }
+  .tset .tfoot .go { background: #000; color: #fff; }
+  .tdots { display: flex; gap: 8px; flex: 1; justify-content: center; }
+  .tdots i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #000; } .tdots i.on { background: #000; }
+  .pvtag { position: absolute; z-index: 5; right: 240px; transform: translateX(50%); bottom: 230px; background: #000; color: #fff; font-size: 13px; font-weight: 700; padding: 4px 12px; border-radius: 10px; white-space: nowrap; }
+  .sl2 { padding: 14px 18px; } .sl2 .t { font-size: 17px; } .sl2 .tr { height: 6px; background: #999; border-radius: 3px; margin-top: 14px; position: relative; }
+  .sl2 .tr i { position: absolute; left: 0; top: 0; bottom: 0; background: #000; border-radius: 3px; } .sl2 .tr b { position: absolute; top: -8px; width: 22px; height: 22px; border-radius: 50%; background: #000; }
 </style></head>
 <body><div class="stage" id="stage"></div>
 <script>
@@ -308,5 +332,34 @@ const SCREENS = {
   light: () => over(topBar(false) + qc + flMine + lastW + qaBar(false) + pins2 + apps),
   settings: () => sbar + homeSettings,
 };
+
+// ---- Extra stock images for the Reddit post ----
+const co = (top, n, title, text) => `<div class="co" style="top:${top}px"><div class="tx"><b>${title}</b> ${text}</div><div class="ln"></div><div class="n">${n}</div></div>`;
+const hero = () => over(topBar(false) + qc + lastW + qaBar(false) + pins4 + apps).replace(`<div class="panel">`, `<div class="dim"></div><div class="hero-t"><h1>SuperBoox</h1><div>A Supernote-style Quick Access panel for BOOX. Swipe the screen edge on any page.</div></div><div class="panel">`) +
+  co(14, 1, "Top bar.", "Clipboard, New Note, Settings. Hold New Note for BOOX's templates.") +
+  co(110, 2, "Quick Controls.", "Tap to switch, hold for more. Front Light has presets.") +
+  co(232, 3, "Last opened", "note and document, one tap back.") +
+  co(400, 4, "Quick Access.", "Pinned notes, books, folders, apps. Add pins what's open; Recent lists what you opened.") +
+  co(745, 5, "Your apps,", "a swipe for more.");
+
+const tour = () => `${sbar}<div class="tset"><div class="bar">STEP 4 OF 8<span class="skip">Skip tour</span></div>
+  <h2>Around the panel</h2><p>The real panel is open beside this page, with your own items. Here's what each part does:</p>
+  <div class="steps">
+    <div><span class="num">1</span><div><b>Top bar.</b> Clipboard, New Note, Settings.</div></div>
+    <div><span class="num">2</span><div><b>Quick Controls.</b> Tap to switch, hold for more (Front Light: its presets).</div></div>
+    <div><span class="num">3</span><div><b>Last opened</b> note and document.</div></div>
+    <div><span class="num">4</span><div><b>Quick Access.</b> Your pinned notes, books, folders. <b>Add</b> pins what's open; hold the list to edit it. <b>Recent</b> lists recent files.</div></div>
+    <div><span class="num">5</span><div><b>Apps</b> at the bottom, swipe for more.</div></div></div>
+  <div class="tfoot"><div class="btn">‹ Previous</div><div class="tdots">${Array.from({ length: 8 }, (_, k) => `<i class="${k === 3 ? "on" : ""}"></i>`).join("")}</div><div class="btn go">Next ›</div></div></div>
+  <div class="panel">${topBar(false) + qc + lastW + qaBar(false) + pins4 + apps}</div>`;
+
+const sl2 = (t, pct) => `<div class="sl2"><div class="t">${t}</div><div class="tr"><i style="width:${pct}%"></i><b style="left:calc(${pct}% - 11px)"></b></div></div>`;
+const live = () => `${sbar}<div class="tset" style="display:block">${head("Look &amp; size")}
+  <div class="sec">SIZE</div><div class="card" style="margin:0 16px">${sl2("Panel width: 40% of screen", 22)}<div class="choice">Menu size<b>Large ›</b></div></div>
+  <div class="para" style="padding:12px 24px;font-size:16px">The real panel shows beside this page while you change these, at the size you pick. Tap anywhere on this side, or go back, to close it.</div>
+  <div class="sec">PAGES</div><div class="card" style="margin:0 16px"><div class="check"><div class="box on"></div>Remember the last page</div><div class="check"><div class="box"></div>Use apps' own icons</div></div></div>
+  <div class="panel">${topBar(false) + qc + lastW + qaBar(false) + pins4 + apps}</div><div class="pvtag">PREVIEW · 40%</div>`;
+
+Object.assign(SCREENS, { hero, tour, live });
 document.getElementById("stage").innerHTML = `<div class="device"><div class="screen">${SCREENS[location.hash.slice(1) || "panel"]()}</div></div>`;
 </script></body></html>

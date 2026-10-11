@@ -37,3 +37,16 @@ I've tested it on a Note Air 6C (Android 16, firmware 4.3). Other models should 
 GitHub: https://github.com/rn-os/superboox
 
 Built with Claude Code. Feedback and feature requests welcome!
+
+---
+
+**Images** (in `docs/launch/reddit/`, upload as a gallery in this order; captions to paste):
+
+1. `1-hero.png`: The panel, swiped open over a book.
+2. `2-clipboard.png`: Clipboard history. Handwriting lasso-copied in BOOX Notes shows as a picture.
+3. `3-light.png`: Hold Front Light for presets, including your own.
+4. `4-tour.png`: The first-run tour explains the real panel beside it.
+5. `5-live.png`: Settings show the real panel while you change it.
+6. `6-settings.png`: Settings home.
+
+All names and content in the images are made up, and the book is *Walden* (public domain).

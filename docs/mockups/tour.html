@@ -1,0 +1,312 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- Proposal after build 58: a first-run tour (Next, Previous, Skip). -->
+<style>
+  @font-face { font-family: Roboto; src: url(fonts/roboto-latin-400-normal.woff2); }
+  @font-face { font-family: Roboto; font-weight: 500; src: url(fonts/roboto-latin-500-normal.woff2); }
+  @font-face { font-family: Roboto; font-weight: 700; src: url(fonts/roboto-latin-700-normal.woff2); }
+  body { margin: 0; background: #e8e8e8; font-family: Roboto, sans-serif; color: #000; }
+  .stage { display: flex; gap: 28px; padding: 28px; width: max-content; align-items: flex-start; }
+  .notes { width: 330px; font-size: 15px; line-height: 1.45; }
+  .notes h3 { font-size: 20px; margin: 0 0 10px; }
+  .notes li { margin-bottom: 8px; }
+  .panel { width: 480px; height: 1000px; background: #fff; border-left: 3px solid #000; display: flex; flex-direction: column; box-shadow: 0 4px 16px rgba(0,0,0,.15); position: relative; }
+  svg { display: block; flex: none; }
+  .top { display: flex; border-bottom: 1.5px solid #000; }
+  .top .c { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 12px 0 9px; font-size: 15px; font-weight: 500; gap: 4px; }
+  .top .sep { width: 1.5px; background: #000; }
+  .top .gear { width: 50px; display: flex; align-items: center; justify-content: center; }
+  .qc { border-bottom: 2.5px solid #000; padding: 12px 6px 4px; }
+  .tiles { display: grid; grid-template-columns: repeat(5, 1fr); row-gap: 10px; }
+  .tile { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 12px; text-align: center; line-height: 1.15; }
+  .dot { width: 54px; height: 54px; border-radius: 50%; border: 2px solid #000; display: flex; align-items: center; justify-content: center; box-sizing: border-box; background: #fff; }
+  .dot.on { background: #000; }
+  .pager { display: flex; justify-content: center; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; padding: 6px 0 4px; }
+  .last { display: flex; align-items: center; padding: 11px 16px; gap: 14px; }
+  .last b { display: block; font-size: 17px; font-weight: 500; } .last span { display: block; font-size: 13px; color: #333; }
+  .ir { height: 1px; background: #000; margin: 0 16px; flex: none; }
+  .qa { position: relative; text-align: center; font-size: 17px; font-weight: 700; padding: 13px 16px; border-top: 2.5px solid #000; border-bottom: 1px solid #000; }
+  .qa .add { position: absolute; right: 10px; top: 7px; display: flex; flex-direction: column; align-items: center; font-size: 11px; font-weight: 400; }
+  .pin { display: flex; align-items: center; gap: 12px; padding: 12px 18px; font-size: 17px; }
+  .apps { margin-top: auto; border-top: 2.5px solid #000; }
+  .apps .row { display: flex; } .apps .row + .row { border-top: 1px solid #000; }
+  .apps .cell { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 8px 0; font-size: 14px; gap: 3px; }
+  .apps .vs { width: 1px; background: #000; margin: 10px 0; }
+  .appi { width: 40px; height: 40px; border-radius: 10px; background: #3a3a3a; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; }
+  .bubble { position: absolute; background: #fff; border: 2px solid #000; border-radius: 12px; padding: 6px 10px; font-size: 13px; font-weight: 500; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+  /* settings */
+  .set { width: 620px; height: 1000px; background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.15); overflow: hidden; position: relative; }
+  .title { font-size: 28px; font-weight: 700; padding: 18px 16px 10px; } .rule3 { height: 3px; background: #000; }
+  .sec { padding: 18px 20px 8px; font-size: 14px; font-weight: 700; letter-spacing: .06em; }
+  .card { margin: 0 12px; border: 2px solid #000; border-radius: 8px; overflow: hidden; }
+  .card > * + * { border-top: 1px solid #000; }
+  .choice { display: flex; align-items: center; padding: 12px 16px; font-size: 17px; font-weight: 500; } .choice b { margin-left: auto; font-size: 15px; }
+  .check { display: flex; align-items: center; gap: 14px; padding: 10px 16px 10px 18px; font-size: 17px; }
+  .box { width: 18px; height: 18px; border: 2px solid #000; border-radius: 2px; position: relative; flex: none; }
+  .box.on { background: #000; }
+  .box.on::after { content: ""; position: absolute; left: 5px; top: 1px; width: 5px; height: 10px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .item { display: flex; align-items: center; padding: 7px 10px 7px 14px; gap: 6px; }
+  .item .t { flex: 1; min-width: 0; padding-left: 6px; } .item .t1 { font-size: 17px; font-weight: 500; } .item .t2 { font-size: 13px; color: #333; }
+  .ib { width: 38px; height: 38px; border: 2px solid #000; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .ib.off { border-color: #888; } .ib.off path { fill: #888; }
+  .btns { display: flex; gap: 8px; padding: 10px 12px; }
+  .btn { flex: 1; min-height: 42px; border: 2px solid #000; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; }
+  .para { font-size: 14px; color: #333; padding: 8px 20px 4px; line-height: 1.4; }
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,.35); }
+  .dialog { position: absolute; left: 36px; right: 36px; top: 40px; bottom: 24px; background: #fff; border: 2px solid #000; border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; }
+  .dialog h4 { margin: 0; padding: 16px 18px 10px; font-size: 20px; }
+  .grp { padding: 12px 18px 4px; font-size: 13px; font-weight: 700; letter-spacing: .06em; }
+  .opt { display: flex; align-items: center; gap: 12px; padding: 6px 18px; }
+  .opt .added { margin-left: auto; font-size: 12.5px; font-weight: 700; color: #555; }
+  .opt .t1 { font-size: 16px; font-weight: 500; } .opt .t2 { font-size: 12.5px; color: #333; }
+  .fl { margin: 6px 10px 10px; border: 2px solid #000; border-radius: 10px; padding: 8px 6px 10px; }
+  .fl .hd { display: flex; align-items: center; padding: 0 8px 8px; font-size: 16px; font-weight: 700; }
+  .fl .hd .x { margin-left: auto; }
+  .fl .row { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .sl { display: flex; align-items: center; gap: 10px; padding: 6px 8px; }
+  .sl .pm { width: 34px; height: 34px; border: 2px solid #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; flex: none; box-sizing: border-box; }
+  .sl .bar { flex: 1; height: 14px; border: 2px solid #000; border-radius: 7px; position: relative; overflow: hidden; }
+  .sl .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: #000; }
+  .sl .v { width: 30px; text-align: right; font-size: 17px; font-weight: 700; }
+  .sub { margin: 8px 6px 0; border-top: 1.5px dashed #000; padding-top: 6px; }
+  .sub .lbl { font-size: 13px; font-weight: 700; padding: 0 8px 2px; display: flex; justify-content: space-between; }
+  .dots { display: flex; justify-content: center; gap: 8px; padding-top: 8px; font-size: 13px; font-weight: 700; align-items: center; }
+  .plus { border-style: dashed !important; }
+  .opt2 { display: flex; gap: 14px; padding: 12px 16px; align-items: flex-start; }
+  .back { width: 40px; height: 40px; border: 2px solid #000; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .handle { width: 30px; display: flex; flex-direction: column; gap: 4px; align-items: center; flex: none; }
+  .handle i { width: 20px; height: 3px; background: #000; border-radius: 2px; }
+  .lift { box-shadow: 0 6px 14px rgba(0,0,0,.35); border: 2px solid #000 !important; border-radius: 8px; background: #fff; position: relative; z-index: 2; margin: -4px -8px; }
+  .hole { height: 56px; border: 2px dashed #000; border-radius: 8px; margin: 4px 10px; }
+  .menu { display: flex; align-items: center; gap: 14px; padding: 12px 14px; }
+  .menu .ic { width: 40px; height: 40px; border: 2px solid #000; border-radius: 20px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .menu .t1 { font-size: 18px; font-weight: 500; } .menu .t2 { font-size: 13px; color: #333; }
+  .new { outline: 3px dashed #000; outline-offset: 3px; }
+  .fl .hint { font-size: 12.5px; color: #333; text-align: center; padding-top: 8px; }
+</style></head>
+<body><div class="stage" id="stage"></div>
+<script>
+const F = {
+  clock: "M11.99,2C6.47,2 2,6.48 2,12s4.47,10 9.99,10C17.52,22 22,17.52 22,12S17.52,2 11.99,2zM12,20c-4.42,0 -8,-3.58 -8,-8s3.58,-8 8,-8 8,3.58 8,8 -3.58,8 -8,8zM12.5,7H11v6l5.25,3.15 0.75,-1.23 -4.5,-2.67z",
+  book: "M21,5c-1.11,-0.35 -2.33,-0.5 -3.5,-0.5 -1.95,0 -4.05,0.4 -5.5,1.5 -1.45,-1.1 -3.55,-1.5 -5.5,-1.5S2.45,4.9 1,6v14.65c0,0.25 0.25,0.5 0.5,0.5 0.1,0 0.15,-0.05 0.25,-0.05C3.1,20.45 5.05,20 6.5,20c1.95,0 4.05,0.4 5.5,1.5 1.35,-0.85 3.8,-1.5 5.5,-1.5 1.65,0 3.35,0.3 4.75,1.05 0.1,0.05 0.15,0.05 0.25,0.05 0.25,0 0.5,-0.25 0.5,-0.5V6c-0.6,-0.45 -1.25,-0.75 -2,-1zM21,18.5c-1.1,-0.35 -2.3,-0.5 -3.5,-0.5 -1.7,0 -4.15,0.65 -5.5,1.5V8c1.35,-0.85 3.8,-1.5 5.5,-1.5 1.2,0 2.4,0.15 3.5,0.5v11.5z",
+  link_add: "M8,11h8v2H8zM20.1,12H22c0,-2.76 -2.24,-5 -5,-5h-4v1.9h4c1.71,0 3.1,1.39 3.1,3.1zM3.9,12c0,-1.71 1.39,-3.1 3.1,-3.1h4V7H7c-2.76,0 -5,2.24 -5,5s2.24,5 5,5h4v-1.9H7c-1.71,0 -3.1,-1.39 -3.1,-3.1zM19,12h-2v3h-3v2h3v3h2v-3h3v-2h-3z",
+  settings: "M3,17v2h6v-2H3zM3,5v2h10V5H3zM13,21v-2h8v-2h-8v-2h-2v6h2zM7,9v2H3v2h4v2h2V9H7zM21,13v-2H11v2h10zM15,9h2V7h4V5h-4V3h-2v6z",
+  wifi: "M1,9l2,2c4.97,-4.97 13.03,-4.97 18,0l2,-2C16.93,2.93 7.08,2.93 1,9zM9,17l3,3 3,-3c-1.65,-1.66 -4.34,-1.66 -6,0zM5,13l2,2c2.76,-2.76 7.24,-2.76 10,0l2,-2C15.14,9.14 8.87,9.14 5,13z",
+  bt: "M17.71,7.71L12,2h-1v7.59L6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 11,14.41V22h1l5.71,-5.71 -4.3,-4.29 4.3,-4.29zM13,5.83l1.88,1.88L13,9.59V5.83zM14.88,16.29L13,18.17v-3.76l1.88,1.88z",
+  plane: "M21,16v-2l-8,-5V3.5c0,-0.83 -0.67,-1.5 -1.5,-1.5S10,2.67 10,3.5V9l-8,5v2l8,-2.5V19l-2,1.5V22l3.5,-1 3.5,1v-1.5L13,19v-5.5l8,2.5z",
+  moon: "M12,3c-4.97,0 -9,4.03 -9,9s4.03,9 9,9 9,-4.03 9,-9c0,-0.46 -0.04,-0.92 -0.1,-1.36 -0.98,1.37 -2.58,2.26 -4.4,2.26 -2.98,0 -5.4,-2.42 -5.4,-5.4 0,-1.81 0.89,-3.42 2.26,-4.4C12.92,3.04 12.46,3 12,3z",
+  light: "M20,8.69V4h-4.69L12,0.69 8.69,4H4v4.69L0.69,12 4,15.31V20h4.69L12,23.31 15.31,20H20v-4.69L23.31,12 20,8.69zM12,18c-3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6 6,2.69 6,6 -2.69,6 -6,6zM12,8c-2.21,0 -4,1.79 -4,4s1.79,4 4,4 4,-1.79 4,-4 -1.79,-4 -4,-4z",
+  refresh: "M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z",
+  lock: "M18,8h-1V6c0,-2.76 -2.24,-5 -5,-5S7,3.24 7,6v2H6c-1.1,0 -2,0.9 -2,2v10c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V10c0,-1.1 -0.9,-2 -2,-2zM12,17c-1.1,0 -2,-0.9 -2,-2s0.9,-2 2,-2 2,0.9 2,2 -0.9,2 -2,2zM15.1,8H8.9V6c0,-1.71 1.39,-3.1 3.1,-3.1 1.71,0 3.1,1.39 3.1,3.1v2z",
+  back: "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z",
+  home: "M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z",
+  recents: "M3,5v14h18V5H3zM19,17H5V7h14v10z",
+  bell: "M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.89,2 2,2zM18,16v-5c0,-3.07 -1.64,-5.64 -4.5,-6.32V4c0,-0.83 -0.67,-1.5 -1.5,-1.5s-1.5,0.67 -1.5,1.5v0.68C7.63,5.36 6,7.92 6,11v5l-2,2v1h16v-1l-2,-2z",
+  crop: "M17,15h2V7c0,-1.1 -0.9,-2 -2,-2H9v2h8v8zM7,17V1H5v4H1v2h4v10c0,1.1 0.9,2 2,2h10v4h2v-4h4v-2H7z",
+  rotate: "M7.11,8.53L5.7,7.11C4.8,8.27 4.24,9.61 4.07,11h2.02c0.14,-0.87 0.49,-1.72 1.02,-2.47zM6.09,13H4.07c0.17,1.39 0.72,2.73 1.62,3.89l1.41,-1.42c-0.52,-0.75 -0.87,-1.59 -1.01,-2.47zM7.1,18.32c1.16,0.9 2.51,1.44 3.9,1.61V17.9c-0.87,-0.15 -1.71,-0.49 -2.46,-1.03L7.1,18.32zM13,4.07V1L8.45,5.55 13,10V6.09c2.84,0.48 5,2.94 5,5.91s-2.16,5.43 -5,5.91v2.02c3.95,-0.49 7,-3.85 7,-7.93s-3.05,-7.44 -7,-7.93z",
+  mute: "M16.5,12c0,-1.77 -1.02,-3.29 -2.5,-4.03v2.21l2.45,2.45c0.03,-0.2 0.05,-0.41 0.05,-0.63zM19,12c0,0.94 -0.2,1.82 -0.54,2.64l1.51,1.51C20.63,14.91 21,13.5 21,12c0,-4.28 -2.99,-7.86 -7,-8.77v2.06c2.89,0.86 5,3.54 5,6.71zM4.27,3L3,4.27 7.73,9H3v6h4l5,5v-6.73l4.25,4.25c-0.67,0.52 -1.42,0.93 -2.25,1.18v2.06c1.38,-0.31 2.63,-0.95 3.69,-1.81L19.73,21 21,19.73l-9,-9L4.27,3zM12,4L9.91,6.09 12,8.18V4z",
+  rec: "M17,10.5V7c0,-0.55 -0.45,-1 -1,-1H4c-0.55,0 -1,0.45 -1,1v10c0,0.55 0.45,1 1,1h12c0.55,0 1,-0.45 1,-1v-3.5l4,4v-11l-4,4z",
+  left: "M15.41,7.41L14,6l-6,6 6,6 1.41,-1.41L10.83,12z", right: "M10,6L8.59,7.41 13.17,12l-4.58,4.59L10,18l6,-6z",
+  up: "M7.41,15.41L12,10.83l4.59,4.58L18,14l-6,-6 -6,6z", down: "M7.41,8.59L12,13.17l4.59,-4.58L18,10l-6,6 -6,-6z",
+  del: "M6,19c0,1.1 0.9,2 2,2h8c1.1,0 2,-0.9 2,-2V7H6v12zM19,4h-3.5l-1,-1h-5l-1,1H5v2h14V4z",
+  navi: "M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM12,17c-2.76,0 -5,-2.24 -5,-5s2.24,-5 5,-5 5,2.24 5,5 -2.24,5 -5,5z",
+};
+const S = {
+  note: "M7,3h10a2,2 0 0 1 2,2v14a2,2 0 0 1 -2,2H7z M4,7.5h5 M4,12h5 M4,16.5h5 M12,8.5h4 M12,12h4 M12,15.5h3",
+  note_new: "M7,3h10a2,2 0 0 1 2,2v14a2,2 0 0 1 -2,2H7z M4,7.5h5 M4,12h5 M4,16.5h5 M14,8.5v7 M10.5,12h7",
+  split: "M4,4h7v16H4z M13,4h7v16h-7z",
+};
+const g = (k, s = 24, c = "#000") => S[k]
+  ? `<svg width="${s}" height="${s}" viewBox="0 0 24 24"><path fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round" d="${S[k]}"/></svg>`
+  : `<svg width="${s}" height="${s}" viewBox="0 0 24 24"><path fill="${c}" d="${F[k]}"/></svg>`;
+F.bright = F.light;
+F.close = "M19,6.41L17.59,5 12,10.59 6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 12,13.41 17.59,19 19,17.59 13.41,12z";
+S.off = "M12,7a5,5 0 1 1 0,10a5,5 0 1 1 0,-10 M12,1.5v2.5 M12,20v2.5 M1.5,12h2.5 M20,12h2.5 M3,3l18,18";
+const notes = (h, items) => `<div class="notes"><h3>${h}</h3><ul>${items.map(i => `<li>${i}</li>`).join("")}</ul></div>`;
+const ib = (k, off) => `<div class="ib ${off ? "off" : ""}">${g(k, 22)}</div>`;
+const radio = (on, t1, t2) => `<div class="opt2"><div class="radio ${on ? "on" : ""}" style="width:20px;height:20px;border:2px solid #000;border-radius:50%;flex:none;box-sizing:border-box;${on ? "background:radial-gradient(#000 45%,#fff 50%)" : ""}"></div><div><div class="t1" style="font-size:17px;font-weight:500">${t1}</div><div class="t2" style="font-size:13px;color:#333">${t2}</div></div></div>`;
+const head = (t) => `<div class="title" style="display:flex;align-items:center;gap:12px"><div class="back">${g("left", 26)}</div>${t}</div><div class="rule3"></div>`;
+F.drag = "M20,9H4v2h16V9zM4,15h16v-2H4v2z";
+F.save = "M17,3H5c-1.11,0 -2,0.9 -2,2v14c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2V7l-4,-4zM12,19c-1.66,0 -3,-1.34 -3,-3s1.34,-3 3,-3 3,1.34 3,3 -1.34,3 -3,3zM15,9H5V5h10v4z";
+F.bug = "M20,8h-2.81c-0.45,-0.78 -1.07,-1.45 -1.82,-1.96L17,4.41 15.59,3l-2.17,2.17C12.96,5.06 12.49,5 12,5s-0.96,0.06 -1.41,0.17L8.41,3 7,4.41l1.62,1.63C7.88,6.55 7.26,7.22 6.81,8H4v2h2.09c-0.05,0.33 -0.09,0.66 -0.09,1v1H4v2h2v1c0,0.34 0.04,0.67 0.09,1H4v2h2.81c1.04,1.79 2.97,3 5.19,3s4.15,-1.21 5.19,-3H20v-2h-2.09c0.05,-0.33 0.09,-0.66 0.09,-1v-1h2v-2h-2v-1c0,-0.34 -0.04,-0.67 -0.09,-1H20V8zM14,16h-4v-2h4v2zM14,12h-4v-2h4v2z";
+F.plus = "M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z";
+F.book2 = F.book; F.pencil = "M3,17.25V21h3.75L17.81,9.94l-3.75,-3.75L3,17.25zM20.71,7.04c0.39,-0.39 0.39,-1.02 0,-1.41l-2.34,-2.34c-0.39,-0.39 -1.02,-0.39 -1.41,0l-1.83,1.83 3.75,3.75 1.83,-1.83z";
+F.clip = "M19,2h-4.18C14.4,0.84 13.3,0 12,0c-1.3,0 -2.4,0.84 -2.82,2H5c-1.1,0 -2,0.9 -2,2v16c0,1.1 0.9,2 2,2h14c1.1,0 2,-0.9 2,-2V4c0,-1.1 -0.9,-2 -2,-2zM12,2c0.55,0 1,0.45 1,1s-0.45,1 -1,1 -1,-0.45 -1,-1 0.45,-1 1,-1zM19,20H5V4h2v3h10V4h2v16z";
+F.copy = "M16,1H4c-1.1,0 -2,0.9 -2,2v14h2V3h12V1zM19,5H8c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h11c1.1,0 2,-0.9 2,-2V7c0,-1.1 -0.9,-2 -2,-2zM19,21H8V7h11v14z";
+F.link = "M3.9,12c0,-1.71 1.39,-3.1 3.1,-3.1h4V7H7c-2.76,0 -5,2.24 -5,5s2.24,5 5,5h4v-1.9H7c-1.71,0 -3.1,-1.39 -3.1,-3.1zM8,13h8v-2H8v2zM17,7h-4v1.9h4c1.71,0 3.1,1.39 3.1,3.1s-1.39,3.1 -3.1,3.1h-4V17h4c2.76,0 5,-2.24 5,-5s-2.24,-5 -5,-5z";
+F.text = "M5,4v3h5.5v12h3V7H19V4z";
+F.image = "M21,19V5c0,-1.1 -0.9,-2 -2,-2H5c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h14c1.1,0 2,-0.9 2,-2zM8.5,13.5l2.5,3.01L14.5,12l4.5,6H5l3.5,-4.5z";
+F.pinned = "M16,9V4h1c0.55,0 1,-0.45 1,-1s-0.45,-1 -1,-1H7c-0.55,0 -1,0.45 -1,1s0.45,1 1,1h1v5c0,1.66 -1.34,3 -3,3v2h5.97v7l1,1 1,-1v-7H19v-2c-1.66,0 -3,-1.34 -3,-3z";
+F.search = "M15.5,14h-0.79l-0.28,-0.27C15.41,12.59 16,11.11 16,9.5 16,5.91 13.09,3 9.5,3S3,5.91 3,9.5 5.91,16 9.5,16c1.61,0 3.09,-0.59 4.23,-1.57l0.27,0.28v0.79l5,4.99L20.49,19l-4.99,-5zM9.5,14C7.01,14 5,11.99 5,9.5S7.01,5 9.5,5 14,7.01 14,9.5 11.99,14 9.5,14z";
+F.paste = "M19,2h-4.18C14.4,0.84 13.3,0 12,0S9.6,0.84 9.18,2H5c-1.1,0 -2,0.9 -2,2v16c0,1.1 0.9,2 2,2h14c1.1,0 2,-0.9 2,-2V4c0,-1.1 -0.9,-2 -2,-2zM12,2c0.55,0 1,0.45 1,1s-0.45,1 -1,1 -1,-0.45 -1,-1 0.45,-1 1,-1zM19,20H5V4h2v3h10V4h2v16z";
+F.share = "M18,16.08c-0.76,0 -1.44,0.3 -1.96,0.77L8.91,12.7c0.05,-0.23 0.09,-0.46 0.09,-0.7s-0.04,-0.47 -0.09,-0.7l7.05,-4.11c0.54,0.5 1.25,0.81 2.04,0.81 1.66,0 3,-1.34 3,-3s-1.34,-3 -3,-3 -3,1.34 -3,3c0,0.24 0.04,0.47 0.09,0.7L8.04,9.81C7.5,9.31 6.79,9 6,9c-1.66,0 -3,1.34 -3,3s1.34,3 3,3c0.79,0 1.5,-0.31 2.04,-0.81l7.12,4.16c-0.05,0.21 -0.08,0.43 -0.08,0.65 0,1.61 1.31,2.92 2.92,2.92 1.61,0 2.92,-1.31 2.92,-2.92s-1.31,-2.92 -2.92,-2.92z";
+F.open = "M19,19H5V5h7V3H5c-1.11,0 -2,0.9 -2,2v14c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2v-7h-2v7zM14,3v2h3.59l-9.83,9.83 1.41,1.41L19,6.41V10h2V3h-7z";
+
+const css = `
+  .top .c.lit { background: #000; color: #fff; }
+  .qa .rec { position: absolute; left: 10px; top: 7px; display: flex; flex-direction: column; align-items: center; font-size: 11px; font-weight: 400; }
+  .hub { display: flex; flex-direction: column; border-bottom: 2.5px solid #000; flex: 1; min-height: 0; }
+  .hub .hh { display: flex; align-items: center; gap: 10px; padding: 12px 14px 6px; }
+  .hub .hh b { font-size: 18px; } .hub .hh span { font-size: 13px; color: #333; }
+  .srch { margin: 4px 12px 8px; border: 2px solid #000; border-radius: 8px; display: flex; align-items: center; gap: 8px; padding: 7px 10px; font-size: 15px; color: #555; }
+  .chips { display: flex; gap: 6px; padding: 0 12px 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; border: 2px solid #000; border-radius: 16px; padding: 4px 11px; font-size: 13.5px; font-weight: 700; }
+  .chip.on { background: #000; color: #fff; }
+  .chip svg { display: inline; }
+  .lab { font-size: 12px; font-weight: 700; letter-spacing: .06em; padding: 6px 16px 4px; display: flex; justify-content: space-between; }
+  .clip { margin: 4px 10px; border: 2px solid #000; border-radius: 8px; display: flex; gap: 10px; padding: 9px 10px; align-items: flex-start; background: #fff; }
+  .clip.now { border-width: 3px; }
+  .clip .k { width: 30px; height: 30px; border: 1.5px solid #000; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .clip .b { flex: 1; min-width: 0; }
+  .clip .s { font-size: 15px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .clip .m { font-size: 12px; color: #333; padding-top: 3px; display: flex; gap: 6px; align-items: center; }
+  .clip .m .tag { border: 1.5px solid #000; border-radius: 4px; padding: 0 4px; font-weight: 700; color: #000; font-size: 11px; }
+  .clip .cp { width: 38px; height: 38px; border: 2px solid #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex: none; }
+  .thumb { width: 120px; height: 56px; border: 1.5px solid #000; border-radius: 4px; margin-top: 2px; }
+  .acts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 8px 0 0; }
+  .acts .btn { min-height: 38px; font-size: 13.5px; gap: 6px; }
+  .hubfoot { margin-top: auto; display: flex; align-items: center; padding: 6px 12px 8px; }
+  .hubfoot .pager { flex: 1; }
+  .small { font-size: 13px; font-weight: 700; border: 2px solid #000; border-radius: 6px; padding: 5px 10px; }
+`;
+document.head.insertAdjacentHTML("beforeend", `<style>${css}</style>`);
+
+const topBar = (lit) => `<div class="top"><div class="c ${lit ? "lit" : ""}">${g("clip", 32, lit ? "#fff" : "#000")}Clipboard</div><div class="sep"></div><div class="c">${g("note_new", 32)}New Note</div><div class="sep"></div><div class="gear">${g("settings", 26)}</div></div>`;
+const tile = ([k, l, on]) => `<div class="tile"><div class="dot ${on ? "on" : ""}">${g(k, 26, on ? "#fff" : "#000")}</div>${l}</div>`;
+const QC = [["wifi", "Wi‑Fi", 1], ["bt", "Bluetooth", 0], ["light", "Front Light", 1], ["moon", "Do Not Disturb", 0], ["refresh", "Full Refresh", 0]];
+const qc = `<div class="qc"><div class="tiles">${QC.map(tile).join("")}</div><div class="pager">${g("left", 22, "#999")}1 / 2${g("right", 22)}</div></div>`;
+const lastRows = `<div class="last">${g("note", 30)}<div><b>Last Opened Note</b><span>Meeting Notes</span></div></div><div class="ir"></div>
+  <div class="last">${g("book", 30)}<div><b>Last Opened Document</b><span>Field Guide · NeoReader</span></div></div>`;
+const qaBar = (mark) => `<div class="qa"><div class="rec ${mark ? "new" : ""}">${g("clock", 24)}Recent</div>Quick Access<div class="add">${g("link_add", 24)}Add</div></div>`;
+const pins = [["note", "Meeting Notes"], ["note", "Daily Journal"], ["note", "Project Ideas"], ["book", "Field Guide"]]
+  .map(([k, t], i) => (i ? `<div class="ir"></div>` : "") + `<div class="pin">${g(k, 22)}${t}</div>`).join("");
+const apps = `<div class="apps"><div class="row"><div class="cell"><div class="appi">10</div>Calendar</div><div class="vs"></div><div class="cell"><div class="appi">Aa</div>Dictionary</div></div>
+  <div class="row"><div class="cell"><div class="appi">±</div>Calculator</div><div class="vs"></div><div class="cell"><div class="appi">◎</div>Browser</div></div></div>`;
+const shell = (inner, mark) => `<div class="panel">${inner}</div>`;
+
+const scribble = `<svg class="thumb" viewBox="0 0 120 56"><path fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" d="M10,40 C20,10 30,10 34,30 S48,46 54,22 M62,36 l10,-20 l10,20 M66,28 h12 M92,14 v28 M92,14 c14,0 14,14 0,14 c16,0 16,14 0,14"/></svg>`;
+const CLIPS = {
+  addr: { k: "text", s: "Hall B, 2nd floor · doors open 9:30, bring the printed agenda", m: "Calendar · 2 min ago", now: 1 },
+  link: { k: "link", s: "https://example.org/articles/e-ink-workflows", m: "Browser · 14 min ago" },
+  ink: { k: "image", img: 1, m: "Notes · lasso copy · 40 min ago" },
+  quote: { k: "text", s: "“The best way to get something done is to begin.” — highlighted passage, chapter 4", m: "NeoReader · 1 h ago" },
+  list: { k: "text", s: "Milk, coffee beans, AA batteries, envelopes", m: "Notes · yesterday" },
+  code: { k: "text", s: "Order #48213-B · tracking 1Z 999 AA1 0123 4567 84", m: "Email · yesterday" },
+  wifi: { k: "text", s: "Guest network password: lantern-maple-42", m: "Pinned · Settings", pin: 1 },
+  ref: { k: "link", s: "https://example.com/docs/getting-started", m: "Browser · 2 days ago" },
+};
+const clip = (c, acts = "") => `<div class="clip ${c.now ? "now" : ""}"><div class="k">${g(c.k, 18)}</div><div class="b">
+  ${c.img ? scribble : `<div class="s">${c.s}</div>`}
+  <div class="m">${c.now ? `<span class="tag">ON CLIPBOARD</span>` : ""}${c.pin ? g("pinned", 13) : ""}${c.m}</div>${acts}</div>
+  ${acts ? "" : `<div class="cp">${g("copy", 20)}</div>`}</div>`;
+const hub = (items, page, pages, extra = "") => `<div class="hub">
+  <div class="hh">${g("clip", 24)}<b>Clipboard</b><span>· 23 items</span><span style="margin-left:auto">${g("close", 24)}</span></div>
+  <div class="srch">${g("search", 20, "#555")}Search clipboard</div>
+  <div class="chips"><span class="chip on">All</span><span class="chip">Text</span><span class="chip">Links</span><span class="chip">Images</span><span class="chip">${g("pinned", 13)} Pinned</span></div>
+  ${items}
+  <div class="hubfoot"><div class="pager">${g("left", 22, page === 1 ? "#999" : "#000")}${page} / ${pages}${g("right", 22)}</div></div>
+  ${extra}</div>`;
+
+const listA = `<div class="lab"><span>PINNED</span></div>${clip(CLIPS.wifi)}<div class="lab"><span>RECENT</span></div>${clip(CLIPS.addr)}${clip(CLIPS.link)}${clip(CLIPS.ink)}`;
+const listC = `<div class="lab"><span>PINNED</span></div>${clip(CLIPS.wifi)}<div class="lab"><span>RECENT</span></div>${clip(CLIPS.addr)}${clip(CLIPS.link)}${clip(CLIPS.ink)}${clip(CLIPS.quote)}${clip(CLIPS.list)}${clip(CLIPS.code)}`;
+const btn = (k, l, dark) => `<div class="btn" style="${dark ? "background:#000;color:#fff" : ""}">${g(k, 17, dark ? "#fff" : "#000")}${l}</div>`;
+const heldActs = `<div class="acts">${btn("copy", "Copy", 1)}${btn("paste", "Paste in app")}${btn("note_new", "Note it")}${btn("share", "Share…")}${btn("pinned", "Pin")}${btn("del", "Delete")}</div>`;
+const listD = `<div class="lab"><span>PINNED</span></div>${clip(CLIPS.wifi)}<div class="lab"><span>RECENT</span></div>${clip(CLIPS.addr)}${clip({ ...CLIPS.quote, now: 0 }, heldActs)}${clip(CLIPS.link)}`;
+
+const set = `<div class="set" style="width:560px">${head("Clipboard")}
+  <div class="sec">IN THE PANEL</div><div class="card">
+    <div class="check"><div class="box on"></div>Show the Clipboard button</div>
+    <div class="check"><div class="box"></div>Clipboard covers the apps too</div></div>
+  <div class="sec">HISTORY</div><div class="card">
+    <div class="choice">Keep the last<b>100 items ›</b></div>
+    <div class="check"><div class="box on"></div>Keep images (lasso copies, screenshots)</div>
+    <div class="check"><div class="box on"></div>Keep history after a restart</div>
+    <div class="choice">Ignore copies from<b>2 apps ›</b></div></div>
+  <div class="sec">CATCHING COPIES</div><div class="card">
+    ${radio(false, "When the panel opens", "No setup. Saves what's on the clipboard each time you open the panel, so a copy replaced before then is missed.")}
+    ${radio(true, "Every copy, as it happens", "Needs Advanced access (Shizuku). Lets SuperBoox read the clipboard in the background.")}</div>
+  <div class="btns" style="padding:16px 12px"><div class="btn">${g("del", 18)}&nbsp; Clear history (keeps pinned)</div></div>
+</div>`;
+
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .screen { width: 700px; height: 940px; border: 4px solid #000; border-radius: 18px; position: relative; overflow: hidden; background: #fff; flex: none; }
+  .tour { position: absolute; inset: 0; display: flex; flex-direction: column; }
+  .tour .bar { display: flex; align-items: center; padding: 18px 20px 10px; font-size: 14px; font-weight: 700; letter-spacing: .05em; }
+  .tour .bar .skip { margin-left: auto; font-size: 15px; letter-spacing: 0; border: 2px solid #000; border-radius: 6px; padding: 6px 12px; }
+  .tour h2 { font-size: 30px; margin: 6px 24px 8px; }
+  .tour p { font-size: 17px; line-height: 1.45; margin: 0 24px 12px; color: #222; }
+  .tour .body { flex: 1; position: relative; }
+  .tour .foot { display: flex; align-items: center; gap: 12px; padding: 16px 20px 22px; border-top: 2px solid #000; }
+  .tour .foot .btn { flex: none; min-width: 130px; min-height: 48px; font-size: 17px; }
+  .tour .foot .btn.dis { border-color: #999; color: #999; }
+  .tour .foot .btn.go { background: #000; color: #fff; }
+  .dots { display: flex; gap: 8px; flex: 1; justify-content: center; }
+  .dots i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #000; }
+  .dots i.on { background: #000; }
+  .tcard { margin: 6px 24px; border: 2px solid #000; border-radius: 10px; padding: 14px 16px; font-size: 16px; }
+  .tcard b { display: block; font-size: 18px; margin-bottom: 4px; }
+  .ok { display: inline-flex; align-items: center; gap: 6px; border: 2px solid #000; border-radius: 14px; padding: 3px 10px; font-weight: 700; font-size: 14px; }
+  .strip2 { position: absolute; right: 0; width: 16px; background: #000; border-radius: 4px 0 0 4px; }
+  .callout { position: absolute; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+  .num { width: 26px; height: 26px; border-radius: 50%; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex: none; }
+  .pv2 { position: absolute; top: 0; right: 0; bottom: 0; width: 330px; overflow: hidden; border-left: 3px solid #000; }
+  .pv2 > div { transform: scale(0.6875); transform-origin: top left; width: 480px; }
+</style>`);
+const N = 7;
+const foot = (i) => `<div class="foot"><div class="btn ${i === 1 ? "dis" : ""}">‹ Previous</div><div class="dots">${Array.from({ length: N }, (_, k) => `<i class="${k + 1 === i ? "on" : ""}"></i>`).join("")}</div><div class="btn go">${i === N ? "Done" : "Next ›"}</div></div>`;
+const step = (i, title, body, extra = "") => `<div class="screen"><div class="tour"><div class="bar">STEP ${i} OF ${N}<span class="skip">Skip tour</span></div>
+  <h2>${title}</h2>${body}<div class="body">${extra}</div>${foot(i)}</div></div>`;
+const PANEL = shell(topBar(false) + qc + lastRows + qaBar(false) + `<div class="pin">${g("note", 22)}Meeting Notes</div><div class="ir"></div><div class="pin">${g("note", 22)}Daily Journal</div>` + apps).replace('class="panel"', 'class="panel" style="height:880px"');
+const T = {
+  a: () => step(1, "Welcome to SuperBoox", `<p>A sidebar for your BOOX, like Supernote's: your notes and books, quick switches, a clipboard and your apps, one swipe away from anything you're doing.</p>
+      <p>This short tour shows you around. You can come back to it any time from <b>Settings → Help</b>.</p>`,
+      `<div class="tcard" style="display:flex;gap:16px;align-items:center"><div style="width:80px;height:110px;border:2px solid #000;border-radius:6px;position:relative"><div style="position:absolute;right:0;top:0;bottom:0;width:34px;border-left:2px solid #000;background:repeating-linear-gradient(0deg,#fff 0 9px,#000 9px 10px)"></div></div>
+        <div>Swipe along the edge → the panel slides in.<br>Tap outside it → it goes away.</div></div>`) +
+    notes("P · Tour, step 1", [
+      "Shown the first time SuperBoox Settings opens (after install), as full pages inside Settings.",
+      "Every step has <b>Skip tour</b> (top right), <b>‹ Previous</b> and <b>Next ›</b>, with dots showing where you are.",
+      "Skipping or finishing marks it done; <b>Settings → Help → Show the tour again</b> replays it.",
+    ]),
+  b: () => step(2, "Turn SuperBoox on", `<p>SuperBoox works through Android's accessibility settings. That's how it adds the edge strip and the panel over other apps, and opens your notes for you.</p>`,
+      `<div class="tcard"><b>SuperBoox service: Off</b>Android settings → Accessibility → SuperBoox → On.<div class="btns" style="padding:12px 0 0"><div class="btn" style="background:#000;color:#fff">Open Android settings</div></div></div>
+       <div class="tcard"><span class="ok">✓ On</span>&nbsp; shows here when you come back, and Next lights up.</div>
+       <p style="font-size:14px;margin-top:10px">SuperBoox only reads what's on screen to find your notes and switches. Nothing leaves the tablet.</p>`) +
+    notes("Q · Step 2: the one required step", [
+      "The button opens Android's accessibility page. When you return, the card turns to <b>✓ On</b>.",
+      "Already on (updates, reinstalls)? The step shows ✓ and you can go straight on.",
+      "Next still works without it, so nobody gets stuck, but later steps say it's needed.",
+    ]),
+  c: () => step(3, "Open the panel", `<p>Your swipe strip is shown in black on the right edge. <b>Swipe up or down along it</b> to open the panel. Try it now.</p>`,
+      `<div class="strip2" style="top:22%;height:30%"></div><div class="callout" style="right:30px;top:calc(22% + 50px)">your swipe strip ›</div>
+       <div class="tcard" style="position:absolute;left:0;right:40px;bottom:16px"><span class="ok">✓ You opened it</span>&nbsp; Tap outside the panel to close it again.<div style="font-size:14px;color:#333;padding-top:6px">Edge, size and gesture: Settings → Gesture (the strip shows there too).</div></div>`) +
+    notes("R · Step 3: try it for real", [
+      "The <b>real</b> strip is drawn black while this step is open (the Gesture page's live preview), and the real panel opens when you swipe.",
+      "Opening it once ticks the step off. Not working? A line under it points to Settings → Gesture.",
+    ]),
+  d: () => step(4, "Around the panel", `<p style="margin-right:350px">The real panel is shown beside this page. Here's what each part does:</p>`,
+      `<div class="pv2"><div>${PANEL}</div></div>
+       <div style="position:absolute;left:24px;right:350px;top:0;display:flex;flex-direction:column;gap:14px;font-size:15px">
+         <div style="display:flex;gap:10px"><span class="num">1</span><div><b>Top bar.</b> Clipboard, New Note, Settings.</div></div>
+         <div style="display:flex;gap:10px"><span class="num">2</span><div><b>Quick Controls.</b> Tap to switch, hold for more (Front Light: its presets).</div></div>
+         <div style="display:flex;gap:10px"><span class="num">3</span><div><b>Last opened</b> note and document.</div></div>
+         <div style="display:flex;gap:10px"><span class="num">4</span><div><b>Quick Access.</b> Your pinned notes, books, folders. <b>Add</b> pins what's open; hold the list to edit it. <b>Recent</b> lists recent files.</div></div>
+         <div style="display:flex;gap:10px"><span class="num">5</span><div><b>Apps</b> at the bottom, swipe for more.</div></div>
+       </div>
+       ${[[14, 1], [62, 2], [145, 3], [196, 4], [545, 5]].map(([t, k]) => `<div class="num" style="position:absolute;right:300px;top:${t}px">${k}</div>`).join("")}`) +
+    notes("S · Step 4: a guided look", [
+      "Uses the live preview: the real panel (with your own items) beside the page, and numbered notes for each part.",
+      "On a narrow screen the notes go above the panel instead of beside it.",
+    ]),
+  e: () => step(5, "Your clipboard", `<p>Tap <b>Clipboard</b> at the top of the panel to see everything you've copied: text, links, pictures and handwriting from BOOX Notes. Tap or hold a clip to copy it again, paste it, share, pin or delete it.</p>`,
+      `<div class="tcard"><b>What's kept, and how</b>Choose in Settings → Clipboard. Copies are saved when the panel opens; every copy as it happens needs Advanced access (step 6).</div>`) +
+    notes("T · Step 5", ["Short, with a pointer to its settings; the panel itself explains the rest."]),
+  f: () => step(6, "Optional: Advanced access", `<p>Some extras need on-device ADB through the free Shizuku app (no computer): your own Front Light presets, and catching every copy.</p>`,
+      `<div class="tcard"><b>Not now</b>Everything else works without it. Set it up later in Settings → Advanced access.<div class="btns" style="padding:12px 0 0"><div class="btn">Set it up now</div></div></div>`) +
+    notes("U · Step 6", ["Clearly optional: <b>Next</b> carries on; <b>Set it up now</b> jumps to Advanced access (the tour picks up where it was when you come back)."]),
+  g: () => step(7, "You're set", `<p>Make it yours in Settings: pin your notes, choose Quick Controls and apps, the panel's size and edge.</p>`,
+      `<div class="tcard"><b>Lost?</b>Settings → Help → <strong>Show the tour again</strong>, or <strong>Troubleshooting</strong> for a debug report.</div>`) +
+    notes("V · Step 7", ["<b>Done</b> closes the tour and lands on Settings' home page."]),
+};
+const h = location.hash;
+document.getElementById("stage").innerHTML = h === "#2" ? T.d() + T.e() : h === "#3" ? T.f() + T.g() : T.a() + T.b() + T.c();
+</script></body></html>

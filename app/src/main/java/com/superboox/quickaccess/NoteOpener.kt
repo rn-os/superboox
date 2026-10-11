@@ -200,8 +200,33 @@ class NoteOpener(private val service: AccessibilityService) {
         if (button == null) return run { handler.postDelayed({ setupTick(notesPackage) }, POLL_MS) }
         DebugLog.i("note", "new-note setup: tapping ${button.viewIdResourceName ?: NotesScreen.textOf(button)}")
         click(button, null)
-        // Let BOOX's new-note screen draw under the held screen, then reveal it.
-        handler.postDelayed({ (service as? QuickAccessService)?.noteOpenFinished(true) }, AFTER_TAP_MS)
+        // BOOX's + opens the new note straight away (build 58 report: "Notebook-2"); then open its Template panel.
+        val until = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
+        handler.postDelayed({ templateTick(notesPackage, until) }, AFTER_TAP_MS)
+    }
+
+    /** In the new note: taps the editor's Template button ("Tem…" in its tool column), then reveals the screen. */
+    private fun templateTick(notesPackage: String, until: Long) {
+        val reveal = { (service as? QuickAccessService)?.noteOpenFinished(true); Unit }
+        val root = notesRoot(BooxNotes.packages(notesPackage))
+        val inEditor = root != null && NotesScreen.read(root) is NotesScreen.State.Editor
+        val button = if (inEditor) findFirst(root!!) { n ->
+            val t = NotesScreen.textOf(n).lowercase()
+            n.isVisibleToUser && (t == "template" || t == "templates" || t.startsWith("tem"))
+        } else null
+        when {
+            button != null -> {
+                DebugLog.i("note", "new-note setup: opening Template (\"${NotesScreen.textOf(button)}\")")
+                click(button, null)
+                handler.postDelayed(reveal, AFTER_TAP_MS)
+            }
+            SystemClock.uptimeMillis() > until -> {
+                DebugLog.w("note", "new-note setup: ${if (inEditor) "no Template button in the new note" else "the new note didn't open"}. Screen:\n" +
+                    (root?.let { DebugReport.describeTree(it) } ?: "Notes window not found"))
+                reveal()
+            }
+            else -> handler.postDelayed({ templateTick(notesPackage, until) }, POLL_MS)
+        }
     }
 
     /**
@@ -221,6 +246,8 @@ class NoteOpener(private val service: AccessibilityService) {
         if (candidates.isNotEmpty()) DebugLog.i("note", "new-note setup: buttons " + candidates.joinToString { "${idOf(it)}\"${NotesScreen.textOf(it)}\"" })
         val notText = candidates.filterNot { idOf(it).contains("text") || idOf(it).contains("folder") || idOf(it).contains("search") || NotesScreen.textOf(it).lowercase().contains("text") }
         return notText.firstOrNull { idOf(it).contains("note") && Regex("create|new|add").containsMatchIn(idOf(it)) }
+            // The Notes widget on BOOX's home screen: create_new is its "+" for a notebook (build 58 report).
+            ?: notText.firstOrNull { idOf(it) == "create_new" }
             ?: notText.firstOrNull { NotesScreen.textOf(it).lowercase().let { t -> t == "new note" || t == "note" || t == "create note" || t == "新建笔记" } }
     }
 

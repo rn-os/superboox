@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 58)
+# SuperBoox: handoff / status (as of build 59)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -265,6 +265,13 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 ## Build 58
 - Build 57 report: drag in the edit view fixed (user confirmed). Handwriting still not drawn: a shape is fields 1 id, 2/3 times, 4 colour, 5 fixed32 (≈5.9, pen width?), 7 bounds JSON, 8 matrix JSON, 11 pen JSON (dpi 320, maxPressure 4095, displayScale…), 12 varint 5 (shape type?), 17 line style JSON, 21 "[]", **24 bytes 2112 (points, not LE float pairs)**, 26 "{"repo":{}}". 22 shapes per copy. `BooxShapes.bruteForce` now tries float/int/double × LE/BE × header 0–32 × record size × x/y position × absolute/relative/normalised and keeps a reading whose points spread inside the bounds; `describe` logs non-printable fields as hex. Earlier failed clips retry (marker `drawn-failed-2`).
 - Hold New Note: BOOX home's Notes widget has `create_text_new` and `create_new` (no "note" in the id), so nothing was tapped and the hold timed out. Search shortened to 6 s while asking the user which BOOX action opens the new-note template screen.
+
+## Build 59
+- Build 58 report: handwriting drawn ("handwriting drawn from shape.pb (916x323)"); user confirmed it shows in the clipboard. Bytes layout found by `bruteForce` (not yet pinned down exactly).
+- Clipboard filter chips: Handwriting added (Images is pictures only); the chip row scrolls sideways when it doesn't fit.
+- Hold New Note: the user's manual run showed BOOX home's Notes widget `create_new` ("+") opens a new notebook directly ("Notebook-2", via com.onyx MiddlewareActivity → ScribbleActivity); no separate settings screen. Assumed target: the editor's Template panel ("Tem…" in its tool column). Now taps `create_new`, waits for the new note, taps its Template button (`templateTick`), logs the editor screen if it can't find it. Awaiting user confirmation that this is the screen they mean.
+- User prefers no further dependence on Shizuku (handwriting can use All files access instead).
+- Tour mockups 41–43 (`tour.html`) awaiting approval.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

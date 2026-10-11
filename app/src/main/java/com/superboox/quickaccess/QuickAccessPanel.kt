@@ -912,7 +912,7 @@ class QuickAccessPanel(
 
     // ---- Clipboard hub ---------------------------------------------------------------------
 
-    private enum class ClipFilter(val label: String) { ALL("All"), TEXT("Text"), LINKS("Links"), IMAGES("Images"), PINNED("Pinned") }
+    private enum class ClipFilter(val label: String) { ALL("All"), TEXT("Text"), LINKS("Links"), IMAGES("Images"), HANDWRITING("Handwriting"), PINNED("Pinned") }
 
     private var clipFilter = ClipFilter.ALL
     private var clipQuery = ""
@@ -990,7 +990,8 @@ class QuickAccessPanel(
             ClipFilter.ALL -> true
             ClipFilter.TEXT -> c.kind == ClipHistory.Kind.TEXT
             ClipFilter.LINKS -> c.kind == ClipHistory.Kind.LINK
-            ClipFilter.IMAGES -> c.kind == ClipHistory.Kind.IMAGE || c.kind == ClipHistory.Kind.HANDWRITING
+            ClipFilter.IMAGES -> c.kind == ClipHistory.Kind.IMAGE
+            ClipFilter.HANDWRITING -> c.kind == ClipHistory.Kind.HANDWRITING
             ClipFilter.PINNED -> c.pinned
         }
         val q = clipQuery.trim()
@@ -1006,7 +1007,11 @@ class QuickAccessPanel(
         val all = ClipHistory.list(service).map { ClipHistory.ensurePreview(service, it) }
         clipCount?.text = "· ${all.size} ${if (all.size == 1) "item" else "items"}"
         with(ctx) {
-            body.addView(hbox().apply {
+            // Filter chips; the row scrolls sideways if they don't all fit (narrow panel, large menu size).
+            body.addView(android.widget.HorizontalScrollView(ctx).apply {
+                isHorizontalScrollBarEnabled = false
+                overScrollMode = View.OVER_SCROLL_NEVER
+                addView(hbox().apply {
                 setPadding(s(12), 0, s(8), s(6))
                 ClipFilter.entries.forEach { f ->
                     val on = f == clipFilter
@@ -1022,6 +1027,7 @@ class QuickAccessPanel(
                         }
                     }, lp(WRAP, WRAP).apply { marginEnd = s(6) })
                 }
+                })
             }, lp(MATCH, WRAP))
         }
         val shown = all.filter(::clipMatches).sortedByDescending { it.pinned }

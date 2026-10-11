@@ -291,3 +291,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - Store the note id in pins when pinning, so lookup by title isn't needed.
 - Last Opened Document only returns to the last reading app; titles depend on that app.
 - Mockups `docs/mockups/10–14` show the approved Supernote design, `15–16` the approved bordered Settings (`settings-borders.html`), `17` the approved icons (`panel-icons.html`), `18/20/21` Quick Controls (`quick-controls.html`), `22` Previous app (`previous-app.html`), `23` proposed Settings menus (`settings-menus.html`, approved, built in 36), `24` Front Light (`front-light.html`, built in 36), `25` tap modes (built in 37), `26–28` proposed Custom sliders, own presets, backup & restore, drag to reorder (`front-light-more.html`, approved, built in 38), `29` proposed Advanced access via Shizuku (`advanced-access.html`, approved, built in 43); `01–09` show the older design.
+
+## Docs refresh (after build 62)
+
+- README rewritten for new users: getting started with the tour and permissions, a tap/hold table for the panel, Clipboard, Front Light presets, Settings sections, Advanced access, privacy (permissions list) and an updated "How it works".
+- Launch images regenerated from `docs/launch/launch.html` (built from the `docs/mockups/clipboard.html` helpers, made-up names, Walden). The images are `1-panel`, `2-clipboard`, `3-light` and `4-settings`.
+- Render script (scratchpad `render-launch.mjs`): Playwright at 2x, screenshots `.stage` for `#panel`, `#clipboard`, `#light` and `#settings`.
+- `docs/launch/reddit-post-2.md` is the update post draft.

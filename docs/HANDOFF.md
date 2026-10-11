@@ -389,3 +389,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - After 800 ms, `syncFromLevels` matches the current signature against the learned per-preset signatures (`K_FL_SIGNATURES`). It is skipped while a SuperBoox action is in progress, still optimistic, or while your own preset is active.
 - **Learning.** Signatures are also learned 1.5 s after SuperBoox switches to Bright, Soft or Off.
 - **Backups.** `K_FL_SIGNATURES` is device-specific, so backups skip it.
+- **Build 71:** the Wi‑Fi report no longer dumps the multi-kilobyte `timestamp_ms=` link-stat lines. `linkStats` summarises the newest 6 samples:
+  - signal and tx/rx link speed
+  - channel busy %
+  - retries per sent packet in each interval
+  - data stalls and score
+
+  The power-save grep excludes those lines, and long lines are capped at 300 characters.

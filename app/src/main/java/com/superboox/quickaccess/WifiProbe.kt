@@ -33,11 +33,12 @@ object WifiProbe {
             val started = SystemClock.uptimeMillis()
             val (code, text) = AdvancedAccess.shellNow(cmd)
             out += "$label (exit $code, ${SystemClock.uptimeMillis() - started} ms):"
-            redact(text).lines().filter { it.isNotBlank() }.take(max).forEach { out += "  $it" }
+            redact(text).lines().filter { it.isNotBlank() }.take(max).forEach { out += "  " + it.take(300) }
         }
         run("status", "cmd wifi status 2>&1", 30)
         run("radio counters", "cat /proc/net/wireless 2>&1")
-        run("power save and low-latency", "dumpsys wifi 2>/dev/null | grep -i -E 'power ?save|lowlatency|low_latency|mPowerSave|isLowLatency' | head -12")
+        run("power save and low-latency", "dumpsys wifi 2>/dev/null | grep -v 'timestamp_ms=' | grep -v 'SupportedFeatures' | grep -i -E 'power ?save|lowlatency|low_latency|mPowerSave' | sort -u | head -8")
+        linkStats(out)
         run("signal and link-speed history", "dumpsys wifi 2>/dev/null | grep -A 24 -m 1 'WifiScoreReport' ", 26)
         run("recent connection events", "dumpsys wifi 2>/dev/null | grep -i -E 'CMD_DISCONNECT|DISCONNECTED|roam|ASSOCIATION_REJECTION|AUTHENTICATION_FAILURE|NETWORK_DISCONNECTION' | tail -12")
         run("uptime", "cat /proc/uptime; uptime 2>&1")
@@ -55,6 +56,35 @@ object WifiProbe {
                 "'https://speed.cloudflare.com/__down?bytes=2000000'; else echo 'curl not on this tablet: use a speed test in the browser'; fi",
         )
         return out
+    }
+
+    /**
+     * The newest of Android's detailed link samples (one very long line every few seconds), boiled
+     * down to what tells a weak signal from a busy channel or a struggling driver: signal, link
+     * speeds both ways, how many sends needed retrying, how busy the channel is, data stalls.
+     */
+    private fun linkStats(out: MutableList<String>) {
+        val (_, text) = AdvancedAccess.shellNow("dumpsys wifi 2>/dev/null | grep 'timestamp_ms=' | tail -6")
+        val samples = text.lines().filter { it.contains("timestamp_ms=") }
+        if (samples.isEmpty()) return run { out += "link samples: none" }
+        fun field(line: String, key: String): Long? = Regex("""[,\s]$key=(-?\d+)""").find(",$line")?.groupValues?.get(1)?.toLongOrNull()
+        out += "link samples (newest last; retries/sent = how often a send had to be repeated):"
+        var prev: String? = null
+        for (l in samples) {
+            val sent = field(l, "total_tx_success")
+            val retries = field(l, "total_tx_retries")
+            val bad = field(l, "total_tx_bad")
+            // Per-interval retry rate from the change since the previous sample, when there is one.
+            val rate = prev?.let { p ->
+                val ds = (sent ?: 0) - (field(p, "total_tx_success") ?: 0)
+                val dr = (retries ?: 0) - (field(p, "total_tx_retries") ?: 0)
+                if (ds > 0) "%.1f".format(dr.toDouble() / ds) else null
+            }
+            out += "  signal ${field(l, "rssi")} dBm, send ${field(l, "tx_linkspeed") ?: field(l, "link_speed_mbps")} Mbps, receive ${field(l, "rx_linkspeed") ?: field(l, "rx_link_speed_mbps")} Mbps, " +
+                "channel busy ${field(l, "channel_utilization_ratio")}%, retries/sent ${rate ?: "-"} (total ${retries}/${sent}, failed $bad), " +
+                "data stall ${field(l, "status_data_stall")}, score ${field(l, "wifi_score")}"
+            prev = l
+        }
     }
 
     /** What any app can see: band, signal, link speeds (names need location access, so they're left out). */

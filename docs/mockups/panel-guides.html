@@ -350,6 +350,62 @@ const S5 = {
     "Closed until tapped. The same kind of drawing could go anywhere else a setting is unclear; tell me where.",
   ]),
 };
+// ---- Round 4 (after build 53): the real panel as a live preview while changing a setting ----
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .screen { width: 760px; height: 1010px; border: 4px solid #000; border-radius: 18px; position: relative; overflow: hidden; background: #fff; flex: none; }
+  .screen .setL { position: absolute; left: 0; top: 0; bottom: 0; overflow: hidden; border-right: 0; }
+  .screen .setL .set { width: 100% !important; height: 100% !important; box-shadow: none; }
+  .pv { position: absolute; top: 0; right: 0; bottom: 0; overflow: hidden; }
+  .pv .panel { transform-origin: top left; box-shadow: none; }
+  .pvtag { position: absolute; z-index: 5; left: 50%; transform: translateX(-50%); bottom: 236px; background: #000; color: #fff; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 10px; white-space: nowrap; }
+  .slider2 { padding: 12px 16px; } .slider2 .t { font-size: 15px; } .slider2 .tr { height: 6px; background: #999; border-radius: 3px; margin-top: 12px; position: relative; }
+  .slider2 .tr i { position: absolute; left: 0; top: 0; bottom: 0; background: #000; border-radius: 3px; } .slider2 .tr b { position: absolute; top: -8px; width: 22px; height: 22px; border-radius: 50%; background: #000; }
+  .finger { position: absolute; width: 34px; height: 34px; border-radius: 50%; border: 3px solid #000; background: rgba(0,0,0,.12); }
+  .hstrip { position: absolute; right: 0; width: 14px; background: #000; border-radius: 4px 0 0 4px; }
+  .hlabel { position: absolute; right: 22px; font-size: 13px; font-weight: 700; background: #fff; border: 2px solid #000; border-radius: 6px; padding: 3px 8px; }
+</style>`);
+const slider2 = (t, pct) => `<div class="slider2"><div class="t">${t}</div><div class="tr"><i style="width:${pct}%"></i><b style="left:calc(${pct}% - 11px)"></b></div></div>`;
+const preview = (settingsHtml, panelHtml, pct, tag) => {
+  const W = 760, pw = Math.round(W * pct / 100), sc = pw / 480;
+  return `<div class="screen"><div class="setL" style="width:${W - pw}px">${settingsHtml}</div>
+    <div class="pv" style="width:${pw}px"><div class="pvtag">${tag}</div><div style="transform:scale(${sc});transform-origin:top left;width:480px;height:${Math.round(1010 / sc)}px">${panelHtml.replace('class="panel"', 'class="panel" style="height:' + Math.round(1010 / sc) + 'px"')}</div></div></div>`;
+};
+const lookLive = `<div class="set">${head("Look &amp; size")}
+  <div class="sec">SIZE</div><div class="card new">${slider2("Panel width: 45% of screen", 27)}
+    <div class="choice">Menu size<b>Large ›</b></div></div>
+  <div class="para">The real panel shows beside this page while you change these, at the size you pick. Tap anywhere on this side, or go back, to close it.</div>
+  <div class="sec">ICONS</div><div class="card"><div class="check"><div class="box"></div>Use apps' own icons</div></div></div>`;
+const clipLive = `<div class="set">${head("Clipboard")}
+  <div class="sec">WHILE OPEN, STILL SHOW</div><div class="card new">
+    <div class="check"><div class="box on"></div>Quick Controls</div>
+    <div class="check"><div class="box"></div>Last Opened</div>
+    <div class="check"><div class="box on"></div>Apps at the bottom</div></div>
+  <div class="para">The panel beside this page opens on the clipboard and updates as you tick or untick.</div></div>`;
+const listS = `${clip(CLIPS.addr)}${clip(CLIPS.link)}`;
+const gestureLive = `<div class="screen"><div class="setL" style="width:100%">${`<div class="set">${head("Gesture")}
+  <div class="card" style="margin-top:16px">${radio(true, "Right edge", "")}${radio(false, "Left edge", "")}</div>
+  <div class="card new" style="margin-top:12px">${slider2("Strip top: 30%", 30)}${slider2("Strip height: 35%", 35)}${slider2("Strip width: 16 dp", 20)}</div>
+  <div class="para">While this page is open, the real swipe strip is shown in black on the screen edge, and moves as you change it. Try swiping it to open the panel right here.</div></div>`}</div>
+  <div class="hstrip" style="top:30%;height:35%"></div>
+  <div class="hlabel" style="top:46%">Your swipe strip</div>
+  <div class="finger" style="right:-6px;top:56%"></div></div>`;
+const S6 = {
+  look: () => preview(lookLive, shell(topBar(false) + qc + lastRows + qaBar(false) + pins + apps), 45, "PREVIEW · 45%") + notes("N · Look & size: the real panel", [
+    "While you move <b>Panel width</b> or pick a <b>Menu size</b>, SuperBoox shows the <b>real panel</b> on its edge, at that size, with a PREVIEW tag.",
+    "This Settings page makes room for it: its content moves to the other side, so the slider stays in reach and isn't covered.",
+    "The preview can't be tapped. It closes when you tap this side, go back, or leave the page.",
+    "Replaces the small drawings from mockup 37 for these settings.",
+  ]),
+  clip: () => preview(clipLive, shell(topBar(true) + qc + hub(listS, 1, 8) + apps), 45, "PREVIEW · CLIPBOARD") + notes("O · Clipboard: the real panel, open on the clipboard", [
+    "Ticking <b>Quick Controls</b>, <b>Last Opened</b> or <b>Apps</b> updates the real panel beside the page, opened on the clipboard with your own clips.",
+    "The small drawings stay as a fallback if the preview can't be shown (e.g. SuperBoox's accessibility service is off).",
+  ]),
+  gesture: () => gestureLive + notes("P · Gesture: the real strip", [
+    "While the Gesture page is open, the invisible swipe strip is drawn in black on the real screen edge, and moves as you change side, top, height and width.",
+    "You can try the swipe right there; the panel opens over Settings as usual.",
+    "It goes back to invisible (or your Show marker setting) when you leave the page.",
+  ]),
+};
 const h = location.hash;
-document.getElementById("stage").innerHTML = h === "#2" ? S5.gesture() : h === "#3" ? S5.guides() : S5.drag() + S5.rename();
+document.getElementById("stage").innerHTML = h === "#2" ? S5.gesture() : h === "#3" ? S5.guides() : h === "#4" ? S6.look() + S6.clip() : h === "#5" ? S6.gesture() : S5.drag() + S5.rename();
 </script></body></html>

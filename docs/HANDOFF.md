@@ -322,3 +322,11 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
     - **on but stopped:** shows the crash time. Restart service uses Shizuku if allowed (`settings put secure enabled_accessibility_services` without the service, then with it). Otherwise it opens `ACCESSIBILITY_DETAILS_SETTINGS` for the component.
     - **off.**
 - **Still unknown.** The exact exception: the next debug report's `[crash]` entry has the stack.
+
+## Build 65: the actual crash
+
+- Report stack: an NPE on `ClipFilter.ordinal()` in `clipMatches`, reached from `QuickAccessPanel.<init>` → `show(CLIPBOARD)` from `showPreview`.
+  - Cause: the clipboard state fields (`clipFilter`…) were declared below the `init` block, so they were still null when a clipboard preview drew the hub from `init`. Every tick under "still show" and every "Preview the panel" tap rebuilt the preview, and each rebuild crashed the service.
+  - Fix: those fields now sit above `init`.
+  - Keep any state that `show()` reads in clipboard mode above `init`.
+- Keyboards are no longer counted as the app in front (`keyboardPackages` from `InputMethodManager`). Leaving the create-note screen once tried to return to `com.onyx.latinime`.

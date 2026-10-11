@@ -102,6 +102,21 @@ class QuickAccessPanel(
     private val sheet = ctx.hbox()
     private val content = ctx.vbox()
 
+    // Clipboard state, declared before init: a preview that opens on the clipboard draws it from
+    // init, and fields declared later would still be null then (build 63 crash).
+    private var clipFilter = ClipFilter.ALL
+    private var clipQuery = ""
+    private var clipPage = 0
+
+    /** Handwriting pictures are being drawn in the background. */
+    private var drawing = false
+
+    /** The clip whose actions are showing (it was tapped or held). */
+    private var clipOpen: String? = null
+    private var clipSearch: android.widget.EditText? = null
+    private var clipBody: LinearLayout? = null
+    private var clipCount: TextView? = null
+
     init {
         // Tapping outside the sheet closes it (no dimming: it only costs an e-ink refresh).
         root.setOnClickListener { service.hidePanel() }
@@ -922,18 +937,6 @@ class QuickAccessPanel(
 
     private enum class ClipFilter(val label: String) { ALL("All"), TEXT("Text"), LINKS("Links"), IMAGES("Images"), HANDWRITING("Handwriting"), PINNED("Pinned") }
 
-    private var clipFilter = ClipFilter.ALL
-    private var clipQuery = ""
-    private var clipPage = 0
-
-    /** Handwriting pictures are being drawn in the background. */
-    private var drawing = false
-
-    /** The clip whose actions are showing (it was tapped or held). */
-    private var clipOpen: String? = null
-    private var clipSearch: android.widget.EditText? = null
-    private var clipBody: LinearLayout? = null
-    private var clipCount: TextView? = null
 
     private fun toggleClipboard() {
         if (mode == Mode.CLIPBOARD) return show(Mode.MAIN)

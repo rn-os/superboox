@@ -98,7 +98,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
-        if (pkg == packageName || pkg in IGNORED_PACKAGES || pkg.contains("inputmethod")) return
+        if (pkg == packageName || pkg in IGNORED_PACKAGES || pkg.contains("inputmethod") || pkg in keyboardPackages) return
         // Dialogs/toasts from other apps also fire this event; only count real app windows.
         val windowType = runCatching { windows.firstOrNull { it.id == event.windowId }?.type }.getOrNull()
         if (windowType == null || windowType == AccessibilityWindowInfo.TYPE_APPLICATION) {
@@ -116,6 +116,15 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             if (newNoteArmed) watchNewNoteBack(pkg)
             trackRecent(pkg, event)
         }
+    }
+
+    /**
+     * Installed keyboards (BOOX's are com.onyx.kime and com.onyx.latinime): their windows aren't the
+     * app in front, and going "back" to one fails (build 63 report).
+     */
+    private val keyboardPackages: Set<String> by lazy {
+        runCatching { getSystemService(android.view.inputmethod.InputMethodManager::class.java).inputMethodList.map { it.packageName }.toSet() }
+            .getOrDefault(emptySet())
     }
 
     override fun onInterrupt() = Unit

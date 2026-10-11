@@ -377,3 +377,15 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - These commands run as shell; the app itself still has no INTERNET permission.
 - SSIDs are hidden. MACs and BSSIDs become `ap-xxxxxx` (a SHA-256 prefix, the same in every report).
 - **Purpose:** separate RF or hardware causes from software ones. The user takes report A while slow, then report B right after toggling Wi‑Fi off and on, in the same place.
+
+## Build 70: Front Light stays in sync with BOOX's panel
+
+- **Report.** SuperBoox had set Bright, the user then picked Soft in BOOX's Control Center, and the panel still showed Bright. `K_FL_PRESET` was only updated by SuperBoox's own actions.
+- **Fix: reading BOOX's panel.**
+  - A tap event or window-state event from systemui schedules `lightSync` (600 ms).
+  - `QuickControls.syncFromScreen` reads the selected preset with `presetButtons`/`selectedPreset`, and saves it if it changed. It also clears your own active preset and learns that preset's levels.
+- **Fix: light-settings changes.**
+  - A `ContentObserver` watches `screen_ctm_brightness/temperature` and `ctm_*_state_key`.
+  - After 800 ms, `syncFromLevels` matches the current signature against the learned per-preset signatures (`K_FL_SIGNATURES`). It is skipped while a SuperBoox action is in progress, still optimistic, or while your own preset is active.
+- **Learning.** Signatures are also learned 1.5 s after SuperBoox switches to Bright, Soft or Off.
+- **Backups.** `K_FL_SIGNATURES` is device-specific, so backups skip it.

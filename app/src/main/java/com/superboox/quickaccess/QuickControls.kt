@@ -393,6 +393,56 @@ object QuickControls {
         DebugLog.i("controls", "front light is now ${now ?: "$preset (assumed)"}")
     }
 
+    // ---- Keeping up with changes made in BOOX's own panel ---------------------------------
+
+    /**
+     * BOOX's Control Center is open and shows which preset is selected: takes that as current.
+     * The preset may have been changed there (or with BOOX's floating button), which SuperBoox
+     * otherwise wouldn't know (build 69: the panel showed Bright while BOOX was on Soft).
+     * Returns the preset when it changed, null when it's the same or can't be seen.
+     */
+    fun syncFromScreen(service: AccessibilityService, prefs: Prefs): String? {
+        val now = runCatching { selectedPreset(presetButtons(service)) }.getOrNull() ?: return null
+        learnLevels(service, prefs, now)
+        if (now == savedPreset(prefs)) return null
+        savePreset(prefs, now)
+        setActiveMine(prefs, null)
+        return now
+    }
+
+    /** The light's state as Android's settings hold it: brightness, warmth and their on/off flags. */
+    private fun lightSignature(context: Context): String? = runCatching {
+        val cr = context.contentResolver
+        LIGHT_SETTINGS.joinToString(",") { Settings.System.getInt(cr, it, -1).toString() }
+    }.getOrNull()?.takeUnless { it.split(",").all { v -> v == "-1" } }
+
+    /** Remembers the levels [preset] showed, so a later change to exactly those can be recognised. */
+    fun learnLevels(context: Context, prefs: Prefs, preset: String) {
+        val sig = lightSignature(context) ?: return
+        val map = runCatching { org.json.JSONObject(prefs.sp.getString(Prefs.K_FL_SIGNATURES, "{}")) }.getOrDefault(org.json.JSONObject())
+        // A signature belongs to one preset only: drop it from any other.
+        map.keys().asSequence().toList().forEach { k -> if (k != preset && map.optString(k) == sig) map.remove(k) }
+        map.put(preset, sig)
+        prefs.sp.edit().putString(Prefs.K_FL_SIGNATURES, map.toString()).apply()
+    }
+
+    /**
+     * The light's settings changed without SuperBoox: if they now match the levels seen for one of
+     * BOOX's presets, takes that preset as current. Returns it when it changed, else null.
+     */
+    fun syncFromLevels(context: Context, prefs: Prefs): String? {
+        val sig = lightSignature(context) ?: return null
+        val map = runCatching { org.json.JSONObject(prefs.sp.getString(Prefs.K_FL_SIGNATURES, "{}")) }.getOrNull() ?: return null
+        val match = map.keys().asSequence().filter { map.optString(it) == sig }.toList().singleOrNull() ?: return null
+        if (match == savedPreset(prefs)) return null
+        savePreset(prefs, match)
+        setActiveMine(prefs, null)
+        return match
+    }
+
+    /** Android's settings for BOOX's front light (seen in the debug report's "Front light" section). */
+    val LIGHT_SETTINGS = listOf("screen_ctm_brightness", "screen_ctm_temperature", "ctm_brightness_state_key", "ctm_temperature_state_key")
+
     /** BOOX's Custom front light: brightness and warmth, each 0–[LEVEL_MAX]. */
     data class Levels(val brightness: Int, val warmth: Int) {
         fun clamp() = Levels(brightness.coerceIn(0, LEVEL_MAX), warmth.coerceIn(0, LEVEL_MAX))

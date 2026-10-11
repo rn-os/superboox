@@ -279,6 +279,8 @@ class Prefs(context: Context) {
         const val K_ADV_METHOD = "adv_light_method"
         const val K_FL_DIRECT_BEFORE = "front_light_direct_before"
         const val K_FL_LAST_ON = "front_light_last_on"
+        /** Front-light settings seen with each BOOX preset, to recognise changes made outside SuperBoox. */
+        const val K_FL_SIGNATURES = "front_light_signatures"
         const val K_CLIP_SHOW = "clip_show"
         const val K_CLIP_COVERS_APPS = "clip_covers_apps"
         const val K_CLIP_LIMIT = "clip_limit"

@@ -54,6 +54,9 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         noteOpener = NoteOpener(this)
         cover = OpeningCover(this, wm)
         prefs.sp.registerOnSharedPreferenceChangeListener(this)
+        QuickControls.LIGHT_SETTINGS.forEach { name ->
+            runCatching { contentResolver.registerContentObserver(android.provider.Settings.System.getUriFor(name), false, lightObserver) }
+        }
         attachHandle()
         instance = this
         NoteIds.capture(this, prefs)
@@ -91,6 +94,10 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         // A tap or a toast ("Copied") may have been a copy: with Advanced access, check the clipboard.
+        // A tap in BOOX's Control Center (or it opening) may have changed the Front Light preset there.
+        if (event.packageName?.toString()?.contains("systemui") == true &&
+            (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED || event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)
+        ) scheduleLightSync()
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED || event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
             val from = event.packageName?.toString()
             if (from != packageName && ::prefs.isInitialized) ClipHistory.checkInBackground(this, prefs, from ?: foregroundPackage)
@@ -162,6 +169,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (instance === this) instance = null
         runCatching { unregisterReceiver(wakeReceiver) }
         if (::prefs.isInitialized) prefs.sp.unregisterOnSharedPreferenceChangeListener(this)
+        runCatching { contentResolver.unregisterContentObserver(lightObserver) }
         if (::noteOpener.isInitialized) noteOpener.cancel()
         if (::cover.isInitialized) cover.hide()
         hidePanel()
@@ -567,6 +575,41 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     private var optimisticPreset: Pair<String, Long>? = null
 
+    // ---- Front Light changed outside SuperBoox ------------------------------------------------
+
+    /** Reads the preset BOOX's Control Center shows, once it has updated after a tap there. */
+    private val lightSync = Runnable {
+        if (qcBusy || !::prefs.isInitialized) return@Runnable
+        QuickControls.syncFromScreen(this, prefs)?.let { p ->
+            DebugLog.i("controls", "front light: BOOX's panel shows $p; SuperBoox updated")
+            optimisticPreset = null
+            panel?.refresh()
+        }
+    }
+
+    private fun scheduleLightSync() {
+        handler.removeCallbacks(lightSync)
+        handler.postDelayed(lightSync, 600)
+    }
+
+    /** The light's settings changed: if not by SuperBoox, see whether they match one of BOOX's presets. */
+    private val lightLevelsSync = Runnable {
+        if (qcBusy || !::prefs.isInitialized) return@Runnable
+        if (optimisticPreset?.let { it.second >= SystemClock.uptimeMillis() } == true) return@Runnable
+        if (QuickControls.activeMine(prefs) != null) return@Runnable // your own preset sets the levels itself
+        QuickControls.syncFromLevels(this, prefs)?.let { p ->
+            DebugLog.i("controls", "front light: levels match $p; SuperBoox updated")
+            panel?.refresh()
+        }
+    }
+
+    private val lightObserver = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            handler.removeCallbacks(lightLevelsSync)
+            handler.postDelayed(lightLevelsSync, 800)
+        }
+    }
+
     private class QcTask(
         val control: QuickControls.Control,
         val hold: Boolean,
@@ -658,6 +701,10 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         }
         handler.postDelayed({
             QuickControls.settlePreset(this, prefs, preset)
+            // Once the light has settled, remember its levels for this preset (to spot it being chosen elsewhere).
+            if (task.mine == null && task.levels == null && preset != "Custom") {
+                handler.postDelayed({ QuickControls.savedPreset(prefs)?.let { QuickControls.learnLevels(this, prefs, it) } }, 1500)
+            }
             val levels = task.levels?.let { if (pendingLevels != null && pendingMine == task.mine) pendingLevels else it }
             if (levels == null && !task.read) {
                 panel?.refresh()

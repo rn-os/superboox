@@ -128,6 +128,8 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             hidePanel()
             showPanel(fresh = false)
         }
+        // Rotated while Settings shows the preview: redo it at the new size.
+        if (previewPanel != null) showPreview(previewClipboard)
     }
 
     override fun onSharedPreferenceChanged(sp: SharedPreferences?, key: String?) {
@@ -153,6 +155,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (::noteOpener.isInitialized) noteOpener.cancel()
         if (::cover.isInitialized) cover.hide()
         hidePanel()
+        hidePreview()
         detachHandle()
     }
 
@@ -210,7 +213,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (!prefs.handleEnabled) return
         val screen = screenSize()
         val edge = prefs.edge
-        val view = EdgeHandleView(this, edge, prefs.trigger, prefs.showHandle) {
+        val view = EdgeHandleView(this, edge, prefs.trigger, prefs.showHandle, solid = stripPreview) {
             DebugLog.i("gesture", "${prefs.trigger} on $edge edge")
             showPanel()
         }
@@ -249,8 +252,50 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
      * @param fresh the user is opening it: start Quick Controls and apps on page 1
      *   unless "Remember last page" is on. False when it's only being rebuilt.
      */
+    // ---- Settings' live preview ----------------------------------------------------------
+
+    /** Settings › Gesture is open: the swipe strip is drawn in black. */
+    var stripPreview = false
+        set(v) {
+            if (field == v) return
+            field = v
+            if (::prefs.isInitialized) attachHandle()
+        }
+
+    private var previewPanel: QuickAccessPanel? = null
+    private var previewClipboard = false
+
+    /**
+     * The real panel, at its real size on its edge, for Settings to show while a
+     * setting changes. Taps pass through it to Settings underneath.
+     */
+    fun showPreview(clipboard: Boolean) {
+        hidePreview()
+        if (panel != null) return
+        val p = QuickAccessPanel(this, prefs, foregroundPackage, previewOfClipboard = clipboard,
+            previewTag = if (clipboard) "PREVIEW · CLIPBOARD" else "PREVIEW · ${prefs.panelWidthPct}%")
+        val params = overlayParams(previewWidth(), WindowManager.LayoutParams.MATCH_PARENT, focusable = false).apply {
+            flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            gravity = Gravity.TOP or (if (prefs.edge == Edge.RIGHT) Gravity.RIGHT else Gravity.LEFT)
+        }
+        runCatching { wm.addView(p.root, params) }
+            .onSuccess { previewPanel = p; previewClipboard = clipboard; DebugLog.i("panel", "preview shown (${params.width}px${if (clipboard) ", clipboard" else ""})") }
+            .onFailure { DebugLog.w("panel", "preview failed: ${it.message}") }
+    }
+
+    fun hidePreview() {
+        previewPanel?.let { runCatching { wm.removeView(it.root) } }
+        previewPanel = null
+    }
+
+    val isPreviewShowing: Boolean get() = previewPanel != null
+
+    /** The panel's width in pixels on this screen right now. */
+    fun previewWidth(): Int = QuickAccessPanel.sheetWidth(this, prefs, screenWidth())
+
     fun showPanel(keepCover: Boolean = false, fresh: Boolean = true) {
         if (panel != null) return
+        hidePreview()
         if (!keepCover) cover.hide()
         if (fresh && !prefs.rememberPages) {
             quickControlsPage = 0

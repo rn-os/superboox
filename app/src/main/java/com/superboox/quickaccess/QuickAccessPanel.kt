@@ -43,6 +43,9 @@ class QuickAccessPanel(
     private val service: QuickAccessService,
     private val prefs: Prefs,
     private val foregroundPackage: String?,
+    /** Settings' live preview: start on the clipboard, and show a PREVIEW tag. */
+    private val previewOfClipboard: Boolean = false,
+    private val previewTag: String? = null,
 ) {
     private enum class Mode { MAIN, RECENT, EDIT, PICK, CLIPBOARD }
 
@@ -112,6 +115,12 @@ class QuickAccessPanel(
             sheet.addView(line, lp(ctx.dp(3), MATCH))
         }
         root.addView(sheet)
+        previewTag?.let { tag ->
+            root.addView(ctx.text(tag, 12f, bold = true, color = Ink.PAPER).apply {
+                setPadding(ctx.dp(10), ctx.dp(3), ctx.dp(10), ctx.dp(3))
+                background = GradientDrawable().apply { setColor(Ink.INK); cornerRadius = ctx.dp(10).toFloat() }
+            }, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM).apply { bottomMargin = ctx.dp(240) })
+        }
         // The panel has focus once its window does: the moment Android lets SuperBoox read the clipboard.
         root.viewTreeObserver.addOnWindowFocusChangeListener { has ->
             if (has && root.isAttachedToWindow) {
@@ -121,7 +130,7 @@ class QuickAccessPanel(
                 if (mode == Mode.CLIPBOARD && before != after) fillClips()
             }
         }
-        show(Mode.MAIN)
+        show(if (previewOfClipboard) Mode.CLIPBOARD else Mode.MAIN)
     }
 
     /** dp scaled by the "Menu size" setting. */
@@ -132,8 +141,8 @@ class QuickAccessPanel(
     private fun show(newMode: Mode) {
         mode = newMode
         val screenW = service.screenWidth()
-        val pct = if (mode == Mode.PICK) maxOf(62, prefs.panelWidthPct) else prefs.panelWidthPct.coerceIn(25, 100)
-        val width = maxOf(s(300), screenW * pct / 100).coerceAtMost(screenW)
+        val width = if (mode == Mode.PICK) maxOf(s(300), screenW * maxOf(62, prefs.panelWidthPct) / 100).coerceAtMost(screenW)
+        else sheetWidth(ctx, prefs, screenW)
         sheet.layoutParams = FrameLayout.LayoutParams(width, MATCH, if (prefs.edge == Edge.RIGHT) Gravity.END else Gravity.START)
 
         content.removeAllViews()
@@ -1611,6 +1620,10 @@ class QuickAccessPanel(
         const val QC_PER_PAGE = 5
         const val LIGHT_PER_PAGE = 4
         const val CLIPS_PER_PAGE_MIN = 2
+
+        /** The panel's width in pixels on a screen [screenW] wide (also used for Settings' live preview). */
+        fun sheetWidth(context: Context, prefs: Prefs, screenW: Int): Int =
+            maxOf(context.dp(300 * prefs.menuSize.scale), screenW * prefs.panelWidthPct.coerceIn(25, 100) / 100).coerceAtMost(screenW)
         const val CLIPS_PER_PAGE_FULL = 7
         private val io = Executors.newSingleThreadExecutor()
     }

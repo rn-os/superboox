@@ -23,6 +23,8 @@ class EdgeHandleView(
     private val edge: Edge,
     private val trigger: Trigger,
     private val visible: Boolean,
+    /** Settings › Gesture is open: draw the whole strip in black so its size and place can be seen. */
+    private val solid: Boolean = false,
     private val onTrigger: () -> Unit,
 ) : View(context) {
 
@@ -36,6 +38,13 @@ class EdgeHandleView(
     private var lastTapUp = 0L
 
     override fun onDraw(canvas: Canvas) {
+        if (solid) {
+            val r = dp(4).toFloat()
+            // Rounded on the inner side only: hugs the screen edge.
+            if (edge == Edge.RIGHT) canvas.drawRoundRect(0f, 0f, width + r, height.toFloat(), r, r, paint)
+            else canvas.drawRoundRect(-r, 0f, width.toFloat(), height.toFloat(), r, r, paint)
+            return
+        }
         if (!visible) return
         // A short dark pill hugging the screen edge.
         val w = dp(4).toFloat()

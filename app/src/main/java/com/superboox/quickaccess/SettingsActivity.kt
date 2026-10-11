@@ -78,6 +78,62 @@ class SettingsActivity : Activity() {
         render()
     }
 
+    override fun onPause() {
+        // The live preview and the black strip only live while their page is on screen.
+        QuickAccessService.instance?.apply { hidePreview(); stripPreview = false }
+        super.onPause()
+    }
+
+    // ---- Live preview ---------------------------------------------------------------------
+
+    /** The real panel is shown beside Look & size or Clipboard (after a change there, or on request). */
+    private var previewOn = false
+
+    private fun previewable() = page == Page.LOOK || page == Page.CLIPBOARD
+
+    /** Shows (or hides) the real panel and the black strip for this page, and keeps this page clear of the panel. */
+    private fun updatePreview() {
+        val svc = QuickAccessService.instance
+        svc?.stripPreview = page == Page.GESTURE
+        if (svc == null || !previewOn || !previewable()) {
+            svc?.hidePreview()
+            scroll.setPadding(0, 0, 0, 0)
+            return
+        }
+        svc.showPreview(clipboard = page == Page.CLIPBOARD)
+        scroll.post { insetForPreview(svc) }
+    }
+
+    /**
+     * Moves this page's content off the side the panel covers, measured on the
+     * screen as it is now (portrait or landscape, full screen or split). Keeps at
+     * least 280dp for the settings themselves; past that the panel overlaps.
+     */
+    private fun insetForPreview(svc: QuickAccessService) {
+        if (!svc.isPreviewShowing) return scroll.setPadding(0, 0, 0, 0)
+        val loc = IntArray(2).also(scroll::getLocationOnScreen)
+        val left = loc[0]
+        val right = left + scroll.width
+        val panelW = svc.previewWidth()
+        val screenW = svc.screenWidth()
+        val room = maxOf(0, scroll.width - dp(280))
+        if (prefs.edge == Edge.RIGHT) {
+            val covered = (right - (screenW - panelW)).coerceIn(0, room)
+            scroll.setPadding(0, 0, covered, 0)
+        } else {
+            val covered = (panelW - left).coerceIn(0, room)
+            scroll.setPadding(covered, 0, 0, 0)
+        }
+    }
+
+    /** Under a previewable page's settings: show or hide the real panel. */
+    private fun previewButton(): View = buttonRow(
+        (if (previewOn) "Hide panel preview" else "Preview the panel") to {
+            previewOn = !previewOn
+            render()
+        },
+    )
+
     /** The settings pages: Home lists the others. */
     private enum class Page(val title: String) {
         HOME("SuperBoox"), GESTURE("Gesture"), LOOK("Look & size"), ITEMS("Quick Access items"),
@@ -112,9 +168,11 @@ class SettingsActivity : Activity() {
             }
         }
         scroll.post { scroll.scrollTo(0, y) }
+        updatePreview()
     }
 
     private fun open(to: Page) {
+        if (to != page) previewOn = false
         page = to
         render()
         scroll.post { scroll.scrollTo(0, 0) }
@@ -128,11 +186,14 @@ class SettingsActivity : Activity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString(K_PAGE, page.name)
+        outState.putBoolean(K_PREVIEW, previewOn)
     }
 
     override fun onRestoreInstanceState(savedInstanceState: Bundle) {
         super.onRestoreInstanceState(savedInstanceState)
         page = savedInstanceState.getString(K_PAGE)?.let { runCatching { Page.valueOf(it) }.getOrNull() } ?: Page.HOME
+        // Rotating keeps the preview; it's redrawn at the new size.
+        previewOn = savedInstanceState.getBoolean(K_PREVIEW)
     }
 
     /** A section page's title bar: ‹ back to Home, then the name, over a heavy rule. */
@@ -637,6 +698,7 @@ class SettingsActivity : Activity() {
             slider("Touch strip height", prefs.handleHeightPct, 10, 100, "% of screen") { prefs.handleHeightPct = it },
             slider("Touch strip position from top", prefs.handleTopPct, 0, 90, "%") { prefs.handleTopPct = it },
         )))
+        list.addView(note("While this page is open, the swipe strip is drawn in black on the screen edge, at its real place and size. Try the swipe right here."))
         list.addView(
             note(
                 "Tip: the \"Quick Access\" app icon opens the panel too. Assign it to a BOOX gesture or the Navigation Ball " +
@@ -648,11 +710,13 @@ class SettingsActivity : Activity() {
     private fun lookSection() {
         list.addView(heading("Size"))
         list.addView(card(listOf(
-            slider("Panel width", prefs.panelWidthPct, 25, 100, "% of screen") { prefs.panelWidthPct = it },
+            slider("Panel width", prefs.panelWidthPct, 25, 100, "% of screen") { prefs.panelWidthPct = it; previewOn = true; render() },
             choiceRow("Menu size", prefs.menuSize.title) {
-                pick("Menu size", MenuSize.entries.map { it.title }, prefs.menuSize.ordinal) { prefs.menuSize = MenuSize.entries[it] }
+                pick("Menu size", MenuSize.entries.map { it.title }, prefs.menuSize.ordinal) { prefs.menuSize = MenuSize.entries[it]; previewOn = true }
             },
+            previewButton(),
         )))
+        list.addView(note("Changing the width or menu size shows the real panel beside this page, at that size, so you can see it before opening the panel. It can't be tapped; hide it with the button or by leaving this page."))
         list.addView(heading("Icons"))
         list.addView(card(listOf(
             check("Use apps' own icons for pinned apps", prefs.appOwnIcons) { prefs.appOwnIcons = it },
@@ -946,9 +1010,11 @@ class SettingsActivity : Activity() {
             "Only when the panel opens: Android doesn't let SuperBoox fetch images in the background, even with Advanced access. Unticking a kind doesn't remove clips already saved."))
         list.addView(heading("While the clipboard is open, still show"))
         list.addView(card(listOf(
-            check("Quick Controls", prefs.clipShowControls) { prefs.clipShowControls = it; render() },
-            check("Last Opened Note & Document", prefs.clipShowLast) { prefs.clipShowLast = it; render() },
-            check("Apps at the bottom", prefs.clipShowApps) { prefs.clipShowApps = it; render() },
+            check("Quick Controls", prefs.clipShowControls) { prefs.clipShowControls = it; previewOn = true; render() },
+            check("Last Opened Note & Document", prefs.clipShowLast) { prefs.clipShowLast = it; previewOn = true; render() },
+            check("Apps at the bottom", prefs.clipShowApps) { prefs.clipShowApps = it; previewOn = true; render() },
+        ) + (if (QuickAccessService.instance != null) listOf(previewButton()) else listOf(
+            // Without the service there's no real panel to show: small drawings instead.
             hbox().apply {
                 gravity = Gravity.CENTER
                 setPadding(dp(12), dp(12), dp(12), dp(14))
@@ -956,7 +1022,7 @@ class SettingsActivity : Activity() {
                 addView(miniPanelLabeled("Controls + apps", true, false, true))
                 addView(miniPanelLabeled("All on", true, true, true))
             },
-        )))
+        ))))
         list.addView(note("Quick Access is always replaced, since the clipboard takes its place. Fewer clips fit on a page when more is shown."))
         list.addView(heading("History"))
         val ignored = ignoredApps()
@@ -1433,6 +1499,7 @@ class SettingsActivity : Activity() {
         const val K_PAGE = "page"
         const val EXTRA_PAGE = "page"
         const val EXTRA_EDIT_PRESET = "edit_preset"
+        private const val K_PREVIEW = "preview"
         const val REQ_FILE = 1
         const val REQ_FOLDER = 2
         const val REQ_RECENT = 3

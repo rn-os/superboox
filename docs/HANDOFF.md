@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 53)
+# SuperBoox: handoff / status (as of build 54)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -240,6 +240,12 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - Settings drawings from mockup 38: Quick Controls "Show me" per control (`controlGuide`), Advanced access "What changes?" (`independentGuide`).
 - Hold Clipboard stays as is (opens Settings › Clipboard). User: deep settings stay in Settings.
 - Gesture / Look & size drawings (37) on hold: user would rather see the real panel/strip while changing a setting. Mockup 39 proposes it.
+
+## Build 54: live preview (mockups 39–40, approved)
+- `QuickAccessService.showPreview(clipboard)` / `hidePreview()`: a real `QuickAccessPanel` (with `previewOfClipboard`, `previewTag`) in its own overlay window, exactly the panel's width (`QuickAccessPanel.sheetWidth`, shared with the panel), on its edge, `FLAG_NOT_TOUCHABLE` + not focusable so taps reach Settings. Re-shown at the new size on rotation; hidden when the real panel opens.
+- `stripPreview`: while Settings › Gesture is open the edge strip is drawn solid black (`EdgeHandleView(solid = true)`) at its real place and size.
+- Settings: `previewOn` (saved across rotation), turned on by changing Panel width / Menu size (Look & size) or the "still show" ticks (Clipboard), or by "Preview the panel"; off when leaving the page or on pause. `insetForPreview` measures Settings' window on screen against the panel's edge and width and pads the covered side (keeps at least 280dp for Settings), so it adapts in portrait, landscape and split screen. The small MiniPanel drawings now only show when the accessibility service isn't running.
+- Look & size's drawings from mockup 37 were replaced by this, as the user preferred.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

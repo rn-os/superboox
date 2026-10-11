@@ -48,6 +48,7 @@ class SettingsActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (current?.get() === this) current = null
         runCatching { rikka.shizuku.Shizuku.removeRequestPermissionResultListener(shizukuResult) }
         super.onDestroy()
     }
@@ -77,8 +78,10 @@ class SettingsActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        current = java.lang.ref.WeakReference(this)
         rebuild()
     }
+
 
     override fun onPause() {
         // The live preview and the black strip only live while their page is on screen.
@@ -151,6 +154,9 @@ class SettingsActivity : Activity() {
     }
 
     private var page = Page.HOME
+
+    /** [MainGuard] is replacing this screen after an error. */
+    private var recovering = false
 
     private val renderNow = Runnable { rebuild() }
 
@@ -302,16 +308,15 @@ class SettingsActivity : Activity() {
                     android.view.MotionEvent.ACTION_DOWN -> {
                         startY = e.rawY
                         v.parent?.requestDisallowInterceptTouchEvent(true)
+                        // Lifted on a bordered card. No translationZ: a raised child makes Android reorder
+                        // the list's drawing, which crashed the panel's drag (build 55) and this one (build 65).
                         row.background = outline(2, 8)
-                        // Above its neighbours without reordering them (bringToFront would).
-                        row.translationZ = dp(6).toFloat()
                     }
                     android.view.MotionEvent.ACTION_MOVE -> row.translationY = e.rawY - startY
                     android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
                         val step = (row.height + dp(1)).coerceAtLeast(1)
                         val to = (index + Math.round(row.translationY / step)).coerceIn(0, count - 1)
                         row.translationY = 0f
-                        row.translationZ = 0f
                         if (e.actionMasked == android.view.MotionEvent.ACTION_UP && to != index) onMove(index, to)
                         render()
                     }
@@ -1784,6 +1789,22 @@ class SettingsActivity : Activity() {
     }
 
     companion object {
+        /** The Settings screen on show, for [MainGuard] to redraw after an error. */
+        private var current: java.lang.ref.WeakReference<SettingsActivity>? = null
+
+        /** Rebuilds the Settings screen from scratch (same page) if it's open; its views may be broken. */
+        fun recoverIfOpen() {
+            val a = current?.get() ?: return
+            if (a.recovering || a.isFinishing || a.isDestroyed) return
+            a.recovering = true
+            // The broken screen is closed (its views can't be trusted) and a fresh one opened on the same
+            // page once it's gone: Settings is singleTask, so starting it first would reuse the broken one.
+            val app = a.applicationContext
+            val again = Intent(app, SettingsActivity::class.java).putExtra(EXTRA_PAGE, a.page.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            runCatching { a.finish() }
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ runCatching { app.startActivity(again) } }, 500)
+        }
+
         const val K_PAGE = "page"
         const val EXTRA_PAGE = "page"
         const val EXTRA_EDIT_PRESET = "edit_preset"

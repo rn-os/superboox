@@ -6,6 +6,8 @@ class SuperBooxApp : Application() {
     override fun onCreate() {
         super.onCreate()
         DebugLog.init(this)
+        // Errors in Settings or the panel are recovered from instead of stopping the service.
+        MainGuard.install()
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             // Recorded before the process dies so the next report shows the crash.

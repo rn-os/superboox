@@ -340,3 +340,18 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - `open()` and `tourGo()` scroll to the top before rendering. The posted rebuild captures the scroll position, so the old `scroll.post` order would have restored the previous page's position.
   - Page changes are logged as `[settings] page X`.
 - **Still to watch.** The panel calls `show()` inside its own click handlers in the same way. It hasn't crashed, but if a similar trace shows the panel's depth, post it there too.
+
+## Build 67: settings can't stop the service
+
+- **Report.** Dragging Bluetooth in Settings → Quick Controls crashed the process, and the service with it. The Settings `dragHandle` used `translationZ`, the same pattern that crashed the panel's drag in build 55. It was removed; rows lift with a border only.
+- **Review of Settings menus.**
+  - Every tap, check, picker and drop handler rebuilds through the posted `render()` (build 66).
+  - Sliders save only when released. Dialogs are separate windows.
+  - No other `translationZ`, `bringToFront` or off-thread view changes were found.
+- **`MainGuard` safety net** (installed in `SuperBooxApp`). It runs `Looper.loop()` inside try/catch on the main thread. On an error it:
+  - logs `E [recovered]`
+  - calls `QuickAccessService.restart()` (clears the panel, preview and cover; re-adds the strip)
+  - calls `SettingsActivity.recoverIfOpen()`, which finishes the broken screen and, 500 ms later, starts a fresh one on the same page (Settings is singleTask)
+  - shows a toast
+
+  More than 6 errors within 10 s are rethrown, so a persistent fault still shows up as a crash in the report.

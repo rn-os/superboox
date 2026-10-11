@@ -307,11 +307,11 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     }
 
     /**
-     * Settings → "Restart the service": clears everything the service has on screen and sets the
-     * edge strip up again, for when it's running but stuck.
+     * Clears everything the service has on screen and sets the edge strip up again: Settings →
+     * "Restart service" when it's running but stuck, and [MainGuard] after an error.
      */
     fun restart() {
-        DebugLog.i("service", "restart from Settings")
+        DebugLog.i("service", "restart: overlays cleared, edge strip set up again")
         if (::noteOpener.isInitialized) noteOpener.cancel()
         if (::cover.isInitialized) cover.hide()
         forgetNewNoteOrigin()

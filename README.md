@@ -176,7 +176,7 @@ Tested on a Note Air 6C (Android 16, firmware 4.3). Other BOOX models and firmwa
 
 ## If the panel stops opening
 
-The top of Settings shows whether the service is running.
+SuperBoox catches errors in Settings and the panel and recovers by itself, so changing settings shouldn't stop it. If it does stop, the top of Settings shows it.
 - **Running but misbehaving:** tap **Restart service**.
 - **Turned on, but stopped:** Android keeps an accessibility service stopped after an error until it's switched off and on again. **Restart service** does that for you with Advanced access. Without it, Restart service opens SuperBoox's switch so you can turn it off and on.
 

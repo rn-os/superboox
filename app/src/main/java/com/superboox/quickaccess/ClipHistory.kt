@@ -273,9 +273,9 @@ object ClipHistory {
         val folder = clip.image?.takeIf { clip.kind == Kind.HANDWRITING && !it.endsWith(".png") } ?: return clip
         val keep = File(dir(context), folder)
         if (File(dir(context), "$folder.png").exists()) return clip.copy(image = "$folder.png").also { c -> save(context, list(context).map { if (it.id == c.id) c else it }) }
-        if (File(keep, "drawn-failed").exists()) return clip
+        if (File(keep, "drawn-failed-2").exists()) return clip
         val png = drawStrokes(keep, "$folder.png", context)
-        if (png == null) { runCatching { File(keep, "drawn-failed").createNewFile() }; return clip }
+        if (png == null) { runCatching { File(keep, "drawn-failed-2").createNewFile() }; return clip }
         val updated = clip.copy(image = png)
         save(context, list(context).map { if (it.id == clip.id) updated else it })
         return updated

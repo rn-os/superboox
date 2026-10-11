@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 57)
+# SuperBoox: handoff / status (as of build 58)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -261,6 +261,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - Build 56 report: BOOX's copy folder holds `shape.pb` (protocol buffers: per shape an id, times, colour as a signed varint, bounds as JSON `{"bottom","left","right","top"}`, matrix JSON, style JSON, and the points) and `extra` (JSON: copyTimestamp, pageRect 1860x2480, pastePosition, viewPortRect…). No picture. `BooxShapes.render` parses the protobuf generically and finds each shape's points as a float array (stride 2–8, absolute / relative / normalised) or repeated {x,y} messages that land inside its bounds; falls back to non-shape messages within all bounds. Unrecognised: `BooxShapes.describe` logs the first shape's field tree. `ClipHistory.ensurePreview` draws clips kept before (once; marks `drawn-failed`).
 - Hold New Note tapped `create_text_new` and made a text note ("Text-1"). Now only a button whose id/label says "note" (not text/folder/search) is tapped, the candidates are logged, and the screen is held (`cover`) until BOOX's screen shows, like opening a pinned note.
 - Edit Quick Access drag crashed (NPE in ViewGroup.dispatchDraw): the list was rebuilt inside the touch while the row had translationZ. Now no translationZ in the panel and the rebuild is posted after the touch.
+
+## Build 58
+- Build 57 report: drag in the edit view fixed (user confirmed). Handwriting still not drawn: a shape is fields 1 id, 2/3 times, 4 colour, 5 fixed32 (≈5.9, pen width?), 7 bounds JSON, 8 matrix JSON, 11 pen JSON (dpi 320, maxPressure 4095, displayScale…), 12 varint 5 (shape type?), 17 line style JSON, 21 "[]", **24 bytes 2112 (points, not LE float pairs)**, 26 "{"repo":{}}". 22 shapes per copy. `BooxShapes.bruteForce` now tries float/int/double × LE/BE × header 0–32 × record size × x/y position × absolute/relative/normalised and keeps a reading whose points spread inside the bounds; `describe` logs non-printable fields as hex. Earlier failed clips retry (marker `drawn-failed-2`).
+- Hold New Note: BOOX home's Notes widget has `create_text_new` and `create_new` (no "note" in the id), so nothing was tapped and the hold timed out. Search shortened to 6 s while asking the user which BOOX action opens the new-note template screen.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

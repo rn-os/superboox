@@ -71,6 +71,55 @@ object BooxShapes {
         return FloatArray(b.size / 4) { buf.float }
     }
 
+    /**
+     * Points in an unknown binary layout (build 57: field 24, 2112 bytes, not
+     * plain little-endian float pairs). Tries float/int/double, both byte orders,
+     * a short header, record sizes and x/y positions, and keeps the reading whose
+     * points spread out inside the shape's bounds.
+     */
+    private fun bruteForce(b: ByteArray, rect: RectF, box: RectF): List<FloatArray>? {
+        var best: List<FloatArray>? = null
+        var bestScore = 0
+        for (order in listOf(ByteOrder.LITTLE_ENDIAN, ByteOrder.BIG_ENDIAN)) {
+            val buf = ByteBuffer.wrap(b).order(order)
+            for (kind in 0..2) {
+                val size = if (kind == 2) 8 else 4
+                fun at(i: Int): Float = when (kind) {
+                    0 -> buf.getFloat(i)
+                    1 -> buf.getInt(i).toFloat()
+                    else -> buf.getDouble(i).toFloat()
+                }
+                for (stride in size * 2..64 step size) for (off in 0..32 step 4) {
+                    val n = (b.size - off) / stride
+                    if (n < 3) continue
+                    for (xp in 0..stride - 2 * size step size) {
+                        val yp = xp + size
+                        for (mode in 0..2) {
+                            val pts = ArrayList<FloatArray>(n)
+                            var inside = 0
+                            for (k in 0 until n) {
+                                val i = off + k * stride
+                                var x = at(i + xp)
+                                var y = at(i + yp)
+                                if (mode == 1) { x += rect.left; y += rect.top }
+                                if (mode == 2) { x = rect.left + x * rect.width(); y = rect.top + y * rect.height() }
+                                if (!x.isNaN() && !y.isNaN() && box.contains(x, y)) inside++
+                                pts += floatArrayOf(x, y)
+                            }
+                            if (inside < n * 0.9) continue
+                            // Spread out over the shape, not a column of zeros or one repeated value.
+                            val span = RectF(pts[0][0], pts[0][1], pts[0][0], pts[0][1]).apply { pts.forEach { union(it[0], it[1]) } }
+                            if (span.width() < rect.width() * 0.5f && span.height() < rect.height() * 0.5f) continue
+                            if (pts.distinctBy { it[0] to it[1] }.size < n / 3) continue
+                            if (n > bestScore) { bestScore = n; best = pts }
+                        }
+                    }
+                }
+            }
+        }
+        return best
+    }
+
     private fun inflate(b: ByteArray): ByteArray? = runCatching {
         if (b.size < 2 || (b[0].toInt() and 0xff) != 0x78) return null
         java.util.zip.InflaterInputStream(b.inputStream()).readBytes()
@@ -104,6 +153,7 @@ object BooxShapes {
                         }
                     }
                 }
+                if (best == null) bruteForce(b, rect, box)?.let { best = it }
                 // Or nested messages: points as repeated {x, y} messages, or deeper structure.
                 if (depth < 4) parse(b)?.let { sub ->
                     val xy = sub.filter { it.type == 2 }.mapNotNull { m ->
@@ -178,7 +228,7 @@ object BooxShapes {
                         sb.append("\n  $path bytes ${b.size}")
                         when {
                             printable(b) -> sb.append(" \"").append(String(b).take(120)).append('"')
-                            b.size % 4 == 0 -> sb.append(" floats? ").append(floats(b).take(12).joinToString { "%.2f".format(it) })
+                            else -> sb.append(" hex ").append(b.take(160).joinToString(" ") { "%02x".format(it) })
                         }
                         if (sub != null && sub.isNotEmpty()) walk(sub, "$path.", depth + 1)
                     }

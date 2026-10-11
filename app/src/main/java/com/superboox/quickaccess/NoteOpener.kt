@@ -553,7 +553,7 @@ class NoteOpener(private val service: AccessibilityService) {
         private const val MAX_RELAUNCHES = 2
         private const val MAX_TAP_ATTEMPTS = 2
         private const val DIRECT_WAIT_MS = 3_500L
-        private const val SETUP_TIMEOUT_MS = 12_000L
+        private const val SETUP_TIMEOUT_MS = 6_000L
 
         /**
          * Open-by-id is off until we know the extra OpenNoteByDocIdActivity reads:

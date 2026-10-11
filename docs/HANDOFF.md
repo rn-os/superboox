@@ -360,3 +360,20 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 
 - Writing only `ACCELEROMETER_ROTATION=0` locked the screen to the stored `USER_ROTATION`, which flipped it 180° on the user's tablet.
 - `QuickControls.toggleRotation` now writes `USER_ROTATION` = the current display rotation first (as Android's `RotationPolicy` does), and logs "locked at N°".
+
+## Build 69: Wi‑Fi section in the debug report
+
+- `WifiProbe` collects two levels of detail:
+  - **Basic (any app):** band, RSSI, link speeds, Wi‑Fi standard, validation.
+  - **With Advanced access:**
+    - `cmd wifi status`
+    - `/proc/net/wireless`
+    - power-save grep
+    - the `WifiScoreReport` history
+    - disconnect/roam events
+    - uptime
+    - ping to the router (from `ip route get`) and to 1.1.1.1
+    - a 2 MB curl download from speed.cloudflare.com, if curl exists
+- These commands run as shell; the app itself still has no INTERNET permission.
+- SSIDs are hidden. MACs and BSSIDs become `ap-xxxxxx` (a SHA-256 prefix, the same in every report).
+- **Purpose:** separate RF or hardware causes from software ones. The user takes report A while slow, then report B right after toggling Wi‑Fi off and on, in the same place.

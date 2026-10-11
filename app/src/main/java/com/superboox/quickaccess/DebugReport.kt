@@ -74,6 +74,9 @@ object DebugReport {
         line("background read problem: ${ClipHistory.backgroundProblem() ?: "none"}")
         line("all files access: ${ClipHistory.hasFileAccess()}; advanced access: ${AdvancedAccess.allowed()}")
 
+        section("Wi-Fi")
+        runCatching { WifiProbe.lines(context) }.getOrElse { listOf("probe failed: ${it.message}") }.forEach { line(it) }
+
         section("Front light: system settings")
         lightSettings(context).forEach { line(it) }
 

@@ -77,7 +77,7 @@ class SettingsActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        render()
+        rebuild()
     }
 
     override fun onPause() {
@@ -152,7 +152,21 @@ class SettingsActivity : Activity() {
 
     private var page = Page.HOME
 
+    private val renderNow = Runnable { rebuild() }
+
+    /**
+     * Rebuilds the page on the next turn of the main loop rather than at once. Most calls come from
+     * a tap on a view inside [list]: emptying [list] while Android is still handling that tap (and
+     * telling accessibility services about it) left a hole in it that crashed the next layout
+     * (build 65 report, ViewGroup.dispatchCollectViewAttributes). Several calls in a row rebuild once.
+     */
     private fun render() {
+        list.removeCallbacks(renderNow)
+        list.post(renderNow)
+    }
+
+    private fun rebuild() {
+        list.removeCallbacks(renderNow)
         val y = scroll.scrollY
         list.removeAllViews()
         if (tourStep != null && page == Page.HOME) {
@@ -187,9 +201,10 @@ class SettingsActivity : Activity() {
 
     private fun open(to: Page) {
         if (to != page) previewOn = false
+        if (to != page) DebugLog.i("settings", "page ${to.name}")
         page = to
+        scroll.scrollTo(0, 0)
         render()
-        scroll.post { scroll.scrollTo(0, 0) }
     }
 
     @Deprecated("Platform Activity API; fine without AndroidX.")
@@ -691,8 +706,8 @@ class SettingsActivity : Activity() {
     private fun tourGo(to: Int) {
         tourStep = to
         if (to == TOUR_TRY) tourPanelOpensAtStart = QuickAccessService.instance?.panelOpens ?: 0
+        scroll.scrollTo(0, 0)
         render()
-        scroll.post { scroll.scrollTo(0, 0) }
     }
 
     /** A permission row: what it's for, ✓ when granted, else a button to Android's switch. */

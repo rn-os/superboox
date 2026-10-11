@@ -330,3 +330,13 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - Fix: those fields now sit above `init`.
   - Keep any state that `show()` reads in clipboard mode above `init`.
 - Keyboards are no longer counted as the app in front (`keyboardPackages` from `InputMethodManager`). Leaving the create-note screen once tried to return to `com.onyx.latinime`.
+
+## Build 66: Settings layout crash
+
+- **Report.** An NPE in `ViewGroup.dispatchCollectViewAttributes` (a null child during layout), five levels deep, so it was the Settings page `list`. It happened within seconds of using Settings, twice. No preview was shown.
+- **Cause (likely).** `render()` emptied and rebuilt `list` synchronously from inside tap or check handlers of views in `list`. On a device with several accessibility services, that can leave a hole in the children array.
+- **Fix.**
+  - `render()` now posts a coalesced `rebuild()`. `onResume` rebuilds directly.
+  - `open()` and `tourGo()` scroll to the top before rendering. The posted rebuild captures the scroll position, so the old `scroll.post` order would have restored the previous page's position.
+  - Page changes are logged as `[settings] page X`.
+- **Still to watch.** The panel calls `show()` inside its own click handlers in the same way. It hasn't crashed, but if a similar trace shows the panel's depth, post it there too.

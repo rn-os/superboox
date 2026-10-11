@@ -1002,7 +1002,8 @@ class QuickAccessPanel(
     private fun fillClips() {
         val body = clipBody ?: return
         body.removeAllViews()
-        val all = ClipHistory.list(service)
+        // Handwriting kept before it could be drawn gets its picture now.
+        val all = ClipHistory.list(service).map { ClipHistory.ensurePreview(service, it) }
         clipCount?.text = "· ${all.size} ${if (all.size == 1) "item" else "items"}"
         with(ctx) {
             body.addView(hbox().apply {
@@ -1373,15 +1374,16 @@ class QuickAccessPanel(
                         startY = e.rawY
                         v.parent?.requestDisallowInterceptTouchEvent(true)
                         row.background = outline(2, 8)
-                        row.translationZ = dp(6).toFloat()
                     }
                     android.view.MotionEvent.ACTION_MOVE -> row.translationY = e.rawY - startY
                     android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
                         val step = (row.height + dp(1)).coerceAtLeast(1)
                         val to = (index + Math.round(row.translationY / step)).coerceIn(0, count - 1)
                         row.translationY = 0f
-                        row.translationZ = 0f
-                        if (e.actionMasked == android.view.MotionEvent.ACTION_UP && to != index) onMove(index, to) else show(Mode.EDIT)
+                        val moved = e.actionMasked == android.view.MotionEvent.ACTION_UP && to != index
+                        // Rebuild after this touch is done: removing the row while it's still being
+                        // drawn and touched crashed the panel (build 56 report).
+                        root.post { if (moved) onMove(index, to) else show(Mode.EDIT) }
                     }
                 }
                 true

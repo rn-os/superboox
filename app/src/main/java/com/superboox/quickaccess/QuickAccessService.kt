@@ -316,7 +316,9 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     /** Hold New Note: BOOX's new-note screen, through the Notes library's own button. */
     fun openNewNoteSetup() {
-        noteOpener.openNewNoteSetup(prefs.notesPackage, inEditor = foregroundPackage == prefs.notesPackage)
+        val inEditor = foregroundPackage == prefs.notesPackage
+        // Hold the screen while Notes opens and the button is found, like opening a pinned note.
+        cover.show { noteOpener.openNewNoteSetup(prefs.notesPackage, inEditor) }
     }
 
     /** After the panel closes: pastes the clipboard into the text box that has focus in the app. */

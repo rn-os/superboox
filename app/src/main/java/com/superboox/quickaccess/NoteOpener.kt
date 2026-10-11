@@ -159,7 +159,10 @@ class NoteOpener(private val service: AccessibilityService) {
             setupBacks++
         } else {
             val how = BooxNotes.launchCandidates(service, notesPackage).firstOrNull { Launcher.tryStart(service, it.second) }?.first
-                ?: return toast("Couldn't open BOOX Notes on this device")
+                ?: return run {
+                    (service as? QuickAccessService)?.noteOpenFinished(false)
+                    toast("Couldn't open BOOX Notes on this device")
+                }
             DebugLog.i("note", "new-note setup: opened Notes via $how")
             setupTabTapped = how != "BOOX launcher"
         }
@@ -171,7 +174,8 @@ class NoteOpener(private val service: AccessibilityService) {
         val packages = BooxNotes.packages(notesPackage)
         val root = notesRoot(packages)
         if (now > setupUntil) {
-            DebugLog.w("note", "new-note setup: no New button found. Screen:\n" + (root?.let { DebugReport.describeTree(it) } ?: "Notes window not found"))
+            DebugLog.w("note", "new-note setup: no new-note button found. Screen:\n" + (root?.let { DebugReport.describeTree(it) } ?: "Notes window not found"))
+            (service as? QuickAccessService)?.noteOpenFinished(false)
             return toast("Couldn't find BOOX's new-note button. Send a debug report from Settings")
         }
         if (root == null) return run { handler.postDelayed({ setupTick(notesPackage) }, POLL_MS) }
@@ -196,18 +200,28 @@ class NoteOpener(private val service: AccessibilityService) {
         if (button == null) return run { handler.postDelayed({ setupTick(notesPackage) }, POLL_MS) }
         DebugLog.i("note", "new-note setup: tapping ${button.viewIdResourceName ?: NotesScreen.textOf(button)}")
         click(button, null)
+        // Let BOOX's new-note screen draw under the held screen, then reveal it.
+        handler.postDelayed({ (service as? QuickAccessService)?.noteOpenFinished(true) }, AFTER_TAP_MS)
     }
 
-    /** The library's "new note" button: by its id, or its label / description. */
+    /**
+     * The library's "new note" button. Its siblings make a text note or a folder
+     * (build 56 tapped create_text_new and made a text note), so only a button
+     * whose id or label says "note" counts; candidates are logged either way.
+     */
     private fun newNoteButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        val labels = setOf("new", "new note", "create", "create note", "add note", "+", "新建", "新建笔记")
-        return findFirst(root) { n ->
-            if (!n.isVisibleToUser) return@findFirst false
+        val candidates = ArrayList<AccessibilityNodeInfo>()
+        findFirst(root) { n ->
             val id = n.viewIdResourceName?.substringAfter(":id/")?.lowercase().orEmpty()
             val t = NotesScreen.textOf(n).lowercase()
-            t in labels || (id.isNotEmpty() && !id.contains("search") && !id.contains("folder") &&
-                (id.contains("new_note") || id.contains("create") || id == "add" || id.contains("add_note") || id.endsWith("_add") || id.startsWith("add_") || id.contains("iv_add")))
+            if (n.isVisibleToUser && (Regex("create|new|add").containsMatchIn(id) || Regex("^(new|create|add)\\b").containsMatchIn(t))) candidates += n
+            false
         }
+        fun idOf(n: AccessibilityNodeInfo) = n.viewIdResourceName?.substringAfter(":id/")?.lowercase().orEmpty()
+        if (candidates.isNotEmpty()) DebugLog.i("note", "new-note setup: buttons " + candidates.joinToString { "${idOf(it)}\"${NotesScreen.textOf(it)}\"" })
+        val notText = candidates.filterNot { idOf(it).contains("text") || idOf(it).contains("folder") || idOf(it).contains("search") || NotesScreen.textOf(it).lowercase().contains("text") }
+        return notText.firstOrNull { idOf(it).contains("note") && Regex("create|new|add").containsMatchIn(idOf(it)) }
+            ?: notText.firstOrNull { NotesScreen.textOf(it).lowercase().let { t -> t == "new note" || t == "note" || t == "create note" || t == "新建笔记" } }
     }
 
     fun cancel() {

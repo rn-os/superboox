@@ -254,6 +254,33 @@ object ClipHistory {
         return path.takeIf { Regex("[A-Za-z0-9._/-]+").matches(it) }
     }
 
+    /** Draws BOOX's strokes (shape.pb in the kept folder) into [png]; logs their structure if they can't be read. */
+    private fun drawStrokes(keep: File, png: String, context: Context): String? {
+        val pb = File(keep, "shape.pb").takeIf { it.exists() }?.readBytes() ?: return null
+        val bmp = runCatching { BooxShapes.render(pb) }.onFailure { DebugLog.w("clipboard", "drawing handwriting failed: ${it.message}") }.getOrNull()
+        if (bmp == null) {
+            DebugLog.i("clipboard", "handwriting strokes not recognised; " + runCatching { BooxShapes.describe(pb) }.getOrElse { it.message })
+            return null
+        }
+        File(dir(context), png).outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        DebugLog.i("clipboard", "handwriting drawn from shape.pb (${bmp.width}x${bmp.height})")
+        bmp.recycle()
+        return png
+    }
+
+    /** Handwriting saved before it could be drawn: draws it from its kept files now (once). */
+    fun ensurePreview(context: Context, clip: Clip): Clip {
+        val folder = clip.image?.takeIf { clip.kind == Kind.HANDWRITING && !it.endsWith(".png") } ?: return clip
+        val keep = File(dir(context), folder)
+        if (File(dir(context), "$folder.png").exists()) return clip.copy(image = "$folder.png").also { c -> save(context, list(context).map { if (it.id == c.id) c else it }) }
+        if (File(keep, "drawn-failed").exists()) return clip
+        val png = drawStrokes(keep, "$folder.png", context)
+        if (png == null) { runCatching { File(keep, "drawn-failed").createNewFile() }; return clip }
+        val updated = clip.copy(image = png)
+        save(context, list(context).map { if (it.id == clip.id) updated else it })
+        return updated
+    }
+
     /** Android's "All files access" is on for SuperBoox: BOOX's copy folder can be read directly. */
     fun hasFileAccess(): Boolean = Build.VERSION.SDK_INT >= 30 && android.os.Environment.isExternalStorageManager()
 
@@ -304,6 +331,7 @@ object ClipHistory {
                 }
             }
         }
+        if (picture == null) picture = drawStrokes(keep, "h$stamp.png", context)
         if (picture == null) DebugLog.i("clipboard", "handwriting: no picture in BOOX's copy (${files.size} files kept for drawing the strokes)")
         // No picture yet: the clip still points at its kept files (the folder), so they go when it's deleted.
         return picture ?: keep.name

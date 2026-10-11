@@ -582,8 +582,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (qcBusy || !::prefs.isInitialized) return@Runnable
         QuickControls.syncFromScreen(this, prefs)?.let { p ->
             DebugLog.i("controls", "front light: BOOX's panel shows $p; SuperBoox updated")
-            optimisticPreset = null
-            panel?.refresh()
+            lightChanged()
         }
     }
 
@@ -599,7 +598,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (QuickControls.activeMine(prefs) != null) return@Runnable // your own preset sets the levels itself
         QuickControls.syncFromLevels(this, prefs)?.let { p ->
             DebugLog.i("controls", "front light: levels match $p; SuperBoox updated")
-            panel?.refresh()
+            lightChanged()
         }
     }
 
@@ -621,6 +620,8 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         /** The SuperBoox preset this applies (null: BOOX's own presets). */
         val mine: String? = null,
         val scrolled: Boolean = false,
+        /** Only read which Front Light preset BOOX shows (holding Front Light in the panel). */
+        val check: Boolean = false,
     )
 
     /** States to show: the last known ones, with taps still being applied on top. */
@@ -653,6 +654,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     private fun nextControl() {
         val task = qcQueue.removeFirstOrNull() ?: return finishSession(closeShade = true, keepPanel = true)
+        if (task.check) return checkPreset(task)
         task.preset?.let { return nextPreset(task, it) }
         val control = task.control
         val hold = task.hold
@@ -679,6 +681,45 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 finishSession(closeShade = !hold, keepPanel = false)
             }
         }, QuickControls.AFTER_TAP_MS)
+    }
+
+    /**
+     * Holding Front Light: makes sure the presets show what BOOX actually has. Instant when the
+     * light's levels confirm (or reveal) the preset; otherwise BOOX's Control Center is read
+     * behind the screen hold, the panel staying on top.
+     */
+    fun checkFrontLight() {
+        if (qcBusy) return
+        // Your own preset sets the light itself; BOOX's panel can't tell which one is on.
+        if (QuickControls.activeMine(prefs) != null && AdvancedAccess.independentPresets(prefs)) return
+        QuickControls.syncFromLevels(this, prefs)?.let { p ->
+            DebugLog.i("controls", "front light: levels match $p; SuperBoox updated")
+            return lightChanged()
+        }
+        if (QuickControls.levelsMatchSaved(this, prefs)) return
+        val control = QuickControls.ALL.firstOrNull { it.id == QuickControls.FRONT_LIGHT } ?: return
+        DebugLog.i("controls", "front light: checking BOOX's preset")
+        qcQueue.addLast(QcTask(control, hold = false, check = true))
+        startSession()
+    }
+
+    private fun checkPreset(task: QcTask) {
+        val shown = QuickControls.screenPreset(this)
+        if (shown == null && !task.scrolled) {
+            QuickControls.scrollShade(this)
+            qcQueue.addFirst(QcTask(task.control, false, check = true, scrolled = true))
+            handler.postDelayed({ nextControl() }, 400)
+            return
+        }
+        val changed = QuickControls.syncFromScreen(this, prefs)
+        DebugLog.i("controls", "front light: BOOX shows ${shown ?: "?"}" + if (changed != null) "; SuperBoox updated" else "")
+        if (changed != null) lightChanged()
+        nextControl()
+    }
+
+    private fun lightChanged() {
+        optimisticPreset = null
+        panel?.refreshLight()
     }
 
     private fun nextPreset(task: QcTask, preset: String) {

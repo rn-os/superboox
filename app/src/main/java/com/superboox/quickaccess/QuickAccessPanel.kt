@@ -292,6 +292,12 @@ class QuickAccessPanel(
     /** Redraws in place (Quick Controls after a tap). */
     fun refresh() = show(mode)
 
+    /** The Front Light preset changed outside the panel: redraw, on the page holding the one now active. */
+    fun refreshLight() {
+        if (lightMenu && lightEdit == null) lightPage = activeLightPage()
+        show(mode)
+    }
+
     private fun quickControlsRow(): View = with(ctx) {
         val controls = QuickControls.selected(prefs)
         val box = vbox().apply { setPadding(s(4), s(10), s(4), s(2)) }
@@ -716,6 +722,8 @@ class QuickAccessPanel(
                         lightMenu = true
                         lightPage = activeLightPage()
                         show(mode)
+                        // Make sure it shows what BOOX actually has (it may have been changed there).
+                        service.checkFrontLight()
                     }
                 } else {
                     service.quickControl(control, hold = true)

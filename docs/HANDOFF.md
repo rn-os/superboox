@@ -396,3 +396,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - data stalls and score
 
   The power-save grep excludes those lines, and long lines are capped at 300 characters.
+- **Build 72:** holding Front Light calls `QuickAccessService.checkFrontLight()`. It does one of four things:
+  - **Your own preset active** (with independent presets): skipped.
+  - **Levels match a learned preset:** that preset is taken (`syncFromLevels`).
+  - **Levels match the saved preset's learned signature:** nothing to do.
+  - **Otherwise:** a `QcTask(check = true)` runs a Control Center session behind the cover. `checkPreset` scrolls if needed, then `syncFromScreen` saves the preset and learns its levels.
+
+  `panel.refreshLight()` redraws on the page holding the active preset.

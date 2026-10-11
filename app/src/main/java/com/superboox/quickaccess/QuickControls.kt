@@ -402,12 +402,24 @@ object QuickControls {
      * Returns the preset when it changed, null when it's the same or can't be seen.
      */
     fun syncFromScreen(service: AccessibilityService, prefs: Prefs): String? {
-        val now = runCatching { selectedPreset(presetButtons(service)) }.getOrNull() ?: return null
+        val now = screenPreset(service) ?: return null
         learnLevels(service, prefs, now)
         if (now == savedPreset(prefs)) return null
         savePreset(prefs, now)
         setActiveMine(prefs, null)
         return now
+    }
+
+    /** The preset BOOX's open Control Center shows as selected; null if its presets aren't in view. */
+    fun screenPreset(service: AccessibilityService): String? =
+        runCatching { selectedPreset(presetButtons(service)) }.getOrNull()
+
+    /** The light's levels are still those seen with the saved preset (so it's very likely still current). */
+    fun levelsMatchSaved(context: Context, prefs: Prefs): Boolean {
+        val saved = savedPreset(prefs) ?: return false
+        val sig = lightSignature(context) ?: return false
+        val map = runCatching { org.json.JSONObject(prefs.sp.getString(Prefs.K_FL_SIGNATURES, "{}")) }.getOrNull() ?: return false
+        return map.optString(saved) == sig
     }
 
     /** The light's state as Android's settings hold it: brightness, warmth and their on/off flags. */

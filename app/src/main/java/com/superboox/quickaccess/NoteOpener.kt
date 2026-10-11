@@ -153,11 +153,9 @@ class NoteOpener(private val service: AccessibilityService) {
         setupBacks = 0
         setupTabTapped = false
         setupUntil = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
-        if (inEditor) {
-            // Back out of the open note (BOOX saves it) to its library.
-            service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
-            setupBacks++
-        } else {
+        // Always through BOOX's home screen (its Notes widget has the +). Back from an open note
+        // can land on another launcher (build 59 report), so don't rely on it; BOOX saves the note itself.
+        run {
             val how = BooxNotes.launchCandidates(service, notesPackage).firstOrNull { Launcher.tryStart(service, it.second) }?.first
                 ?: return run {
                     (service as? QuickAccessService)?.noteOpenFinished(false)
@@ -179,15 +177,6 @@ class NoteOpener(private val service: AccessibilityService) {
             return toast("Couldn't find BOOX's new-note button. Send a debug report from Settings")
         }
         if (root == null) return run { handler.postDelayed({ setupTick(notesPackage) }, POLL_MS) }
-        val state = NotesScreen.read(root)
-        if (state is NotesScreen.State.Editor) {
-            if (setupBacks < 2) {
-                setupBacks++
-                service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
-                handler.postDelayed({ setupTick(notesPackage) }, AFTER_BACK_MS)
-            } else handler.postDelayed({ setupTick(notesPackage) }, POLL_MS)
-            return
-        }
         if (!setupTabTapped && root.packageName?.toString() == BooxNotes.BOOX_HOME_PACKAGE) {
             setupTabTapped = true
             findFirst(root) { n -> NotesScreen.textOf(n).lowercase().let { it == "notes" || it == "note" } && n.isVisibleToUser }?.let {
@@ -200,32 +189,26 @@ class NoteOpener(private val service: AccessibilityService) {
         if (button == null) return run { handler.postDelayed({ setupTick(notesPackage) }, POLL_MS) }
         DebugLog.i("note", "new-note setup: tapping ${button.viewIdResourceName ?: NotesScreen.textOf(button)}")
         click(button, null)
-        // BOOX's + opens the new note straight away (build 58 report: "Notebook-2"); then open its Template panel.
+        // BOOX's + opens its create-note screen (name, page layout, templates, Create / Cancel; build 59
+        // report). Reveal it as soon as it's up.
         val until = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
-        handler.postDelayed({ templateTick(notesPackage, until) }, AFTER_TAP_MS)
+        handler.postDelayed({ createScreenTick(notesPackage, until) }, POLL_MS)
     }
 
-    /** In the new note: taps the editor's Template button ("Tem…" in its tool column), then reveals the screen. */
-    private fun templateTick(notesPackage: String, until: Long) {
-        val reveal = { (service as? QuickAccessService)?.noteOpenFinished(true); Unit }
+    private fun createScreenTick(notesPackage: String, until: Long) {
         val root = notesRoot(BooxNotes.packages(notesPackage))
-        val inEditor = root != null && NotesScreen.read(root) is NotesScreen.State.Editor
-        val button = if (inEditor) findFirst(root!!) { n ->
-            val t = NotesScreen.textOf(n).lowercase()
-            n.isVisibleToUser && (t == "template" || t == "templates" || t.startsWith("tem"))
-        } else null
+        val shown = root != null && NotesScreen.isCreateNoteScreen(root)
         when {
-            button != null -> {
-                DebugLog.i("note", "new-note setup: opening Template (\"${NotesScreen.textOf(button)}\")")
-                click(button, null)
-                handler.postDelayed(reveal, AFTER_TAP_MS)
+            shown -> {
+                DebugLog.i("note", "new-note setup: BOOX's create-note screen is up")
+                (service as? QuickAccessService)?.noteOpenFinished(true)
             }
             SystemClock.uptimeMillis() > until -> {
-                DebugLog.w("note", "new-note setup: ${if (inEditor) "no Template button in the new note" else "the new note didn't open"}. Screen:\n" +
+                DebugLog.w("note", "new-note setup: the create-note screen didn't show. Screen:\n" +
                     (root?.let { DebugReport.describeTree(it) } ?: "Notes window not found"))
-                reveal()
+                (service as? QuickAccessService)?.noteOpenFinished(true)
             }
-            else -> handler.postDelayed({ templateTick(notesPackage, until) }, POLL_MS)
+            else -> handler.postDelayed({ createScreenTick(notesPackage, until) }, POLL_MS)
         }
     }
 

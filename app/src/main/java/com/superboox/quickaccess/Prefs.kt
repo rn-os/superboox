@@ -82,6 +82,11 @@ class Prefs(context: Context) {
         get() = sp.getInt(K_CLIP_LIMIT, 100)
         set(v) = sp.edit().putInt(K_CLIP_LIMIT, v).apply()
 
+    /** The first-run tour was finished or skipped. */
+    var tourDone: Boolean
+        get() = sp.getBoolean(K_TOUR_DONE, false)
+        set(v) = sp.edit().putBoolean(K_TOUR_DONE, v).apply()
+
     var clipKeepText: Boolean
         get() = sp.getBoolean(K_CLIP_TEXT, true)
         set(v) = sp.edit().putBoolean(K_CLIP_TEXT, v).apply()
@@ -281,6 +286,7 @@ class Prefs(context: Context) {
         const val K_CLIP_KEEP_RESTART = "clip_keep_restart"
         const val K_CLIP_IGNORED = "clip_ignored"
         const val K_CLIP_MODE = "clip_mode"
+        const val K_TOUR_DONE = "tour_done"
         const val K_CLIP_TEXT = "clip_text"
         const val K_CLIP_LINKS = "clip_links"
         const val K_CLIP_CODES = "clip_codes"

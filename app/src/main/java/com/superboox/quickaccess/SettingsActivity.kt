@@ -41,6 +41,8 @@ class SettingsActivity : Activity() {
             addView(list)
         }
         setContentView(scroll)
+        // First launch: the tour (it also asks for the permissions SuperBoox uses).
+        if (savedInstanceState == null && !prefs.tourDone) tourStep = 0
         openRequestedPage(intent)
         runCatching { rikka.shizuku.Shizuku.addRequestPermissionResultListener(shizukuResult) }
     }
@@ -94,8 +96,14 @@ class SettingsActivity : Activity() {
     /** Shows (or hides) the real panel and the black strip for this page, and keeps this page clear of the panel. */
     private fun updatePreview() {
         val svc = QuickAccessService.instance
-        svc?.stripPreview = page == Page.GESTURE
-        if (svc == null || !previewOn || !previewable()) {
+        val touring = tourStep != null && page == Page.HOME
+        svc?.stripPreview = page == Page.GESTURE || (touring && tourStep == TOUR_TRY)
+        if (touring && tourStep == TOUR_PANEL && svc != null) {
+            svc.showPreview(clipboard = false)
+            scroll.post { insetForPreview(svc) }
+            return
+        }
+        if (svc == null || !previewOn || !previewable() || touring) {
             svc?.hidePreview()
             scroll.setPadding(0, 0, 0, 0)
             return
@@ -146,6 +154,11 @@ class SettingsActivity : Activity() {
     private fun render() {
         val y = scroll.scrollY
         list.removeAllViews()
+        if (tourStep != null && page == Page.HOME) {
+            renderTour()
+            updatePreview()
+            return
+        }
         if (page == Page.HOME) {
             statusSection()
             homeMenu()
@@ -180,13 +193,18 @@ class SettingsActivity : Activity() {
 
     @Deprecated("Platform Activity API; fine without AndroidX.")
     override fun onBackPressed() {
-        if (page != Page.HOME) open(Page.HOME) else super.onBackPressed()
+        when {
+            page != Page.HOME -> open(Page.HOME)
+            tourStep != null && tourStep!! > 0 -> { tourStep = tourStep!! - 1; render() }
+            else -> super.onBackPressed()
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString(K_PAGE, page.name)
         outState.putBoolean(K_PREVIEW, previewOn)
+        tourStep?.let { outState.putInt(K_TOUR, it) }
     }
 
     override fun onRestoreInstanceState(savedInstanceState: Bundle) {
@@ -194,6 +212,7 @@ class SettingsActivity : Activity() {
         page = savedInstanceState.getString(K_PAGE)?.let { runCatching { Page.valueOf(it) }.getOrNull() } ?: Page.HOME
         // Rotating keeps the preview; it's redrawn at the new size.
         previewOn = savedInstanceState.getBoolean(K_PREVIEW)
+        tourStep = savedInstanceState.getInt(K_TOUR, -1).takeIf { it >= 0 }
     }
 
     /** A section page's title bar: ‹ back to Home, then the name, over a heavy rule. */
@@ -233,6 +252,10 @@ class SettingsActivity : Activity() {
         )))
         list.addView(heading("Help"))
         list.addView(card(listOf(
+            actionRow(R.drawable.ic_star, "Show the tour again", "A quick walk-through, and the permissions SuperBoox uses") {
+                tourStep = 0
+                render()
+            },
             menuRow(R.drawable.ic_bug, Page.TROUBLESHOOTING, "Copy or share a debug report"),
             menuRow(R.drawable.ic_shield, Page.ADVANCED_ACCESS, when {
                 AdvancedAccess.independentPresets(prefs) -> "Independent Front Light presets on"
@@ -627,6 +650,184 @@ class SettingsActivity : Activity() {
         }, lp(0, WRAP, 1f))
         pressable()
         setOnClickListener { if (!selected) onPick() }
+    }
+
+    /** Like [menuRow], for an action rather than a page. */
+    private fun actionRow(iconRes: Int, title: String, summary: String, onClick: () -> Unit): View = hbox().apply {
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(14), dp(12), dp(14), dp(12))
+        contentDescription = "$title: $summary"
+        addView(android.widget.FrameLayout(context).apply {
+            background = outline(2, 20)
+            addView(icon(getDrawable(iconRes), 22), android.widget.FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+        }, lp(dp(40), dp(40)))
+        addView(vbox().apply {
+            setPadding(dp(14), 0, dp(8), 0)
+            addView(text(title, 18f, medium = true))
+            addView(text(summary, 13f, color = Ink.MUTED).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
+        }, lp(0, WRAP, 1f))
+        addView(text("›", 26f, bold = true))
+        pressable()
+        setOnClickListener { onClick() }
+    }
+
+    // ---- First-run tour -------------------------------------------------------------------
+
+    /** The tour's step while it's showing (null: not touring). */
+    private var tourStep: Int? = null
+    private var tourPanelOpensAtStart = 0
+    private val tourPoll = android.os.Handler(android.os.Looper.getMainLooper())
+
+    private fun endTour() {
+        tourStep = null
+        prefs.tourDone = true
+        tourPoll.removeCallbacksAndMessages(null)
+        QuickAccessService.instance?.apply { hidePreview(); stripPreview = false }
+        scroll.setPadding(0, 0, 0, 0)
+        render()
+    }
+
+    private fun tourGo(to: Int) {
+        tourStep = to
+        if (to == TOUR_TRY) tourPanelOpensAtStart = QuickAccessService.instance?.panelOpens ?: 0
+        render()
+        scroll.post { scroll.scrollTo(0, 0) }
+    }
+
+    /** A permission row: what it's for, ✓ when granted, else a button to Android's switch. */
+    private fun permissionRow(title: String, detail: String, granted: Boolean, open: () -> Unit): View = vbox().apply {
+        setPadding(dp(16), dp(12), dp(16), dp(12))
+        addView(hbox().apply {
+            addView(text(title, 17f, medium = true), lp(0, WRAP, 1f))
+            addView(text(if (granted) "✓ On" else "Off", 14f, bold = true).apply {
+                setPadding(dp(8), dp(2), dp(8), dp(2))
+                background = outline(2, 12)
+            })
+        })
+        addView(text(detail, 13.5f, color = Ink.MUTED).apply { setPadding(0, dp(4), 0, dp(6)) })
+        if (!granted) addView(inkButton("Turn on") { open() }, lp(MATCH, WRAP))
+    }
+
+    private fun ignoringBattery(): Boolean =
+        (getSystemService(android.os.PowerManager::class.java))?.isIgnoringBatteryOptimizations(packageName) == true
+
+    private fun renderTour() {
+        val step = tourStep ?: return
+        val svc = QuickAccessService.instance
+        list.addView(hbox().apply {
+            setPadding(dp(20), dp(18), dp(16), dp(6))
+            addView(text("STEP ${step + 1} OF $TOUR_STEPS", 14f, bold = true).apply { letterSpacing = 0.05f }, lp(0, WRAP, 1f))
+            if (step < TOUR_STEPS - 1) addView(inkButton("Skip tour", 15f) { endTour() })
+        })
+        fun title(t: String) = list.addView(text(t, 28f, bold = true).apply { setPadding(dp(20), dp(8), dp(20), dp(8)) })
+        fun para(t: String) = list.addView(text(t, 17f).apply { setPadding(dp(20), 0, dp(20), dp(12)); setLineSpacing(0f, 1.2f) })
+        when (step) {
+            0 -> {
+                title("Welcome to SuperBoox")
+                para("A sidebar for your BOOX, like Supernote's: your notes and books, quick switches, a clipboard and your apps, one swipe away from anything you're doing.")
+                para("This short tour shows you around and asks for the permissions SuperBoox uses. You can come back to it any time from Settings → Help.")
+            }
+            1 -> {
+                title("Turn SuperBoox on")
+                para("SuperBoox works through Android's accessibility settings: that's how it adds the edge strip and the panel over other apps, and opens your notes for you. It's the one thing it can't work without.")
+                list.addView(card(listOf(
+                    permissionRow("SuperBoox service", "Android settings → Accessibility → SuperBoox Quick Access → On.", isServiceEnabled()) {
+                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    },
+                )))
+                list.addView(note("SuperBoox only reads what's on screen to find your notes and switches. Nothing leaves the tablet."))
+            }
+            2 -> {
+                title("Permissions")
+                para("These are optional; each one unlocks something. Turn on what you'd like, now or later in Android settings.")
+                list.addView(card(listOf(
+                    permissionRow("Keep running in the background", "So BOOX doesn't freeze SuperBoox and the edge strip stops working.", ignoringBattery()) {
+                        if (!Launcher.tryStart(this, Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))))
+                            Launcher.tryStart(this, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                    },
+                    permissionRow("Modify system settings", "Lets the Auto-rotate Quick Control switch rotation directly.", Settings.System.canWrite(this)) {
+                        Launcher.tryStart(this, Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName")))
+                    },
+                    permissionRow("All files access", "Shows a preview of handwriting you copy in BOOX Notes. SuperBoox only reads BOOX's copy folder.", ClipHistory.hasFileAccess()) {
+                        openAllFilesAccess()
+                    },
+                )))
+            }
+            TOUR_TRY -> {
+                title("Open the panel")
+                val opened = (svc?.panelOpens ?: 0) > tourPanelOpensAtStart
+                para(if (svc == null) "Turn the SuperBoox service on first (step 2), then come back here."
+                    else "Your swipe strip is shown in black on the ${prefs.edge.name.lowercase()} edge. ${prefs.trigger.title} along it to open the panel. Try it now.")
+                list.addView(card(listOf(cardText(
+                    if (opened) "✓ You opened it. Tap outside the panel to close it again."
+                    else "Waiting for you to open the panel… Not working? Change the edge, size and gesture in Settings → Gesture.",
+                ))))
+                // Notice the swipe without the user having to come back to this page.
+                if (!opened && svc != null) tourPoll.postDelayed({ if (tourStep == TOUR_TRY && (QuickAccessService.instance?.panelOpens ?: 0) > tourPanelOpensAtStart) render() }, 1000)
+            }
+            TOUR_PANEL -> {
+                title("Around the panel")
+                para(if (svc != null) "The real panel is shown beside this page. Here's what each part does:" else "Here's what each part of the panel does:")
+                listOf(
+                    "Top bar" to "Clipboard, New Note (hold it for BOOX's new-note screen) and Settings.",
+                    "Quick Controls" to "Tap to switch, hold for more. Front Light: hold for its presets.",
+                    "Last opened" to "Your last note and document, one tap away.",
+                    "Quick Access" to "Pinned notes, books and folders. Add pins what's open; hold the list to edit it. Recent lists recent files.",
+                    "Apps" to "At the bottom, swipe for more.",
+                ).forEachIndexed { i, (t, d) ->
+                    list.addView(hbox().apply {
+                        gravity = Gravity.TOP
+                        setPadding(dp(20), dp(6), dp(20), dp(6))
+                        addView(text("${i + 1}", 14f, bold = true, color = Ink.PAPER).apply {
+                            gravity = Gravity.CENTER
+                            background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(Ink.INK) }
+                        }, lp(dp(26), dp(26)))
+                        addView(text("$t. $d", 15.5f).apply { setPadding(dp(10), dp(2), 0, 0) }, lp(0, WRAP, 1f))
+                    })
+                }
+            }
+            5 -> {
+                title("Your clipboard")
+                para("Tap Clipboard at the top of the panel to see what you've copied: text, links, pictures and handwriting from BOOX Notes. Tap or hold a clip to copy it again, paste it, share, pin or delete it.")
+                list.addView(card(listOf(cardText("Choose what's kept in Settings → Clipboard. Copies are saved when the panel opens; catching every copy as it happens needs Advanced access (next step)."))))
+            }
+            6 -> {
+                title("Optional: Advanced access")
+                para("A few extras need on-device ADB through the free Shizuku app (no computer): your own Front Light presets, and catching every copy as it happens. Everything else works without it.")
+                list.addView(card(listOf(buttonRow("Set it up now" to { open(Page.ADVANCED_ACCESS) }))))
+                list.addView(note("Back from Advanced access returns you to the tour."))
+            }
+            else -> {
+                title("You're set")
+                para("Make it yours in Settings: pin your notes, choose Quick Controls and apps, the panel's size and edge.")
+                list.addView(card(listOf(cardText("Lost? Settings → Help → Show the tour again, or Troubleshooting for a debug report."))))
+            }
+        }
+        list.addView(View(this), lp(MATCH, dp(16)))
+        list.addView(divider(2))
+        list.addView(hbox().apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(20))
+            addView(inkButton("‹ Previous") { if (step > 0) tourGo(step - 1) }.apply { isEnabled = step > 0; alpha = if (step > 0) 1f else 0.4f }, lp(dp(140), WRAP))
+            addView(hbox().apply {
+                gravity = Gravity.CENTER
+                repeat(TOUR_STEPS) { k ->
+                    addView(View(context).apply {
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            shape = android.graphics.drawable.GradientDrawable.OVAL
+                            setColor(if (k == step) Ink.INK else Ink.PAPER)
+                            setStroke(dp(2), Ink.INK)
+                        }
+                    }, lp(dp(12), dp(12)).apply { marginStart = dp(4); marginEnd = dp(4) })
+                }
+            }, lp(0, WRAP, 1f))
+            addView(inkButton(if (step == TOUR_STEPS - 1) "Done" else "Next ›") {
+                if (step == TOUR_STEPS - 1) endTour() else tourGo(step + 1)
+            }.apply {
+                setTextColor(Ink.PAPER)
+                background = android.graphics.drawable.GradientDrawable().apply { setColor(Ink.INK); cornerRadius = dp(6).toFloat() }
+            }, lp(dp(140), WRAP))
+        })
     }
 
     /** Home row: round icon, the page's name with what's set under it, and ›. */
@@ -1514,6 +1715,10 @@ class SettingsActivity : Activity() {
         const val EXTRA_PAGE = "page"
         const val EXTRA_EDIT_PRESET = "edit_preset"
         private const val K_PREVIEW = "preview"
+        private const val K_TOUR = "tour"
+        private const val TOUR_STEPS = 8
+        private const val TOUR_TRY = 3
+        private const val TOUR_PANEL = 4
         const val REQ_FILE = 1
         const val REQ_FOLDER = 2
         const val REQ_RECENT = 3

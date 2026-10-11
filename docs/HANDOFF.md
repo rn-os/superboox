@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 59)
+# SuperBoox: handoff / status (as of build 60)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -272,6 +272,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - Hold New Note: the user's manual run showed BOOX home's Notes widget `create_new` ("+") opens a new notebook directly ("Notebook-2", via com.onyx MiddlewareActivity → ScribbleActivity); no separate settings screen. Assumed target: the editor's Template panel ("Tem…" in its tool column). Now taps `create_new`, waits for the new note, taps its Template button (`templateTick`), logs the editor screen if it can't find it. Awaiting user confirmation that this is the screen they mean.
 - User prefers no further dependence on Shizuku (handwriting can use All files access instead).
 - Tour mockups 41–43 (`tour.html`) awaiting approval.
+
+## Build 60
+- Hold New Note fixed from the build 59 report: BOOX's `create_new` opens its **create-note screen** inside ScribbleActivity (note_name EditText, page_layout Single Page/Scroll, template tabs Recent/Regular/Work/…, `btn_ok_vertical` "Create" / `btn_cancel_vertical` "Cancel", `tv_selected_bg`). That is the screen the user wants. `NotesScreen.isCreateNoteScreen` detects it and the held screen is revealed at once (`createScreenTick`). The setup now always goes through BOOX's home (Back from a note landed on the user's own launcher). That screen's name field isn't recorded as a recent note.
+- First-run tour (mockups 41–43, plus a permissions step at the user's request): `tourStep` in SettingsActivity, shown on first launch (`Prefs.tourDone`, not backed up), 8 steps: welcome, accessibility (required), permissions (background running via REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Modify system settings, All files access), try the swipe (live black strip, ticks when `panelOpens` grows), around the panel (live panel preview + inset), clipboard, Advanced access (optional; Back returns to the tour), done. Skip / Previous / Next / dots. Settings › Help › Show the tour again.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

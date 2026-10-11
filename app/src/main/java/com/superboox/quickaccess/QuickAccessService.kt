@@ -254,6 +254,10 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
      */
     // ---- Settings' live preview ----------------------------------------------------------
 
+    /** How many times the panel has opened since the service started (the tour's "try it" step). */
+    var panelOpens = 0
+        private set
+
     /** Settings › Gesture is open: the swipe strip is drawn in black. */
     var stripPreview = false
         set(v) {
@@ -306,6 +310,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         runCatching { wm.addView(p.root, params) }
             .onSuccess {
                 panel = p
+                panelOpens++
                 DebugLog.i("panel", "shown over $foregroundPackage")
             }
             .onFailure {

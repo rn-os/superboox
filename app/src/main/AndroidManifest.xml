@@ -9,6 +9,8 @@
     <!-- Optional, granted by the user in Android settings (All files access): lets the
          Clipboard read BOOX Notes' handwriting copy folder for its preview without
          Advanced access. Only that folder is read. -->
+    <!-- Lets the tour ask BOOX/Android to keep SuperBoox running in the background. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />

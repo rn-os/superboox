@@ -130,7 +130,17 @@ object NotesScreen {
     // ---- Editor --------------------------------------------------------------------------
 
     /** The open note's name from BOOX's own title view only (no guessing), for Recent Files. */
-    fun trustedTitle(root: AccessibilityNodeInfo): String? = noteNameView(root)?.takeIf { it.isNotEmpty() }
+    fun trustedTitle(root: AccessibilityNodeInfo): String? =
+        if (isCreateNoteScreen(root)) null else noteNameView(root)?.takeIf { it.isNotEmpty() }
+
+    /**
+     * BOOX's create-note screen (after its +): a name field, page layout, templates and
+     * Create / Cancel. Its name field is also note_name, so it isn't an open note yet.
+     */
+    fun isCreateNoteScreen(root: AccessibilityNodeInfo): Boolean =
+        listOf("btn_ok_vertical", "page_layout", "tv_selected_bg").any { id ->
+            runCatching { root.findAccessibilityNodeInfosByViewId("com.onyx.android.note:id/$id") }.getOrNull()?.any { it.isVisibleToUser } == true
+        }
 
     private fun noteNameView(root: AccessibilityNodeInfo): String? =
         runCatching { root.findAccessibilityNodeInfosByViewId("com.onyx.android.note:id/note_name") }.getOrNull()

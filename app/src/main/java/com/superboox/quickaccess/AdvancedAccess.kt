@@ -88,6 +88,25 @@ object AdvancedAccess {
         p.waitFor() to text
     }.getOrElse { -1 to "${it.javaClass.simpleName}: ${(it.cause ?: it).message}" }
 
+    /** Runs a shell command as ADB would and returns its raw output (for binary files); null if not available. */
+    fun shellBytes(command: String, max: Int = 8 * 1024 * 1024): ByteArray? = runCatching {
+        if (!allowed()) return null
+        val m = Shizuku::class.java.getDeclaredMethod("newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java)
+        m.isAccessible = true
+        val p = m.invoke(null, arrayOf("sh", "-c", command), null, null) as Process
+        val out = java.io.ByteArrayOutputStream()
+        p.inputStream.use { s ->
+            val b = ByteArray(16 * 1024)
+            while (out.size() < max) {
+                val r = s.read(b)
+                if (r < 0) break
+                out.write(b, 0, r)
+            }
+        }
+        p.waitFor()
+        out.toByteArray()
+    }.getOrNull()
+
     /**
      * Read-only look at where BOOX's front light lives (for the debug report):
      * the backlight devices, their values and permissions, and related services.

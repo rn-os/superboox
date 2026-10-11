@@ -1090,8 +1090,9 @@ class QuickAccessPanel(
                 if (c.kind == ClipHistory.Kind.IMAGE) {
                     addView(clipThumb(c, if (open) 160 else 64))
                 } else if (c.kind == ClipHistory.Kind.HANDWRITING) {
-                    // BOOX keeps the strokes in its own format: no preview, never the raw address.
-                    addView(text("Handwriting from BOOX Notes", sp(15f), medium = true))
+                    // A picture of the strokes when BOOX's copy had one; never the raw address.
+                    if (c.image?.endsWith(".png") == true) addView(clipThumb(c, if (open) 160 else 64))
+                    addView(text("Handwriting from BOOX Notes", sp(if (c.image?.endsWith(".png") == true) 12.5f else 15f), medium = true))
                     if (open) addView(text("Pastes back into BOOX Notes while BOOX still has this copy (usually until the tablet restarts).", sp(12.5f), color = Ink.MUTED))
                 } else {
                     addView(text(c.text.trim(), sp(15f)).apply {

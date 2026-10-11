@@ -75,6 +75,13 @@ object ClipHistory {
 
     fun imageFile(context: Context, clip: Clip): File? = clip.image?.let { File(dir(context), it) }
 
+    /** A clip's own files: its picture, and for handwriting the copy of BOOX's files kept beside it. */
+    private fun discardFiles(context: Context, clip: Clip) {
+        val name = clip.image ?: return
+        File(dir(context), name).deleteRecursively()
+        File(dir(context), name.removeSuffix(".png")).deleteRecursively()
+    }
+
     // ---- Stored list -------------------------------------------------------------------------
 
     /** Newest first. */
@@ -122,7 +129,7 @@ object ClipHistory {
 
     fun delete(context: Context, id: String) {
         val all = list(context)
-        all.firstOrNull { it.id == id }?.let { c -> imageFile(context, c)?.delete() }
+        all.firstOrNull { it.id == id }?.let { c -> discardFiles(context, c) }
         save(context, all.filterNot { it.id == id })
         if (currentId(context) == id) setCurrent(context, null)
     }
@@ -130,7 +137,7 @@ object ClipHistory {
     /** Clears everything but pinned clips. */
     fun clear(context: Context) {
         val (keep, drop) = list(context).partition { it.pinned }
-        drop.forEach { imageFile(context, it)?.delete() }
+        drop.forEach { discardFiles(context, it) }
         save(context, keep)
         DebugLog.i("clipboard", "history cleared (${drop.size} clips, ${keep.size} pinned kept)")
     }
@@ -227,12 +234,62 @@ object ClipHistory {
                         main.post { add(context, prefs, Kind.IMAGE, "", name, source) }
                     }
                 }
-                fromNotes && prefs.clipKeepHandwriting -> main.post {
-                    add(context, prefs, Kind.HANDWRITING, uri.toString(), null, source, label, mimes.joinToString(","))
+                fromNotes && prefs.clipKeepHandwriting -> {
+                    val preview = notesCopyDir(uri)?.let { runCatching { handwritingPreview(context, it) }.onFailure { e -> DebugLog.w("clipboard", "handwriting preview failed: ${e.message}") }.getOrNull() }
+                    main.post { add(context, prefs, Kind.HANDWRITING, uri.toString(), preview, source, label, mimes.joinToString(",")) }
                 }
                 else -> DebugLog.i("clipboard", "file clip not kept")
             }
         }
+    }
+
+    /**
+     * BOOX Notes' lasso copy is a folder on shared storage, linked as
+     * content://…onyx.fileprovider/external/.noteCache/CopyPoints/<id> (build 54 report).
+     */
+    private fun notesCopyDir(uri: Uri): String? {
+        val p = uri.path ?: return null
+        if (!uri.authority.orEmpty().endsWith(".fileprovider") || !p.startsWith("/external/")) return null
+        val path = "/storage/emulated/0/" + p.removePrefix("/external/")
+        return path.takeIf { Regex("[A-Za-z0-9._/-]+").matches(it) }
+    }
+
+    /**
+     * Through Advanced access (SuperBoox itself can't read BOOX's folder): logs
+     * what the copy folder holds, keeps a copy of its files so the strokes can be
+     * drawn later, and returns a picture from it for the preview if there is one.
+     */
+    private fun handwritingPreview(context: Context, folder: String): String? {
+        if (!AdvancedAccess.allowed()) {
+            DebugLog.i("clipboard", "handwriting preview needs Advanced access")
+            return null
+        }
+        DebugLog.i("clipboard", "handwriting folder:\n" + AdvancedAccess.shellNow("ls -laR '$folder' 2>&1 | head -60").second)
+        val files = AdvancedAccess.shellNow("find '$folder' -type f 2>/dev/null | head -20").second.lines().map { it.trim() }.filter { it.startsWith(folder) }
+        val stamp = System.currentTimeMillis()
+        val keep = File(dir(context), "h$stamp").apply { mkdirs() }
+        var picture: String? = null
+        for (f in files) {
+            if (!Regex("[A-Za-z0-9._/ -]+").matches(f)) continue
+            val bytes = AdvancedAccess.shellBytes("cat '$f'", max = 4 * 1024 * 1024) ?: continue
+            File(keep, f.removePrefix(folder).trim('/').replace('/', '_').ifEmpty { "file" }).writeBytes(bytes)
+            val hex = bytes.take(64).joinToString(" ") { "%02x".format(it) }
+            val text = String(bytes.take(240).map { c -> if (c in 32..126) c.toInt().toChar() else '.' }.toCharArray())
+            DebugLog.i("clipboard", "handwriting file ${f.removePrefix(folder)} (${bytes.size} bytes)\n  hex: $hex\n  text: $text")
+            if (picture == null) {
+                val bmp = runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull()
+                if (bmp != null) {
+                    val name = "h$stamp.png"
+                    File(dir(context), name).outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                    DebugLog.i("clipboard", "handwriting preview from ${f.removePrefix(folder)} (${bmp.width}x${bmp.height})")
+                    bmp.recycle()
+                    picture = name
+                }
+            }
+        }
+        if (picture == null) DebugLog.i("clipboard", "handwriting: no picture in BOOX's copy (${files.size} files kept for drawing the strokes)")
+        // No picture yet: the clip still points at its kept files (the folder), so they go when it's deleted.
+        return picture ?: keep.name
     }
 
     /**
@@ -298,7 +355,7 @@ object ClipHistory {
         // Keep the newest unpinned clips up to the limit; pinned ones always stay.
         var unpinned = 0
         val kept = updated.filter { c -> c.pinned || ++unpinned <= prefs.clipLimit }
-        updated.filterNot { it in kept }.forEach { imageFile(context, it)?.delete() }
+        updated.filterNot { it in kept }.forEach { discardFiles(context, it) }
         save(context, kept)
         setCurrent(context, (same ?: kept.first()).id)
     }
@@ -408,7 +465,13 @@ object ClipHistory {
             )
             else -> ClipData.newPlainText("SuperBoox", clip.text)
         }
-        return runCatching { cm.setPrimaryClip(data) }
+        val set = runCatching { cm.setPrimaryClip(data) }.recoverCatching {
+            // Android only lets BOOX re-share its own handwriting link; offer the link as text instead (BOOX may still paste it).
+            if (clip.kind != Kind.HANDWRITING || it !is SecurityException) throw it
+            DebugLog.i("clipboard", "handwriting: can't re-share BOOX's link; putting it back as a link")
+            cm.setPrimaryClip(ClipData(ClipDescription(clip.label ?: "NOTE_SHAPES", arrayOf(ClipDescription.MIMETYPE_TEXT_URILIST)), ClipData.Item(clip.text)))
+        }
+        return set
             .onSuccess {
                 setCurrent(context, clip.id)
                 // Our own copy: no need to save it again when the clipboard is next read.

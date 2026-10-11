@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 54)
+# SuperBoox: handoff / status (as of build 55)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -246,6 +246,12 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - `stripPreview`: while Settings › Gesture is open the edge strip is drawn solid black (`EdgeHandleView(solid = true)`) at its real place and size.
 - Settings: `previewOn` (saved across rotation), turned on by changing Panel width / Menu size (Look & size) or the "still show" ticks (Clipboard), or by "Preview the panel"; off when leaving the page or on pause. `insetForPreview` measures Settings' window on screen against the panel's edge and width and pads the covered side (keeps at least 280dp for Settings), so it adapts in portrait, landscape and split screen. The small MiniPanel drawings now only show when the accessibility service isn't running.
 - Look & size's drawings from mockup 37 were replaced by this, as the user preferred.
+
+## Build 55: handwriting preview, step 1
+- Build 54 report: BOOX's lasso copy is `content://com.onyx.android.note.onyx.fileprovider/external/.noteCache/CopyPoints/<uuid>`, label `NOTE_SHAPES`, mime `text/uri-list`, and the link is a **folder** (read gives EISDIR). Putting it back on the clipboard fails: "UID … does not have permission" (Android won't let SuperBoox re-share BOOX's link).
+- `ClipHistory.handwritingPreview`: through Shizuku (`AdvancedAccess.shellBytes`, raw output) lists the folder (`/storage/emulated/0/.noteCache/CopyPoints/<uuid>`), copies its files into `filesDir/clips/h<time>/`, logs each file's size, first 64 bytes (hex) and readable text, and uses the first file that decodes as a picture as the preview (`h<time>.png`). The clip's `image` is the png or, without one, the folder, so deleting the clip removes the kept files (`discardFiles`).
+- `putBack` for handwriting falls back to the link as text (`text/uri-list`, label kept) when Android refuses the link itself; whether BOOX pastes that is untested.
+- Next: from the logged file format, draw the strokes into a preview when BOOX's folder has no picture.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

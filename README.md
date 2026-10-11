@@ -40,7 +40,7 @@ From top to bottom:
 | Part | Tap | Hold |
 |---|---|---|
 | **Clipboard** (top bar) | Opens your clipboard history in the panel | Opens Settings → Clipboard |
-| **New Note** (top bar) | Makes a new note | Opens BOOX's own create-note screen to pick a name, template and layout |
+| **New Note** (top bar) | Makes a new note | Opens BOOX's own create-note screen on your recent templates, to pick a name, template and layout. Back or Cancel returns you to where you were, not BOOX's home screen |
 | **⚙** (top bar) | Opens Settings | |
 | **Quick Controls** | Switches Wi‑Fi, Bluetooth, Do Not Disturb, Auto-rotate, Full Refresh, Back/Home/Recents and more | Opens that control's settings |
 | **Front Light** control | Turns the light on or off | Shows the presets (see below) |

@@ -10,7 +10,7 @@ Quick recap: swipe along the edge of the screen on any page, and a panel opens. 
 
 - **Clipboard history.** Tap Clipboard at the top of the panel to see everything you've copied: text, links, images, and **handwriting you lasso-copy in BOOX Notes, shown as a picture of what you wrote**. You can search it, filter it, and pin the things you keep reusing. Tap or hold a clip to copy it again, paste it into the app you're in, share it, or delete it. I wanted it to be a catch-all for carrying stuff between apps on the tablet.
 - **Front Light presets.** Hold Front Light to switch between Bright, Soft, Custom and Off without opening the Control Center. You can also make your own named presets (Reading, Evening, whatever you like) that don't overwrite BOOX's Custom.
-- **Hold New Note** to go straight to BOOX's create-note screen, so you can pick the name, template and layout.
+- **Hold New Note** to go straight to BOOX's create-note screen, opened on your recent templates, so you can pick the name, template and layout. Backing out takes you back to where you were, not BOOX's home screen (handy if you use another launcher).
 - **Quick Controls** in the panel: Wi‑Fi, Bluetooth, Do Not Disturb, Auto-rotate, Full Refresh and more. Tap to switch, hold for settings.
 - **A first-run tour.** It walks you through turning it on, shows you where to swipe, explains each part of the real panel, and asks for the optional permissions with a short reason for each.
 - **Live preview in Settings.** When you change the panel's width, what the clipboard covers and so on, the real panel shows beside the settings so you can see what you're changing. It works in portrait and landscape.

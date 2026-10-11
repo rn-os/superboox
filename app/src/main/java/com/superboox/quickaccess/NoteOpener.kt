@@ -200,9 +200,12 @@ class NoteOpener(private val service: AccessibilityService) {
         val shown = root != null && NotesScreen.isCreateNoteScreen(root)
         when {
             shown -> {
-                // Left on BOOX's last-used template category: the user's usual choice (decided after build 61).
-                DebugLog.i("note", "new-note setup: BOOX's create-note screen is up")
-                (service as? QuickAccessService)?.noteOpenFinished(true)
+                // BOOX opens on the last template's category (e.g. Work); Recent shows the template used last.
+                val recent = findFirst(root!!) { n -> n.isVisibleToUser && NotesScreen.textOf(n).equals("Recent", ignoreCase = true) }
+                DebugLog.i("note", "new-note setup: BOOX's create-note screen is up" + if (recent != null) "; choosing the Recent templates" else "; no Recent tab found")
+                if (recent != null) click(recent, null)
+                (service as? QuickAccessService)?.newNoteScreenShown()
+                handler.postDelayed({ (service as? QuickAccessService)?.noteOpenFinished(true) }, if (recent != null) 500L else 0L)
             }
             SystemClock.uptimeMillis() > until -> {
                 DebugLog.w("note", "new-note setup: the create-note screen didn't show. Screen:\n" +

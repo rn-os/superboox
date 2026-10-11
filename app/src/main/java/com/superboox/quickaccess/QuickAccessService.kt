@@ -113,6 +113,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 DebugLog.i("foreground", "$pkg ($cls)")
                 if (newApp) rememberApp(pkg)
             }
+            if (newNoteArmed) watchNewNoteBack(pkg)
             trackRecent(pkg, event)
         }
     }
@@ -322,6 +323,11 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     /** Hold New Note: BOOX's new-note screen, through the Notes library's own button. */
     fun openNewNoteSetup() {
         val inEditor = foregroundPackage == prefs.notesPackage
+        // Remember where this started, so leaving BOOX's screen comes back here rather than to BOOX's home.
+        newNoteArmed = false
+        newNoteOrigin = foregroundPackage?.takeIf { it != BooxNotes.BOOX_HOME_PACKAGE }?.let {
+            NewNoteOrigin(it, if (inEditor) Recents.lastNote(prefs)?.title else null, SystemClock.uptimeMillis() + NEW_NOTE_RETURN_MS)
+        }
         // Hold the screen while Notes opens and the button is found, like opening a pinned note.
         cover.show { noteOpener.openNewNoteSetup(prefs.notesPackage, inEditor) }
     }
@@ -688,13 +694,65 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         val pkg = previousApp ?: return
         hidePanel()
         DebugLog.i("previous", "back to $pkg")
-        when (pkg) {
-            prefs.notesPackage -> Recents.lastNote(prefs)?.let { openBooxNote(it.title) }
+        reopen(pkg)
+    }
+
+    /** Opens [pkg] again: Notes reopens [noteTitle] (or the last note), NeoReader its last book, a launcher its home screen. */
+    private fun reopen(pkg: String, noteTitle: String? = null) {
+        when {
+            pkg == prefs.notesPackage -> (noteTitle ?: Recents.lastNote(prefs)?.title)?.let { openBooxNote(it) }
                 ?: BooxNotes.launchCandidates(this, prefs.notesPackage).firstOrNull()?.let { Launcher.start(this, it.second) }
-            ReaderLibrary.NEOREADER -> Recents.list(prefs).firstOrNull { it.pkg == pkg && it.path.isNotEmpty() }
+            pkg == ReaderLibrary.NEOREADER -> Recents.list(prefs).firstOrNull { it.pkg == pkg && it.path.isNotEmpty() }
                 ?.let { ReaderLibrary.open(this, it.path) } ?: Launcher.launchApp(this, pkg)
+            pkg in homePackages -> Launcher.start(this, Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setPackage(pkg))
             else -> Launcher.launchApp(this, pkg)
         }
+    }
+
+    // ---- Leaving BOOX's create-note screen (hold New Note) ---------------------------------
+
+    /** Where hold New Note was used from (the open note's name, if it was a note). */
+    private class NewNoteOrigin(val pkg: String, val noteTitle: String?, val until: Long)
+
+    private var newNoteOrigin: NewNoteOrigin? = null
+
+    /** Set once BOOX's create-note screen is up: from then on, BOOX's home coming back means the user left it. */
+    private var newNoteArmed = false
+
+    fun newNoteScreenShown() {
+        newNoteArmed = newNoteOrigin != null
+    }
+
+    private fun forgetNewNoteOrigin() {
+        newNoteArmed = false
+        newNoteOrigin = null
+        handler.removeCallbacks(newNoteBackCheck)
+    }
+
+    /**
+     * Back or Cancel on BOOX's create-note screen (or Back out of the new note) lands on BOOX's
+     * home screen, which may not be the user's launcher. Go back to where New Note was held instead.
+     */
+    private fun watchNewNoteBack(pkg: String) {
+        val origin = newNoteOrigin ?: return
+        when {
+            SystemClock.uptimeMillis() > origin.until -> forgetNewNoteOrigin()
+            pkg == BooxNotes.BOOX_HOME_PACKAGE -> {
+                handler.removeCallbacks(newNoteBackCheck)
+                handler.postDelayed(newNoteBackCheck, NEW_NOTE_BACK_CHECK_MS)
+            }
+            pkg in BooxNotes.packages(prefs.notesPackage) -> Unit // still on the create-note screen or in the new note
+            else -> forgetNewNoteOrigin() // went somewhere else on purpose
+        }
+    }
+
+    private val newNoteBackCheck = Runnable {
+        val origin = newNoteOrigin?.takeIf { newNoteArmed } ?: return@Runnable
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return@Runnable
+        if (root.packageName?.toString() != BooxNotes.BOOX_HOME_PACKAGE || NotesScreen.isCreateNoteScreen(root)) return@Runnable
+        forgetNewNoteOrigin()
+        DebugLog.i("note", "left BOOX's new-note screen: back to ${origin.pkg}${origin.noteTitle?.let { " (\"$it\")" } ?: ""}")
+        reopen(origin.pkg, origin.noteTitle)
     }
 
     /** Called by [NoteOpener] when it's done, either way. */
@@ -758,6 +816,10 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     companion object {
         private const val REVEAL_DELAY_MS = 400L
+        /** How long after hold New Note leaving BOOX's screens still returns to where it started (writing the new note can take a while). */
+        private const val NEW_NOTE_RETURN_MS = 3 * 60 * 60_000L
+        /** Lets the screen settle before checking that BOOX's home, not the create-note screen, is in front. */
+        private const val NEW_NOTE_BACK_CHECK_MS = 300L
         /** How long a tapped tile shows its new state before the system's own reading wins. */
         private const val OPTIMISTIC_MS = 8_000L
 

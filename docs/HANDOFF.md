@@ -298,3 +298,12 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - Launch images regenerated from `docs/launch/launch.html` (built from the `docs/mockups/clipboard.html` helpers, made-up names, Walden). The images are `1-panel`, `2-clipboard`, `3-light` and `4-settings`.
 - Render script (scratchpad `render-launch.mjs`): Playwright at 2x, screenshots `.stage` for `#panel`, `#clipboard`, `#light` and `#settings`.
 - `docs/launch/reddit-post-2.md` is the update post draft.
+
+## Build 63: hold New Note, Recent tab and return
+
+- The create-note screen taps BOOX's **Recent** template tab again; the user changed their mind after build 62. Recent shows the template used last.
+- **Return to the starting point.** `QuickAccessService.openNewNoteSetup` records `NewNoteOrigin`: the app in front, plus the open note's title if it was a note. BOOX's home is never recorded as an origin.
+  - `NoteOpener` calls `newNoteScreenShown()` once the create screen is up, which arms the watch.
+  - When a window event brings `com.onyx` (BOOX home) to the front, `newNoteBackCheck` runs 300 ms later. If the active root is BOOX home and not the create-note screen, it calls `reopen(origin)`.
+  - `reopen` handles each kind of origin: Notes reopens the note, NeoReader its book, a launcher package gets a HOME intent, and anything else is launched as an app. `openPreviousApp` now uses `reopen` too.
+  - The same check also catches Back out of the newly created note. Going to any other app, or 3 hours passing, cancels the watch.

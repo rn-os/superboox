@@ -273,11 +273,11 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
      * The real panel, at its real size on its edge, for Settings to show while a
      * setting changes. Taps pass through it to Settings underneath.
      */
-    fun showPreview(clipboard: Boolean) {
+    fun showPreview(clipboard: Boolean, lightPresets: Boolean = false) {
         hidePreview()
         if (panel != null) return
         val p = QuickAccessPanel(this, prefs, foregroundPackage, previewOfClipboard = clipboard,
-            previewTag = if (clipboard) "PREVIEW · CLIPBOARD" else "PREVIEW · ${prefs.panelWidthPct}%")
+            previewTag = if (clipboard) "PREVIEW · CLIPBOARD" else "PREVIEW · ${prefs.panelWidthPct}%", previewLightPresets = lightPresets)
         val params = overlayParams(previewWidth(), WindowManager.LayoutParams.MATCH_PARENT, focusable = false).apply {
             flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
             gravity = Gravity.TOP or (if (prefs.edge == Edge.RIGHT) Gravity.RIGHT else Gravity.LEFT)

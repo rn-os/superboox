@@ -46,6 +46,8 @@ class QuickAccessPanel(
     /** Settings' live preview: start on the clipboard, and show a PREVIEW tag. */
     private val previewOfClipboard: Boolean = false,
     private val previewTag: String? = null,
+    /** The tour's Advanced access step: open on Front Light with your own presets showing. */
+    private val previewLightPresets: Boolean = false,
 ) {
     private enum class Mode { MAIN, RECENT, EDIT, PICK, CLIPBOARD }
 
@@ -131,6 +133,12 @@ class QuickAccessPanel(
             }
         }
         show(if (previewOfClipboard) Mode.CLIPBOARD else Mode.MAIN)
+        // After construction: the Front Light fields are declared (and initialised) below this block.
+        if (previewLightPresets) root.post {
+            lightMenu = true
+            lightPage = 1
+            show(mode)
+        }
     }
 
     /** dp scaled by the "Menu size" setting. */

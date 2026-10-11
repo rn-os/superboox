@@ -98,8 +98,9 @@ class SettingsActivity : Activity() {
         val svc = QuickAccessService.instance
         val touring = tourStep != null && page == Page.HOME
         svc?.stripPreview = page == Page.GESTURE || (touring && tourStep == TOUR_TRY)
-        if (touring && tourStep == TOUR_PANEL && svc != null) {
-            svc.showPreview(clipboard = false)
+        if (touring && tourStep in listOf(TOUR_PANEL, TOUR_CLIPBOARD, TOUR_ADVANCED) && svc != null) {
+            // The real panel beside the page: as it is, open on the clipboard, or on Front Light's presets.
+            svc.showPreview(clipboard = tourStep == TOUR_CLIPBOARD, lightPresets = tourStep == TOUR_ADVANCED)
             scroll.post { insetForPreview(svc) }
             return
         }
@@ -762,6 +763,9 @@ class SettingsActivity : Activity() {
                     if (opened) "✓ You opened it. Tap outside the panel to close it again."
                     else "Waiting for you to open the panel… Not working? Change the edge, size and gesture in Settings → Gesture.",
                 ))))
+                if (opened) list.addView(card(listOf(cardText(
+                    "Two holds worth knowing: hold New Note for BOOX's create-note screen (name, layout, template), and hold Clipboard for its settings.",
+                ))).apply { (layoutParams as ViewGroup.MarginLayoutParams).topMargin = dp(12) })
                 // Notice the swipe without the user having to come back to this page.
                 if (!opened && svc != null) tourPoll.postDelayed({ if (tourStep == TOUR_TRY && (QuickAccessService.instance?.panelOpens ?: 0) > tourPanelOpensAtStart) render() }, 1000)
             }
@@ -786,13 +790,15 @@ class SettingsActivity : Activity() {
                     })
                 }
             }
-            5 -> {
+            TOUR_CLIPBOARD -> {
                 title("Your clipboard")
+                if (svc != null) para("The panel beside this page is open on your clipboard.")
                 para("Tap Clipboard at the top of the panel to see what you've copied: text, links, pictures and handwriting from BOOX Notes. Tap or hold a clip to copy it again, paste it, share, pin or delete it.")
                 list.addView(card(listOf(cardText("Choose what's kept in Settings → Clipboard. Copies are saved when the panel opens; catching every copy as it happens needs Advanced access (next step)."))))
             }
-            6 -> {
+            TOUR_ADVANCED -> {
                 title("Optional: Advanced access")
+                if (svc != null) para("Beside this page: the Front Light presets (hold Front Light in the panel), where your own presets live.")
                 para("A few extras need on-device ADB through the free Shizuku app (no computer): your own Front Light presets, and catching every copy as it happens. Everything else works without it.")
                 list.addView(card(listOf(buttonRow("Set it up now" to { open(Page.ADVANCED_ACCESS) }))))
                 list.addView(note("Back from Advanced access returns you to the tour."))
@@ -1719,6 +1725,8 @@ class SettingsActivity : Activity() {
         private const val TOUR_STEPS = 8
         private const val TOUR_TRY = 3
         private const val TOUR_PANEL = 4
+        private const val TOUR_CLIPBOARD = 5
+        private const val TOUR_ADVANCED = 6
         const val REQ_FILE = 1
         const val REQ_FOLDER = 2
         const val REQ_RECENT = 3

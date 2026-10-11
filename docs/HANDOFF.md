@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 61)
+# SuperBoox: handoff / status (as of build 62)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -279,7 +279,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 
 ## Build 61
 - Build 60 report: hold New Note works (create-note screen up ~0.4 s after the tap). User confirmed the tour is helpful and the live panel in it intuitive.
-- BOOX's create-note screen opens on the last template's category (Work); the setup now taps the "Recent" tab before revealing.
+- BOOX's create-note screen opens on the last template's category (Work). Build 61 tapped Recent; the user then preferred BOOX's last-used category, so build 62 leaves it.
+
+## Build 62
+- Tour: the clipboard step shows the real panel open on the clipboard; the Advanced access step shows it open on Front Light's own presets (`previewLightPresets`, applied after construction since those fields are declared after `init`); the try-it step mentions hold New Note / hold Clipboard once the panel has been opened.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

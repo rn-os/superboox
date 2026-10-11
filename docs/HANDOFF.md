@@ -1,4 +1,4 @@
-# SuperBoox: handoff / status (as of build 52)
+# SuperBoox: handoff / status (as of build 53)
 
 ## What it is
 An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C, Android 16 / SDK 36, firmware 4.3 `2026-09-16_13-47_4.3-rel_0916`**). It recreates the **Supernote "Quick Access" sidebar**. You swipe up or down along the right screen edge on any page, and a panel opens with:
@@ -231,6 +231,15 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - Clipboard: BOOX Notes lasso copies are a `content://com.onyx.android.note.onyx.fileprovider/…/CopyPoints/…` link, not a picture. Kept as `Kind.HANDWRITING` (label "Handwriting from BOOX Notes", original label/mime types stored to put it back). If the linked file decodes as a picture it's kept as an image. The log line "file clip: …" records type, size, first 32 bytes, picture or not: check it to see if a preview is possible.
 - Mockups 34–35 built: Settings › Clipboard "What to keep" (Text, Links, Images, Handwriting, Codes off by default; passwords/private never) with how each is caught, and "While the clipboard is open, still show" (Quick Controls, Last Opened, Apps; all off by default; replaces covers-apps, migrated) with `MiniPanel` drawings. Clips per page: 7 minus 2/1/3 for what still shows, at least 2.
 - Mockups pending: rename Quick Access apps (4), drag in the panel's edit view (5), visual previews for confusing settings (8).
+
+## Build 53
+- User after 52: rename only the apps at the bottom (renaming SuperBoox's label for documents isn't worth it unless it renamed the real file, which BOOX notes don't allow). Done in Settings › Apps at the bottom (✎, dialog with Save / Reset / Cancel; `renameDockApp`).
+- "Rece" cut off: the label sat in a column as wide as the clock icon, so it wrapped (MATCH_PARENT children don't widen a WRAP LinearLayout). Fixed in 52 with `lp(WRAP, WRAP)` + one line; "Add" given the same.
+- Drag handles (≡) in the panel's Edit Quick Access view (`QuickAccessPanel.dragHandle`), arrows kept.
+- Handwriting: `ClipHistory.describeFile` logs the linked file's first bytes (hex + readable), and inside gzip/zip, to work out BOOX's stroke format for a preview.
+- Settings drawings from mockup 38: Quick Controls "Show me" per control (`controlGuide`), Advanced access "What changes?" (`independentGuide`).
+- Hold Clipboard stays as is (opens Settings › Clipboard). User: deep settings stay in Settings.
+- Gesture / Look & size drawings (37) on hold: user would rather see the real panel/strip while changing a setting. Mockup 39 proposes it.
 
 ## Next step
 - Build 27 log confirmed: Auto-rotate direct toggle and hold-for-menu, and Previous app (moved to position 4). Build 28: the apps grid swipes sideways too (`SwipeRow` with `vertical = true`). Not yet seen in a log: quick repeated taps queued in one session. Build 29: holding Previous app opens recent apps (`GLOBAL_ACTION_RECENTS`). Build 29 log: the queue works (4 quick taps in one session), and so does holding Previous app. Build 30: Auto-rotate taps switch directly even mid-session (they had been queued as a tile tap, which opened the BOOX menu). Note: Airplane on turns Wi-Fi/BT off; the panel may show them on for up to 8 s (optimistic state) before system reads correct it.

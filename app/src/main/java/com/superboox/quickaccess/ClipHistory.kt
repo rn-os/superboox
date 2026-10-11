@@ -215,6 +215,8 @@ object ClipHistory {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             runCatching { context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } }
             val picture = bounds.outWidth > 0 && bounds.outHeight > 0
+            runCatching { describeFile(context, uri) }.onSuccess { DebugLog.i("clipboard", "file clip contents:\n$it") }
+                .onFailure { DebugLog.w("clipboard", "file clip unreadable: ${it.javaClass.simpleName} ${it.message}") }
             DebugLog.i("clipboard", "file clip: ${uri.authority}${uri.path?.substringBeforeLast('/')?.let { "$it/…" }} label=$label mimes=$mimes type=$type " +
                 "size=$size picture=$picture${if (picture) " ${bounds.outWidth}x${bounds.outHeight}" else ""} " +
                 "head=${head.getOrNull()?.joinToString("") { "%02x".format(it) } ?: head.exceptionOrNull()?.javaClass?.simpleName}")
@@ -231,6 +233,51 @@ object ClipHistory {
                 else -> DebugLog.i("clipboard", "file clip not kept")
             }
         }
+    }
+
+    /**
+     * What a linked file holds, for working out BOOX's handwriting format from a
+     * debug report: its first bytes (hex and readable text), and inside it if it's
+     * gzip or zip. Handwriting strokes only, nothing personal beyond the shape data.
+     */
+    private fun describeFile(context: Context, uri: Uri): String {
+        val bytes = context.contentResolver.openInputStream(uri)?.use { s -> s.readNBytesCompat(4096) } ?: return "no stream"
+        fun hex(b: ByteArray, n: Int) = b.take(n).joinToString(" ") { "%02x".format(it) }
+        fun ascii(b: ByteArray, n: Int) = String(b.take(n).map { c -> if (c in 32..126) c.toInt().toChar() else '.' }.toCharArray())
+        val out = StringBuilder()
+        out.append("  hex: ").append(hex(bytes, 96)).append('\n')
+        out.append("  text: ").append(ascii(bytes, 400)).append('\n')
+        when {
+            bytes.size > 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte() -> {
+                val inner = context.contentResolver.openInputStream(uri)?.use { java.util.zip.GZIPInputStream(it).readNBytesCompat(2048) } ?: ByteArray(0)
+                out.append("  gzip inside, hex: ").append(hex(inner, 96)).append('\n')
+                out.append("  gzip inside, text: ").append(ascii(inner, 600)).append('\n')
+            }
+            bytes.size > 2 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte() -> {
+                context.contentResolver.openInputStream(uri)?.use { s ->
+                    val zip = java.util.zip.ZipInputStream(s)
+                    var n = 0
+                    while (n < 12) {
+                        val e = zip.nextEntry ?: break
+                        val head = zip.readNBytesCompat(256)
+                        out.append("  zip entry ${e.name} (${e.size}): ").append(ascii(head, 160)).append('\n')
+                        n++
+                    }
+                }
+            }
+        }
+        return out.toString().trimEnd()
+    }
+
+    private fun java.io.InputStream.readNBytesCompat(max: Int): ByteArray {
+        val buf = java.io.ByteArrayOutputStream()
+        val b = ByteArray(1024)
+        while (buf.size() < max) {
+            val r = read(b, 0, minOf(b.size, max - buf.size()))
+            if (r < 0) break
+            buf.write(b, 0, r)
+        }
+        return buf.toByteArray()
     }
 
     private fun add(context: Context, prefs: Prefs, kind: Kind, text: String, image: String?, source: String?, label: String? = null, mimes: String? = null) {

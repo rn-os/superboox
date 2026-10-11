@@ -756,7 +756,7 @@ class QuickAccessPanel(
                 setPadding(s(6), 0, s(6), 0)
                 contentDescription = "Add to Quick Access"
                 addView(icon(getDrawable(R.drawable.ic_link_add), iconPx(24)))
-                addView(text("Add", sp(11f)).apply { gravity = Gravity.CENTER })
+                addView(text("Add", sp(11f)).apply { gravity = Gravity.CENTER; maxLines = 1 }, lp(WRAP, WRAP))
                 pressable()
                 setOnClickListener { addFromContext() }
             }, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.END or Gravity.CENTER_VERTICAL))
@@ -1331,7 +1331,9 @@ class QuickAccessPanel(
         pins.forEachIndexed { i, pin ->
             if (i > 0) box.addView(insetRule())
             box.addView(hbox().apply {
-                setPadding(s(20), s(7), s(8), s(7))
+                setPadding(s(6), s(7), s(8), s(7))
+                setBackgroundColor(Ink.PAPER)
+                addView(dragHandle(this, i, pins.size) { from, to -> movePin(from, to) })
                 addView(pinIcon(pin))
                 addView(oneLine(text(pin.label, sp(17f))).apply { setPadding(s(12), 0, s(6), 0) }, lp(0, WRAP, 1f))
                 val b = iconPx(44)
@@ -1344,6 +1346,37 @@ class QuickAccessPanel(
             })
         }
         box
+    }
+
+    /**
+     * ≡ for a row in the edit view: press and drag it up or down; the row follows
+     * on a bordered card and moves when let go. Only redraws on drop (e-ink).
+     */
+    private fun dragHandle(row: View, index: Int, count: Int, onMove: (Int, Int) -> Unit): View = with(ctx) {
+        icon(getDrawable(R.drawable.ic_drag), iconPx(26)).apply {
+            contentDescription = "Drag to move"
+            setPadding(s(6), s(8), s(10), s(8))
+            var startY = 0f
+            setOnTouchListener { v, e ->
+                when (e.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        startY = e.rawY
+                        v.parent?.requestDisallowInterceptTouchEvent(true)
+                        row.background = outline(2, 8)
+                        row.translationZ = dp(6).toFloat()
+                    }
+                    android.view.MotionEvent.ACTION_MOVE -> row.translationY = e.rawY - startY
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                        val step = (row.height + dp(1)).coerceAtLeast(1)
+                        val to = (index + Math.round(row.translationY / step)).coerceIn(0, count - 1)
+                        row.translationY = 0f
+                        row.translationZ = 0f
+                        if (e.actionMasked == android.view.MotionEvent.ACTION_UP && to != index) onMove(index, to) else show(Mode.EDIT)
+                    }
+                }
+                true
+            }
+        }
     }
 
     private fun movePin(from: Int, to: Int) {

@@ -413,7 +413,14 @@ class SettingsActivity : Activity() {
                 isChecked = prefs.independentPresets && prefs.lightTestPassed
                 setOnCheckedChangeListener { _, on -> prefs.independentPresets = on; if (on) AdvancedAccess.markUsed(prefs); render() }
             },
-        )))
+            hbox().apply {
+                setPadding(dp(16), dp(12), dp(16), dp(12))
+                addView(text("What changes?", 16f, bold = true), lp(0, WRAP, 1f))
+                addView(text(if (independentGuideOpen) "▴" else "▾", 16f, bold = true))
+                pressable()
+                setOnClickListener { independentGuideOpen = !independentGuideOpen; render() }
+            },
+        ) + if (independentGuideOpen) listOf(independentGuide()) else emptyList()))
         list.addView(note(if (allowed) "To remove access, revoke SuperBoox in Shizuku. More options that need ADB will appear here as they're added."
             else "Without it, SuperBoox works as before; your own Front Light presets stay unavailable."))
     }
@@ -693,6 +700,7 @@ class SettingsActivity : Activity() {
             rows += controlRow(c, i, controls.size,
                 onMove = { from, to -> QuickControls.save(prefs, controls.move(from, to)) },
                 onRemove = { QuickControls.save(prefs, controls.filterNot { it.id == c.id }) })
+            if (c.id in shownGuides) rows += controlGuide(c)
         }
         if (controls.isEmpty()) rows += cardText("No controls yet.")
         rows += buttonRow(
@@ -715,6 +723,12 @@ class SettingsActivity : Activity() {
             setPadding(dp(12), 0, 0, 0)
             addView(text(c.label, 17f, medium = true))
             addView(text(describe(c), 13f, color = Ink.MUTED))
+            // A picture of what tap and hold do, opened on request.
+            addView(text(if (c.id in shownGuides) "Hide picture ▴" else "Show me ▾", 13.5f, bold = true).apply {
+                setPadding(0, dp(4), dp(8), dp(2))
+                pressable()
+                setOnClickListener { if (!shownGuides.remove(c.id)) shownGuides += c.id; render() }
+            })
         }, lp(0, WRAP, 1f))
         fun small(iconRes: Int, label: String, enabled: Boolean = true, action: () -> Unit) {
             addView(inkIconButton(iconRes, label, 44, enabled) { action(); render() })
@@ -722,6 +736,87 @@ class SettingsActivity : Activity() {
         small(R.drawable.ic_arrow_up, "Move up", index > 0) { onMove(index, index - 1) }
         small(R.drawable.ic_arrow_down, "Move down", index < count - 1) { onMove(index, index + 1) }
         small(R.drawable.ic_delete, "Remove") { onRemove() }
+    }
+
+    /** Controls whose "Show me" picture is open. */
+    private val shownGuides = HashSet<String>()
+
+    /** Tap and hold for [c], drawn: the tile filled for a tap, ringed for a hold. */
+    private fun controlGuide(c: QuickControls.Control): View = hbox().apply {
+        gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        setPadding(dp(12), dp(10), dp(12), dp(14))
+        val (tap, hold) = when {
+            c.id == QuickControls.FRONT_LIGHT -> "light turns off / back on" to "opens the presets under the controls"
+            c.id == "rotate" -> "rotation on / off" to "opens BOOX's rotation menu"
+            c.momentary -> "a full e‑ink refresh" to "opens its settings"
+            c.kind == QuickControls.Kind.TOGGLE -> "switches it on / off" to "opens its settings"
+            c.kind == QuickControls.Kind.TILE -> "opens it" to "opens its settings"
+            else -> c.label.lowercase().replaceFirstChar { it.uppercase() } to null
+        }
+        fun figure(filled: Boolean, ringed: Boolean, title: String, detail: String) = vbox().apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(8), 0, dp(8), 0)
+            addView(android.widget.FrameLayout(context).apply {
+                if (ringed) background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setStroke(dp(2), Ink.INK, dp(5).toFloat(), dp(4).toFloat())
+                }
+                addView(android.widget.FrameLayout(context).apply {
+                    background = android.graphics.drawable.GradientDrawable().apply {
+                        shape = android.graphics.drawable.GradientDrawable.OVAL
+                        setColor(if (filled) Ink.INK else Ink.PAPER)
+                        setStroke(dp(2), Ink.INK)
+                    }
+                    addView(icon(getDrawable(c.icon), 24).apply { if (filled) imageTintList = android.content.res.ColorStateList.valueOf(Ink.PAPER) },
+                        android.widget.FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+                }, android.widget.FrameLayout.LayoutParams(dp(50), dp(50), Gravity.CENTER))
+            }, lp(dp(64), dp(64)))
+            addView(text(title, 14f, bold = true).apply { gravity = Gravity.CENTER })
+            addView(text(detail, 12.5f, color = Ink.MUTED).apply { gravity = Gravity.CENTER; maxWidth = dp(130) })
+        }
+        addView(figure(filled = true, ringed = false, title = "Tap", detail = tap))
+        if (hold != null) addView(figure(filled = false, ringed = true, title = "Hold", detail = hold))
+        if (c.id == QuickControls.FRONT_LIGHT) addView(vbox().apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(8), dp(14), dp(8), 0)
+            addView(hbox().apply {
+                background = outline(2, 8)
+                setPadding(dp(6), dp(6), dp(6), dp(6))
+                repeat(4) { i ->
+                    addView(View(context).apply {
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            shape = android.graphics.drawable.GradientDrawable.OVAL
+                            setColor(if (i == 0) Ink.INK else Ink.PAPER)
+                            setStroke(dp(2), Ink.INK)
+                        }
+                    }, lp(dp(20), dp(20)).apply { if (i < 3) marginEnd = dp(4) })
+                }
+            })
+            addView(text("Bright · Soft ·\nCustom · Off", 12.5f, color = Ink.MUTED).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
+        })
+    }
+
+    private var independentGuideOpen = false
+
+    /** Independent presets off and on, drawn: whether BOOX's Custom is borrowed or left alone. */
+    private fun independentGuide(): View = vbox().apply {
+        setPadding(dp(16), dp(4), dp(16), dp(16))
+        fun chip(t: String, black: Boolean) = text(t, 12.5f, bold = true, color = if (black) Ink.PAPER else Ink.INK).apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            background = if (black) android.graphics.drawable.GradientDrawable().apply { setColor(Ink.INK); cornerRadius = dp(6).toFloat() } else outline(2, 6)
+        }
+        fun arrow() = text("→", 15f, bold = true).apply { setPadding(dp(8), 0, dp(8), 0) }
+        addView(text("OFF", 13f, bold = true).apply { setPadding(0, dp(4), 0, dp(6)) })
+        addView(hbox().apply { addView(chip("Your preset", false)); addView(arrow()); addView(chip("BOOX Custom", true)); addView(arrow()); addView(chip("Light", false)) })
+        addView(text("Your preset borrows BOOX's Custom, so Custom's levels change too.", 12.5f, color = Ink.MUTED).apply { setPadding(0, dp(6), 0, dp(10)) })
+        addView(text("ON", 13f, bold = true).apply { setPadding(0, dp(4), 0, dp(6)) })
+        addView(hbox().apply {
+            addView(chip("Your preset", false)); addView(arrow()); addView(chip("Light", false))
+            addView(chip("BOOX Custom", true), lp(WRAP, WRAP).apply { marginStart = dp(18) })
+            addView(text("untouched", 12.5f).apply { setPadding(dp(6), 0, 0, 0) })
+        })
+        addView(text("Your preset sets the light directly. BOOX's Custom keeps its own levels.", 12.5f, color = Ink.MUTED).apply { setPadding(0, dp(6), 0, 0) })
     }
 
     private fun describe(c: QuickControls.Control): String = when {
@@ -781,11 +876,31 @@ class SettingsActivity : Activity() {
         if (dock.isEmpty()) rows += cardText("No apps yet.")
         dock.forEachIndexed { i, app ->
             rows += itemRow(app, i, dock.size, onMove = { from, to -> prefs.dock = dock.move(from, to) },
-                onEdit = null, onRemove = { prefs.dock = dock.filterNot { it.id == app.id }; render() })
+                onEdit = if (app.value == Prefs.PREVIOUS_APP) null else ({ renameDockApp(app) }),
+                onRemove = { prefs.dock = dock.filterNot { it.id == app.id }; render() })
         }
         rows += buttonRow("+ Add app" to { pickApp { prefs.dock = prefs.dock + it; render() } })
         list.addView(card(rows))
         if (prefs.previousAppInDock) list.addView(note("Move \"Previous app\" with ↑ ↓ to choose where it sits."))
+    }
+
+    /** Rename an app at the bottom of the panel: only the name SuperBoox shows. Reset puts the app's own name back. */
+    private fun renameDockApp(app: Pin) {
+        val own = Launcher.appLabel(this, app.value.substringBefore('/'))
+        val f = field("Name", app.label)
+        f.post { f.requestFocus(); f.setSelection(f.text.length) }
+        fun save(name: String) {
+            prefs.dock = prefs.dock.map { if (it.id == app.id) it.copy(label = name) else it }
+            DebugLog.i("dock", "renamed ${app.label} -> $name")
+            render()
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Rename app")
+            .setView(vbox().apply { setPadding(dp(20), dp(8), dp(20), 0); addView(f, lp(MATCH, WRAP)) })
+            .setPositiveButton("Save") { _, _ -> f.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::save) }
+            .setNeutralButton("Reset") { _, _ -> save(own) }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun recentSection() {

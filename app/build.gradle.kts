@@ -15,7 +15,9 @@ android {
         // CI run number, so each downloaded build installs as an upgrade over the last.
         val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionCode = build
-        versionName = "0.1.0-build.$build"
+        // CI sets SB_VERSION: "1.0.0" for a stable release (a v1.0.0 tag), "1.1.0-dev.N" for
+        // pre-release builds. It matches the release tag, for Obtainium's version check.
+        versionName = System.getenv("SB_VERSION") ?: "0.0.0-local.$build"
     }
 
     signingConfigs {

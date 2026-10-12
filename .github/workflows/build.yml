@@ -2,6 +2,9 @@ name: Build APK
 
 on:
   push:
+    branches: ["**"]
+    # A version tag (v1.0.0) publishes a stable release; path filters don't apply to tags.
+    tags: ["v*"]
     # Docs/mockup-only pushes don't produce a new APK or release.
     paths-ignore:
       - "docs/**"
@@ -9,9 +12,13 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Needed to create the test releases below.
+# Needed to create the releases below.
 permissions:
   contents: write
+
+env:
+  # The version being worked towards: branch builds are pre-releases of it.
+  NEXT_VERSION: "1.1.0"
 
 jobs:
   build:
@@ -23,32 +30,52 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
+      # Stable: tag v1.2.3 -> version 1.2.3. Everything else: NEXT_VERSION-dev.<run>, a pre-release.
+      - name: Version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "name=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+            echo "stable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${NEXT_VERSION}-dev.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "stable=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build debug APK
-        run: ./gradlew --no-daemon assembleDebug
+        run: SB_VERSION="${{ steps.version.outputs.name }}" ./gradlew --no-daemon assembleDebug
       - name: Name APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk "superboox-build-${GITHUB_RUN_NUMBER}.apk"
+        run: cp app/build/outputs/apk/debug/app-debug.apk "superboox-${{ steps.version.outputs.name }}.apk"
       - uses: actions/upload-artifact@v4
         with:
-          name: superboox-build-${{ github.run_number }}
-          path: superboox-build-*.apk
-      # Each push becomes a GitHub release with the APK attached: a direct .apk link
-      # for the BOOX browser, and an update source for Obtainium. The tag equals the
-      # APK's versionName (0.1.0-build.N, see app/build.gradle.kts) so Obtainium's
-      # version detection matches installed and released builds.
-      - name: Publish release
-        if: github.event_name != 'pull_request'
+          name: superboox-${{ steps.version.outputs.name }}
+          path: superboox-*.apk
+      # Stable releases: a direct .apk link for the BOOX browser and the update Obtainium offers
+      # by default. The tag equals the APK's versionName so Obtainium's version check matches.
+      - name: Publish stable release
+        if: steps.version.outputs.stable == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: 0.1.0-build.${{ github.run_number }}
-          target_commitish: ${{ github.sha }}
-          name: SuperBoox 0.1.0-build.${{ github.run_number }}
+          tag_name: v${{ steps.version.outputs.name }}
+          name: SuperBoox ${{ steps.version.outputs.name }}
           prerelease: false
           make_latest: true
-          files: superboox-build-*.apk
+          files: superboox-*.apk
+          body_path: docs/releases/v${{ steps.version.outputs.name }}.md
+      # Every other push: a pre-release. Obtainium only offers these with "Include prereleases" on.
+      - name: Publish pre-release
+        if: steps.version.outputs.stable == 'false' && github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.name }}
+          target_commitish: ${{ github.sha }}
+          name: SuperBoox ${{ steps.version.outputs.name }} (pre-release)
+          prerelease: true
+          make_latest: false
+          files: superboox-*.apk
           body: |
-            Test build from `${{ github.ref_name }}` at ${{ github.sha }}.
+            **Pre-release** from `${{ github.ref_name }}` at ${{ github.sha }}: new work being tested, may have rough edges.
+            For the stable version, use the release marked **Latest**.
 
-            **Install:** download the `.apk` below on your BOOX, open it, and allow installs from the browser or file manager if asked. It installs over earlier test builds and keeps your settings.
-            **Updates with Obtainium:** add `https://github.com/rn-os/superboox` as an app source.
-            **First run:** SuperBoox → Accessibility settings → turn on "SuperBoox Quick Access", then allow SuperBoox to run in the background in BOOX App Management.
+            **Install:** download the `.apk` below on your BOOX and open it. It installs over earlier builds and keeps your settings.
+            **Updates with Obtainium:** add `https://github.com/rn-os/superboox`; turn on "Include prereleases" in the app's Obtainium settings to get these.
             **Found a bug?** SuperBoox → Troubleshooting → Copy debug report.

@@ -403,3 +403,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - **Otherwise:** a `QcTask(check = true)` runs a Control Center session behind the cover. `checkPreset` scrolls if needed, then `syncFromScreen` saves the preset and learns its levels.
 
   `panel.refreshLight()` redraws on the page holding the active preset.
+
+## Releases (from 1.0.0)
+
+- **Stable releases.** Run the "Build APK" workflow manually with `release=X.Y.Z`, or push a `vX.Y.Z` tag (this session can't push tags; it got a 403). Either way the workflow builds versionName X.Y.Z, tags `vX.Y.Z` and publishes it as Latest, with notes from `docs/releases/vX.Y.Z.md`.
+- **Pre-releases.** Every other push builds `NEXT_VERSION-dev.<run>` (NEXT_VERSION is set in the workflow, currently 1.1.0) and publishes it as a GitHub pre-release. Obtainium only offers those with "Include prereleases" on.
+- **versionCode** is still the run number, so builds always install as upgrades.
+- **v1.0.0** was published from commit 24a5c02, the build 72 code. Its release check: signed with the repo key, versionName 1.0.0.

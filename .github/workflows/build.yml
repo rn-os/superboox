@@ -11,6 +11,11 @@ on:
       - "**.md"
   pull_request:
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Publish a stable release with this version (e.g. 1.0.0); leave empty for a pre-release"
+        required: false
+        default: ""
 
 # Needed to create the releases below.
 permissions:
@@ -30,11 +35,14 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
-      # Stable: tag v1.2.3 -> version 1.2.3. Everything else: NEXT_VERSION-dev.<run>, a pre-release.
+      # Stable: a manual run with release=1.2.3, or a v1.2.3 tag -> version 1.2.3 (tag v1.2.3 created). Everything else: NEXT_VERSION-dev.<run>, a pre-release.
       - name: Version
         id: version
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+          if [[ -n "${{ github.event.inputs.release }}" ]]; then
+            echo "name=${{ github.event.inputs.release }}" >> "$GITHUB_OUTPUT"
+            echo "stable=true" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             echo "name=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
             echo "stable=true" >> "$GITHUB_OUTPUT"
           else
@@ -56,6 +64,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.name }}
+          target_commitish: ${{ github.sha }}
           name: SuperBoox ${{ steps.version.outputs.name }}
           prerelease: false
           make_latest: true

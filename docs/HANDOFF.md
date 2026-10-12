@@ -410,3 +410,13 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - **Pre-releases.** Every other push builds `NEXT_VERSION-dev.<run>` (NEXT_VERSION is set in the workflow, currently 1.1.0) and publishes it as a GitHub pre-release. Obtainium only offers those with "Include prereleases" on.
 - **versionCode** is still the run number, so builds always install as upgrades.
 - **v1.0.0** was published from commit 24a5c02, the build 72 code. Its release check: signed with the repo key, versionName 1.0.0.
+
+## 1.1 proposal: Tasks (mockups 44–48, `docs/mockups/tasks.html`)
+
+- **Scope.** Ideas taken from Agile Ink (a closed-source, commercial app; none of its code or branding is used). Everything stays offline, with no handwriting recognition; the user chose this.
+- **Step 1:**
+  - "Make task" on clipboard clips. Handwriting becomes the task; a typed title is optional.
+  - A new-task card in the panel, recording the source note and a due date.
+  - A Tasks view behind a new top-bar cell (Clipboard | Tasks | New Note | ⚙), with open/today/done.
+- **Step 2:** Collect, a tab listing BOOX notes changed since they were last marked reviewed (from NoteModel `updatedAt`).
+- **Settings → Tasks:** coverage like Clipboard, auto-clear of done tasks, Collect scope. Tasks are included in backups.

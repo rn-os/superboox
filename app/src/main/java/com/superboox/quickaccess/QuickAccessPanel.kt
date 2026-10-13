@@ -213,6 +213,10 @@ class QuickAccessPanel(
         }
         content.addView(scrolling(middle), lp(MATCH, 0, 1f))
         content.addView(rule(3))
+        thisAppStrip()?.let {
+            content.addView(it, lp(MATCH, WRAP))
+            content.addView(rule(1))
+        }
         content.addView(dock(), lp(MATCH, WRAP))
     }
 
@@ -1577,6 +1581,37 @@ class QuickAccessPanel(
         toast(if (added == 1) "Added 1 item" else "Added $added items")
         picked.clear()
         show(Mode.MAIN)
+    }
+
+    // ---- This app: BOOX's Optimize / EinkWise for the app in front -----------------------
+
+    private fun thisAppStrip(): View? = with(ctx) {
+        if (!prefs.showThisApp) return null
+        val pkg = EinkMenus.target(service, foregroundPackage) ?: return null
+        hbox().apply {
+            setPadding(s(12), s(8), s(10), s(8))
+            addView(icon(Launcher.appIcon(service, pkg), iconPx(32), tint = false))
+            addView(vbox().apply {
+                setPadding(s(10), 0, s(6), 0)
+                addView(oneLine(text(Launcher.appLabel(service, pkg), sp(15f), medium = true)))
+                addView(oneLine(text("Open now", sp(12f), color = Ink.MUTED)))
+            }, lp(0, WRAP, 1f))
+            addView(menuButton(R.drawable.ic_optimize, "Optimize") { service.openEinkMenu(optimize = true, pkg = pkg) })
+            addView(menuButton(R.drawable.ic_einkwise, "EinkWise") { service.openEinkMenu(optimize = false, pkg = pkg) })
+        }
+    }
+
+    /** Outlined icon + label button that opens one of BOOX's menus. */
+    private fun menuButton(iconRes: Int, label: String, onClick: () -> Unit): View = with(ctx) {
+        hbox().apply {
+            contentDescription = label
+            setPadding(s(8), s(6), s(10), s(6))
+            addView(icon(getDrawable(iconRes), iconPx(18)))
+            addView(text(label, sp(14f), bold = true).apply { setPadding(s(5), 0, 0, 0) })
+            pressable(outline(2, 8))
+            layoutParams = lp(WRAP, WRAP).apply { marginStart = s(6) }
+            setOnClickListener { onClick() }
+        }
     }
 
     // ---- Apps: 2 columns, 4 per page ------------------------------------------------------

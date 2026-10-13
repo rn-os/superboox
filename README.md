@@ -48,6 +48,7 @@ From top to bottom:
 | **Recent** (on the Quick Access bar) | Lists recently opened notes and books, newest first | |
 | **Quick Access** | Opens a pinned item | Lets you drag to reorder or remove items |
 | **Add** (on the Quick Access bar) | Pins what's open (see below) | |
+| **This app** (above the apps, BOOX only) | **Optimize** opens BOOX's Customize panel (refresh, display, color) for the app that's open; **EinkWise** opens BOOX's E-Ink Center. Both open over the app, and changes apply while it runs | |
 | **Apps** along the bottom | Opens the app; swipe for more pages. **Previous app** can be one of them | |
 
 What **Add** pins depends on where you are:

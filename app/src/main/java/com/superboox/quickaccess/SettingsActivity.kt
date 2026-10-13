@@ -1225,6 +1225,7 @@ class SettingsActivity : Activity() {
         val rows = mutableListOf<View>(
             check("Show \"Previous app\": the app you were in before this one", prefs.previousAppInDock) { prefs.previousAppInDock = it; render() },
         )
+        if (EinkMenus.available) rows += check("Show \"This app\": BOOX's Optimize and EinkWise for the app that's open", prefs.showThisApp) { prefs.showThisApp = it; render() }
         if (dock.isEmpty()) rows += cardText("No apps yet.")
         dock.forEachIndexed { i, app ->
             rows += itemRow(app, i, dock.size, onMove = { from, to -> prefs.dock = dock.move(from, to) },

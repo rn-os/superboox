@@ -456,7 +456,9 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     private fun openBooxNote(path: String, noteId: String?) {
         hidePanel()
-        val inNotes = isNotesInFront
+        // Only a real Notes activity counts here: from the launcher's Notes tab, relaunching
+        // returns to the same tab, and the opener then knows it came in through the launcher.
+        val inNotes = BooxNotes.isNotesScreen(foregroundPackage, foregroundActivity, prefs.notesPackage)
         DebugLog.i("note", "open \"$path\"${noteId?.let { " (id ${it.take(8)}…)" } ?: ""} (Notes in front: $inNotes, $foregroundPackage/$foregroundActivity)")
         // Hold the current screen so the BOOX home screen doesn't flash by on the way.
         cover.show { noteOpener.open(prefs.notesPackage, path, inNotes, noteId) }

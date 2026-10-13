@@ -187,7 +187,8 @@ object NotesScreen {
                 ?.isNotEmpty() == true
         }
 
-    private val LAUNCHER_NOTES_IDS = listOf("create_icon", "note_association_recent", "note_association_tab1")
+    // The library's own Recent / association tabs (Note Air 2 report); not on the home screen's Notes widget.
+    private val LAUNCHER_NOTES_IDS = listOf("note_association_recent", "note_association_tab1")
 
     private fun noteNameView(root: AccessibilityNodeInfo): String? =
         runCatching { root.findAccessibilityNodeInfosByViewId("com.onyx.android.note:id/note_name") }.getOrNull()

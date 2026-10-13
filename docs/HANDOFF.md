@@ -411,6 +411,18 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - **versionCode** is still the run number, so builds always install as upgrades.
 - **v1.0.0** was published from commit 24a5c02, the build 72 code. Its release check: signed with the repo key, versionName 1.0.0.
 
+## 1.1.0-dev.77 device checks (Note Air 6C, over adb) and the handwriting fixes
+
+- **Checks.** dev.77 passed: pinned note from another app, Add inside a note, Add in the Notes library, Last opened, hold New Note, Add on BOOX's Library. The handwriting check failed three ways; fixed as below.
+- **Testing over adb.** `input stylus motionevent DOWN/MOVE/UP` drives BOOX's lasso and `input stylus tap` pastes, but injected input can't draw strokes (BOOX reads the pen device, and adb can't write to it). `uiautomator dump` unbinds the accessibility service for about 2 s: don't use it mid-action. The app is debuggable, so `run-as com.superboox.quickaccess` reads `files/clips`.
+- **Previews.** `shape.pb` field 24 is one 24-byte record per point: big-endian floats, x and y first (then pressure, size, time). `BooxShapes.recordPoints` reads that first. `bruteForce` had settled on a wrong reading with huge outliers (pictures 916x16); such pictures are redrawn once (`flatPicture`, marker `redrawn`).
+- **Every lasso copy.** BOOX deletes its previous `CopyPoints/<uuid>` folder at each copy, so only the last copy before the panel opened was kept. `ClipHistory.checkNotesCopies` (a `FileObserver` on the folder, plus taps and toasts from Notes) keeps each new folder as it appears; needs All files access. `recordUri` then only moves that clip to the top.
+- **Putting an older copy back.** Findings on firmware 4.3:
+  - BOOX Notes pastes only from its own link (`com.onyx.android.note.onyx.fileprovider`). With SuperBoox's mirror link on the clipboard a freshly started Notes offers no paste.
+  - While Notes stays running it pastes the copy it holds in memory, whatever the clipboard or the folder hold (leaving and reopening the note doesn't change that).
+  - A freshly started Notes reads the folder its link points to. So `swapIntoNotesCopy` leaves BOOX's link on the clipboard and writes the older copy's `shape.pb` and `extra` into that folder: the older copy pastes once Notes has restarted.
+  - Not solved: making a running Notes reload. `am kill` (what `killBackgroundProcesses` does) doesn't stop it even from the home screen; only a force-stop does (adb or Shizuku).
+
 ## 1.1 proposal: Tasks (mockups 44–48, `docs/mockups/tasks.html`)
 
 - **Scope.** Ideas taken from Agile Ink (a closed-source, commercial app; none of its code or branding is used). Everything stays offline, with no handwriting recognition; the user chose this.

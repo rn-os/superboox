@@ -1281,7 +1281,12 @@ class QuickAccessPanel(
 
     private fun copyClip(c: ClipHistory.Clip) {
         if (ClipHistory.putBack(service, c)) {
-            toast(when (c.kind) { ClipHistory.Kind.IMAGE -> "Image copied"; ClipHistory.Kind.HANDWRITING -> "Handwriting copied"; else -> "Copied" })
+            toast(when {
+                c.kind == ClipHistory.Kind.IMAGE -> "Image copied"
+                ClipHistory.swappedIntoNotes -> "Handwriting copied. Reopen BOOX Notes if it pastes a newer copy"
+                c.kind == ClipHistory.Kind.HANDWRITING -> "Handwriting copied"
+                else -> "Copied"
+            })
             clipOpen = null
             fillClips()
         } else {

@@ -125,10 +125,24 @@ object BooxShapes {
         java.util.zip.InflaterInputStream(b.inputStream()).readBytes()
     }.getOrNull()
 
+    /**
+     * The layout seen on the Note Air 6C (firmware 4.3): field 24 holds one 24-byte record per
+     * point, big-endian floats, x and y first (then pressure, size and a time). Null unless
+     * the points land inside the shape's bounds.
+     */
+    private fun recordPoints(fields: List<Field>, box: RectF): List<FloatArray>? {
+        val b = fields.firstOrNull { it.num == 24 && it.type == 2 }?.bytes ?: return null
+        if (b.size < 24 || b.size % 24 != 0) return null
+        val buf = ByteBuffer.wrap(b).order(ByteOrder.BIG_ENDIAN)
+        val pts = List(b.size / 24) { k -> floatArrayOf(buf.getFloat(k * 24), buf.getFloat(k * 24 + 4)) }
+        return pts.takeIf { all -> all.all { !it[0].isNaN() && !it[1].isNaN() && box.contains(it[0], it[1]) } }
+    }
+
     /** Points of one shape, in page coordinates, or null if none were recognised. */
     private fun points(fields: List<Field>, rect: RectF, depth: Int = 0): List<FloatArray>? {
         val slack = maxOf(rect.width(), rect.height()) * 0.1f + 4f
         val box = RectF(rect.left - slack, rect.top - slack, rect.right + slack, rect.bottom + slack)
+        if (depth == 0) recordPoints(fields, box)?.let { return it }
         fun place(x: Float, y: Float, mode: Int): Pair<Float, Float> = when (mode) {
             0 -> x to y
             1 -> rect.left + x to rect.top + y

@@ -1,0 +1,39 @@
+name: Something isn't working
+description: Report a problem on your BOOX. The debug report tells us your model and firmware.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        SuperBoox reads BOOX's own screens and files, which differ between models and firmware.
+        The debug report is what lets a problem be fixed and confirmed for your tablet.
+  - type: input
+    id: device
+    attributes:
+      label: BOOX model and firmware
+      description: Shown in SuperBoox → Settings → Your device.
+      placeholder: "Note Air 6C · firmware 4.3"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: SuperBoox version
+      placeholder: "1.1.0"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: The steps you took, in order, help most.
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Debug report
+      description: SuperBoox → Settings → Troubleshooting → Copy debug report, then paste it here. It holds note and app names but no note contents.
+      render: text
+    validations:
+      required: false

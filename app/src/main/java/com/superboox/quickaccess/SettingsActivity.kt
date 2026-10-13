@@ -151,6 +151,7 @@ class SettingsActivity : Activity() {
         HOME("SuperBoox"), GESTURE("Gesture"), LOOK("Look & size"), ITEMS("Quick Access items"),
         CONTROLS("Quick Controls"), APPS("Apps at the bottom"), RECENT("Recent files"), CLIPBOARD("Clipboard"),
         TROUBLESHOOTING("Troubleshooting"), BACKUP("Backup & restore"), ADVANCED_ACCESS("Advanced access"), ADVANCED("Advanced"),
+        DEVICE("Your device"),
     }
 
     private var page = Page.HOME
@@ -198,6 +199,7 @@ class SettingsActivity : Activity() {
                 Page.BACKUP -> backupSection()
                 Page.ADVANCED_ACCESS -> advancedAccessSection()
                 Page.ADVANCED -> advancedSection()
+                Page.DEVICE -> deviceSection()
                 Page.HOME -> Unit
             }
         }
@@ -278,6 +280,7 @@ class SettingsActivity : Activity() {
                 tourStep = 0
                 render()
             },
+            menuRow(R.drawable.ic_check, Page.DEVICE, Devices.summary()),
             menuRow(R.drawable.ic_bug, Page.TROUBLESHOOTING, "Copy or share a debug report"),
             menuRow(R.drawable.ic_shield, Page.ADVANCED_ACCESS, when {
                 AdvancedAccess.independentPresets(prefs) -> "Independent Front Light presets on"
@@ -747,6 +750,11 @@ class SettingsActivity : Activity() {
                 title("Welcome to SuperBoox")
                 para("A sidebar for your BOOX, like Supernote's: your notes and books, quick switches, a clipboard and your apps, one swipe away from anything you're doing.")
                 para("This short tour shows you around and asks for the permissions SuperBoox uses. You can come back to it any time from Settings → Help.")
+                list.addView(card(listOf(
+                    cardText("Your tablet: ${Devices.summary()}\n${Devices.verdict()} " +
+                        if (Devices.known() == null) "Most of it should work; if something doesn't, a debug report (Settings → Troubleshooting) shows us what your BOOX does differently."
+                        else "Settings → Your device lists what's confirmed."),
+                )))
             }
             1 -> {
                 title("Turn SuperBoox on")
@@ -769,7 +777,7 @@ class SettingsActivity : Activity() {
                     permissionRow("Modify system settings", "Lets the Auto-rotate Quick Control switch rotation directly.", Settings.System.canWrite(this)) {
                         Launcher.tryStart(this, Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName")))
                     },
-                    permissionRow("All files access", "Shows a preview of handwriting you copy in BOOX Notes. SuperBoox only reads BOOX's copy folder.", ClipHistory.hasFileAccess()) {
+                    permissionRow("All files access", "Keeps every handwriting copy you make in BOOX Notes, with a preview, and lets you paste older ones. SuperBoox only uses BOOX's copy folder.", ClipHistory.hasFileAccess()) {
                         openAllFilesAccess()
                     },
                 )))
@@ -1438,6 +1446,36 @@ class SettingsActivity : Activity() {
                 prompt("BOOX Notes package", pkg, "Package name") { prefs.notesPackage = it.ifBlank { BooxNotes.DEFAULT_PACKAGE } }
             },
         )))
+    }
+
+    /** What SuperBoox knows about this tablet: each device-dependent feature and whether it's been seen working here. */
+    private fun deviceSection() {
+        list.addView(View(this), lp(MATCH, dp(12)))
+        list.addView(card(listOf(cardText(
+            "${Devices.summary()}\n${Devices.verdict()}\n\nSuperBoox reads BOOX's own screens and files, which differ between " +
+                "models and firmware. \"Not yet tested\" means nobody has confirmed it on a tablet like yours, not that it's broken.",
+        ))))
+        list.addView(heading("Checked features"))
+        list.addView(card(Devices.Feature.values().map { f ->
+            hbox().apply {
+                setPadding(dp(16), dp(12), dp(16), dp(12))
+                addView(text(f.title, 16f), lp(0, WRAP, 1f))
+                addView(text(Devices.status(f).label, 13f, bold = true).apply {
+                    setPadding(dp(8), dp(2), dp(8), dp(2))
+                    background = outline(2, 12)
+                })
+            }
+        }))
+        Devices.known()?.settings?.takeIf { it.isNotEmpty() }?.let { settings ->
+            list.addView(heading("Settings it was checked with"))
+            list.addView(card(settings.map { cardText(it) }))
+        }
+        list.addView(heading("Something not working?"))
+        list.addView(card(listOf(
+            cardText("A debug report names your model and firmware and shows what BOOX's screens look like to SuperBoox. That's what lets a feature be fixed and confirmed for your tablet."),
+            buttonRow("Copy debug report" to { copyReport() }, "Share…" to { shareReport() }),
+        )))
+        list.addView(View(this), lp(MATCH, dp(24)))
     }
 
     private fun troubleshootingSection() {

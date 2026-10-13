@@ -31,6 +31,7 @@ object DebugReport {
         line("android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
         line("firmware: ${Build.DISPLAY}")
         line("fingerprint: ${Build.FINGERPRINT}")
+        line(Devices.describe())
         line("screen: ${dm.widthPixels}x${dm.heightPixels}px, density ${dm.density} (${dm.densityDpi}dpi)")
 
         section("BOOX apps (launchable)")

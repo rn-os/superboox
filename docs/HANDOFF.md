@@ -423,6 +423,13 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - A new clip on the clipboard makes Notes load it. Changing the files behind a link already on the clipboard doesn't: Notes keeps what it loaded until the clipboard changes or it restarts.
   - Found by reading BOOX Notes' code with `dexdump` (`/system/app/knote2-release`); other BOOX firmware may differ.
 
+## Device awareness (`Devices.kt`)
+
+- The user asked for per-device tracking: features depend on BOOX's screens and files, which differ by model and firmware. The app reads the model (`Build.MODEL`) and firmware (`Devices.firmwareOf(Build.DISPLAY)`, "4.3" from "…_4.3-rel_…") itself; nobody picks a device.
+- `Devices.TABLE` lists what was seen working per model and firmware, with the build it was checked on and the settings it was checked with. Only the Note Air 6C on 4.3 is in it (the six features checked over adb on 1.1.0-dev.79). Add a row only from a device check or a user's debug report; anything else shows "Not yet tested" (or "Other firmware" for a known model on a different firmware).
+- Shown in the tour's first step, Settings → Help → Your device (`Page.DEVICE`, `deviceSection`), and the debug report's Device section (`Devices.describe`).
+- `.github/ISSUE_TEMPLATE/bug_report.yml` asks for model and firmware, version and the debug report.
+
 ## 1.1 proposal: Tasks (mockups 44–48, `docs/mockups/tasks.html`)
 
 - **Scope.** Ideas taken from Agile Ink (a closed-source, commercial app; none of its code or branding is used). Everything stays offline, with no handwriting recognition; the user chose this.

@@ -181,6 +181,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(K_SYSTEM_ACTIONS, false)
         set(v) = sp.edit().putBoolean(K_SYSTEM_ACTIONS, v).apply()
 
+    /** Position of the Notes tab in the BOOX launcher's icon-only tab bar (older firmware), -1 = not learned yet. */
+    var launcherNotesTab: Int
+        get() = sp.getInt(K_NOTES_TAB, -1)
+        set(v) = sp.edit().putInt(K_NOTES_TAB, v).apply()
+
     var notesPackage: String
         get() = sp.getString(K_NOTES_PKG, null)?.takeIf { it.isNotBlank() } ?: BooxNotes.DEFAULT_PACKAGE
         set(v) = sp.edit().putString(K_NOTES_PKG, v.trim()).apply()
@@ -291,6 +296,7 @@ class Prefs(context: Context) {
         const val K_TOUR_DONE = "tour_done"
         /** When SuperBoox last stopped on an error (written as it stops), for Settings' status. */
         const val K_LAST_CRASH = "last_crash"
+        const val K_NOTES_TAB = "boox_launcher_notes_tab"
         const val K_CLIP_TEXT = "clip_text"
         const val K_CLIP_LINKS = "clip_links"
         const val K_CLIP_CODES = "clip_codes"

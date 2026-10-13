@@ -48,6 +48,34 @@ object ReaderLibrary {
         }
     }.onFailure { DebugLog.w("reader", "NeoReader library not readable: ${it.javaClass.simpleName} ${it.message}") }.getOrNull()
 
+    /** Every document in NeoReader's library (title and path). Call off the main thread. */
+    fun all(context: Context): List<Doc> = runCatching {
+        val cols = arrayOf("title", "name", "nativeAbsolutePath")
+        val out = ArrayList<Doc>()
+        context.contentResolver.query(METADATA, cols, null, null, null)?.use { c ->
+            val iTitle = c.getColumnIndex("title")
+            val iName = c.getColumnIndex("name")
+            val iPath = c.getColumnIndex("nativeAbsolutePath")
+            while (c.moveToNext()) {
+                val path = if (iPath >= 0) c.getString(iPath) else null
+                if (path.isNullOrBlank()) continue
+                val title = (if (iTitle >= 0) c.getString(iTitle) else null)?.takeIf { it.isNotBlank() }
+                    ?: (if (iName >= 0) c.getString(iName) else null)?.takeIf { it.isNotBlank() }
+                    ?: File(path).nameWithoutExtension
+                out += Doc(title, path)
+            }
+        }
+        out
+    }.onFailure { DebugLog.w("reader", "NeoReader library not readable: ${it.javaClass.simpleName} ${it.message}") }.getOrDefault(emptyList())
+
+    /**
+     * The document a card in BOOX's Library shows, by title or file name (either may be
+     * shortened with "…"), or null.
+     */
+    fun match(docs: List<Doc>, label: String): Doc? =
+        docs.firstOrNull { NotesScreen.matches(it.title, label) }
+            ?: docs.firstOrNull { NotesScreen.matches(File(it.path).nameWithoutExtension, label) || NotesScreen.matches(File(it.path).name, label) }
+
     fun isInstalled(context: Context) = runCatching { context.packageManager.getPackageInfo(NEOREADER, 0) }.isSuccess
 
     /** Opens the document at [path], in NeoReader when it's installed. */

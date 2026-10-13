@@ -977,7 +977,8 @@ class SettingsActivity : Activity() {
             slider("Touch strip height", prefs.handleHeightPct, 10, 100, "% of screen") { prefs.handleHeightPct = it },
             slider("Touch strip position from top", prefs.handleTopPct, 0, 90, "%") { prefs.handleTopPct = it },
         )))
-        list.addView(note("While this page is open, the swipe strip is drawn in black on the screen edge, at its real place and size. Try the swipe right here."))
+        list.addView(note("While this page is open, the swipe strip is drawn in black on the screen edge, at its real place and size. Try the swipe right here. " +
+            "Elsewhere only the small marker shows: it stays thin, but the whole strip still responds to your swipe."))
         list.addView(
             note(
                 "Tip: the \"Quick Access\" app icon opens the panel too. Assign it to a BOOX gesture or the Navigation Ball " +

@@ -43,7 +43,19 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         private set
 
     val isNotesInFront: Boolean
-        get() = BooxNotes.isNotesScreen(foregroundPackage, foregroundActivity, prefs.notesPackage)
+        get() = BooxNotes.isNotesScreen(foregroundPackage, foregroundActivity, prefs.notesPackage) ||
+            (foregroundPackage == BooxNotes.BOOX_HOME_PACKAGE && launcherNotesShowing())
+
+    /**
+     * The BOOX launcher is showing its Notes library under a generic activity name (Note Air 2,
+     * 2022 firmware: com.onyx.reader.main.ui.MainActivity, with an icon-only tab bar).
+     */
+    private fun launcherNotesShowing(): Boolean = runCatching {
+        val root = windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+            .firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName?.toString() == BooxNotes.BOOX_HOME_PACKAGE } }
+            ?: return false
+        NotesScreen.isLauncherNotesLibrary(root) && NotesScreen.launcherTabs(root).isNotEmpty()
+    }.getOrDefault(false)
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -187,7 +199,33 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         }.getOrNull() ?: return@Runnable
         NotesScreen.trustedTitle(root)?.let { title ->
             Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, title, prefs.notesPackage, System.currentTimeMillis()))
+            return@Runnable
         }
+        if (NotesScreen.isCreateNoteScreen(root)) return@Runnable
+        // No note_name view (Note Air 2, 2022 firmware): take a top-bar text that is a real note's name.
+        val shown = runCatching { NotesScreen.topBarTexts(root) }.getOrDefault(emptyList())
+        val tree = if (editorTreeLogged) null else runCatching { DebugReport.describeTree(root) }.getOrNull()
+        io.execute {
+            NotesDb.forgetTitles()
+            val title = NotesDb.matchTitle(this, shown)
+            handler.post {
+                if (title != null) {
+                    Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, title, prefs.notesPackage, System.currentTimeMillis()))
+                } else if (tree != null && !editorTreeLogged) {
+                    // Once per run, so the next debug report shows how this firmware lays out an open note.
+                    editorTreeLogged = true
+                    DebugLog.i("recent", "open note's name not found (top bar: ${shown.take(8)}). Screen:\n$tree")
+                }
+            }
+        }
+    }
+
+    private var editorTreeLogged = false
+
+    /** The open note's name where the editor has no note_name view: a top-bar text matching a note in BOOX's database. */
+    private fun editorTitleFromDb(root: android.view.accessibility.AccessibilityNodeInfo): String? {
+        if (root.packageName?.toString() != prefs.notesPackage || NotesScreen.isCreateNoteScreen(root)) return null
+        return NotesDb.matchTitle(this, NotesScreen.topBarTexts(root))
     }
 
     /** Remembers the open note (read from the editor's title) and the last reading app used. */
@@ -895,7 +933,9 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             if (log) DebugLog.w("picker", "no $pkg window found; windows=${runCatching { windows.map { "${it.type}:${it.root?.packageName}" } }.getOrNull()}")
             return null
         }
-        val state = NotesScreen.read(root)
+        val state = NotesScreen.read(root).let { read ->
+            if (read is NotesScreen.State.Unknown) editorTitleFromDb(root)?.let { NotesScreen.State.Editor(it) } ?: read else read
+        }
         val summary = when (state) {
             is NotesScreen.State.Editor -> "editor, title \"${state.title}\""
             is NotesScreen.State.Library -> "library, ${state.cards.size} cards: ${state.cards.joinToString { it.label }.take(300)}"

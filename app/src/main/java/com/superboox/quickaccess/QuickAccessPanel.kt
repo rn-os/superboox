@@ -83,6 +83,9 @@ class QuickAccessPanel(
 
     /** Library cards offered by the Add picker, and which are ticked. */
     private var pickChoices: List<NotesScreen.Card> = emptyList()
+
+    /** When picking from BOOX's Library (books): each card's document. Empty when picking notes. */
+    private var pickDocs: Map<String, ReaderLibrary.Doc> = emptyMap()
     private val picked = LinkedHashSet<String>()
 
     val root: FrameLayout = object : FrameLayout(ctx) {
@@ -895,6 +898,7 @@ class QuickAccessPanel(
             is NotesScreen.State.Library -> {
                 if (state.cards.isEmpty()) return toast("No notes found on this screen")
                 pickChoices = state.cards
+                pickDocs = emptyMap()
                 picked.clear()
                 show(Mode.PICK)
                 return
@@ -903,9 +907,40 @@ class QuickAccessPanel(
         }
         val pkg = foregroundPackage
         if (pkg == ReaderLibrary.NEOREADER) return addOpenDocument()
+        if (pkg == BooxNotes.BOOX_HOME_PACKAGE) return addFromBooxLibrary()
+        if (pkg == prefs.notesPackage) {
+            // An open note whose name couldn't be read (the screen layout is in the log).
+            return toast("Couldn't read this note's name. Please send a debug report (Settings → Troubleshooting)")
+        }
         if (pkg == null || pkg == service.packageName || service.packageManager.getLaunchIntentForPackage(pkg) == null) {
             return toast("Open a note, or the Notes library, then tap Add")
         }
+        addApp(pkg)
+    }
+
+    /**
+     * On BOOX's home screen: if its Library (books) is showing, pick books to pin, matched to
+     * NeoReader's library so they open directly. Anywhere else on the home screen, pin the app.
+     */
+    private fun addFromBooxLibrary() {
+        val cards = (service.notesState(log = false) as? NotesScreen.State.Library)?.cards.orEmpty()
+        if (cards.isEmpty()) return addApp(BooxNotes.BOOX_HOME_PACKAGE)
+        io.execute {
+            val docs = ReaderLibrary.all(service)
+            val matched = cards.mapNotNull { c -> ReaderLibrary.match(docs, c.label)?.let { c to it } }
+            main.post {
+                if (!root.isAttachedToWindow) return@post
+                DebugLog.i("pin", "BOOX Library: ${cards.size} cards, ${matched.size} matched to NeoReader's library")
+                if (matched.isEmpty()) return@post addApp(BooxNotes.BOOX_HOME_PACKAGE)
+                pickChoices = matched.map { it.first }
+                pickDocs = matched.associate { it.first.label to it.second }
+                picked.clear()
+                show(Mode.PICK)
+            }
+        }
+    }
+
+    private fun addApp(pkg: String) {
         val label = Launcher.appLabel(service, pkg)
         if (prefs.pins.any { it.type == PinType.APP && it.value.substringBefore('/') == pkg }) {
             return toast("$label is already in Quick Access")
@@ -1486,7 +1521,12 @@ class QuickAccessPanel(
             box.addView(hbox().apply {
                 setPadding(s(16), s(11), s(16), s(11))
                 addView(checkbox(on))
-                addView(icon(getDrawable(if (card.isFolder) R.drawable.ic_folder else R.drawable.ic_note), iconPx(24)).apply {
+                val iconRes = when {
+                    card.label in pickDocs -> R.drawable.ic_book
+                    card.isFolder -> R.drawable.ic_folder
+                    else -> R.drawable.ic_note
+                }
+                addView(icon(getDrawable(iconRes), iconPx(24)).apply {
                     (layoutParams as LinearLayout.LayoutParams).marginStart = s(12)
                 })
                 addView(vbox().apply {
@@ -1522,7 +1562,13 @@ class QuickAccessPanel(
     private fun addPicked() {
         var added = 0
         picked.forEach { label ->
-            if (!isNotePinned(label)) {
+            val doc = pickDocs[label]
+            if (doc != null) {
+                if (prefs.pins.none { it.type == PinType.DOCUMENT && it.value == doc.path }) {
+                    prefs.addPin(Pin(PinType.DOCUMENT, doc.title, doc.path))
+                    added++
+                }
+            } else if (!isNotePinned(label)) {
                 prefs.addPin(Pin(PinType.BOOX_NOTE, label, label))
                 added++
             }

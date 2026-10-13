@@ -15,7 +15,7 @@ object Backup {
     private val SKIP = setOf(
         Prefs.K_RECENTS, Prefs.K_QC_STATES, Prefs.K_FL_PRESET, Prefs.K_FL_LAST_ON,
         Prefs.K_FL_MINE_ACTIVE, Prefs.K_LAST_BACKUP, Prefs.K_FL_LEVELS, Prefs.K_FL_BOOX_CUSTOM,
-        Prefs.K_ADV_BOOT, Prefs.K_ADV_TEST, Prefs.K_TOUR_DONE, Prefs.K_LAST_CRASH, Prefs.K_FL_SIGNATURES, Prefs.K_FL_DIRECT_BEFORE, Prefs.K_ADV_METHOD,
+        Prefs.K_ADV_BOOT, Prefs.K_ADV_TEST, Prefs.K_TOUR_DONE, Prefs.K_LAST_CRASH, Prefs.K_NOTES_TAB, Prefs.K_FL_SIGNATURES, Prefs.K_FL_DIRECT_BEFORE, Prefs.K_ADV_METHOD,
     )
 
     /** What a backup file holds, ready to restore. */

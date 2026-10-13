@@ -509,6 +509,26 @@ object ClipHistory {
 
     // ---- Back onto the clipboard ----------------------------------------------------------------
 
+    /**
+     * Puts an older handwriting copy's files back into BOOX's copy folder, if BOOX has since
+     * removed them (needs All files access). Returns what happened, for the log.
+     */
+    private fun restoreHandwriting(context: Context, clip: Clip): String {
+        val folder = notesCopyDir(Uri.parse(clip.text)) ?: return "not a BOOX copy folder"
+        val target = File(folder)
+        if (target.isDirectory && target.list()?.isNotEmpty() == true) return "BOOX's folder still there"
+        if (!hasFileAccess()) return "BOOX's folder is gone; restoring it needs All files access"
+        val keep = clip.image?.removeSuffix(".png")?.let { File(dir(context), it) }?.takeIf { it.isDirectory }
+            ?: return "no kept copy of the strokes"
+        return runCatching {
+            target.mkdirs()
+            keep.listFiles().orEmpty().filter { it.isFile && !it.name.startsWith("drawn-failed") }.forEach { f ->
+                f.copyTo(File(target, f.name), overwrite = true)
+            }
+            "restored BOOX's folder"
+        }.getOrElse { e -> "restoring BOOX's folder failed: ${e.message}" }
+    }
+
     fun putBack(context: Context, clip: Clip): Boolean {
         val cm = context.getSystemService(ClipboardManager::class.java) ?: return false
         val data = when (clip.kind) {
@@ -522,10 +542,15 @@ object ClipHistory {
             else -> ClipData.newPlainText("SuperBoox", clip.text)
         }
         val set = runCatching { cm.setPrimaryClip(data) }.recoverCatching {
-            // Android only lets BOOX re-share its own handwriting link; offer the link as text instead (BOOX may still paste it).
+            // Android only lets BOOX re-share its own handwriting link (Tab Ultra C report: older
+            // handwriting pasted as a text link). Put BOOX's copy folder back if it's gone, and
+            // offer a link of our own with the same path, which BOOX may read the folder from.
             if (clip.kind != Kind.HANDWRITING || it !is SecurityException) throw it
-            DebugLog.i("clipboard", "handwriting: can't re-share BOOX's link; putting it back as a link")
-            cm.setPrimaryClip(ClipData(ClipDescription(clip.label ?: "NOTE_SHAPES", arrayOf(ClipDescription.MIMETYPE_TEXT_URILIST)), ClipData.Item(clip.text)))
+            val restored = restoreHandwriting(context, clip)
+            val mirror = Uri.parse(clip.text).path?.let { p -> Uri.parse("content://$AUTHORITY$p") }
+                ?: throw it
+            DebugLog.i("clipboard", "handwriting: can't re-share BOOX's link; putting back SuperBoox's link to the same folder ($restored)")
+            cm.setPrimaryClip(ClipData(data.description, ClipData.Item(mirror)))
         }
         return set
             .onSuccess {
@@ -556,7 +581,8 @@ class ClipProvider : ContentProvider() {
         return File(ClipHistory.dir(context ?: return null), name).takeIf { it.exists() }
     }
 
-    override fun getType(uri: Uri): String = "image/png"
+    // Only kept images are files here; a handwriting link (BOOX's folder path) has no type.
+    override fun getType(uri: Uri): String? = file(uri)?.let { "image/png" }
 
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? =
         file(uri)?.let { ParcelFileDescriptor.open(it, ParcelFileDescriptor.MODE_READ_ONLY) }

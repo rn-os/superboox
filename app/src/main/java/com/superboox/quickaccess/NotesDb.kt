@@ -58,6 +58,48 @@ object NotesDb {
         return rows.firstOrNull { it.id == id && it.status == 0 }?.title
     }
 
+    /**
+     * The folders a note sits in, outermost first ("Work", "Projects"), or empty at the top
+     * level. Lets the library walk find a note pinned by name alone inside a folder.
+     */
+    fun folderPath(context: Context, id: String): List<String> {
+        val rows = runCatching { query(context) }.getOrNull() ?: return emptyList()
+        val byId = rows.associateBy { it.id }
+        val out = ArrayList<String>()
+        var parent = byId[id]?.parent
+        while (!parent.isNullOrEmpty() && out.size < 12) {
+            val folder = byId[parent] ?: break
+            out.add(0, folder.title)
+            parent = folder.parent
+        }
+        return out
+    }
+
+    @Volatile private var titleCache: Pair<Long, Set<String>>? = null
+
+    /**
+     * The first of [shown] that is the name of a live note in BOOX's database, or null. For
+     * reading an open note's name where the editor has no note_name view: matching a real note
+     * keeps tool labels ("Pen 0.30mm") from being taken as names. Cached briefly.
+     */
+    fun matchTitle(context: Context, shown: List<String>): String? {
+        if (shown.isEmpty()) return null
+        val now = android.os.SystemClock.uptimeMillis()
+        val titles = titleCache?.takeIf { now - it.first < 30_000 }?.second
+            ?: (runCatching { query(context) }.getOrNull() ?: return null)
+                .filter { it.status == 0 }
+                .map { it.title }
+                .toSet()
+                .also { titleCache = now to it }
+        for (s in shown) titles.firstOrNull { NotesScreen.matches(it, s) }?.let { return it }
+        return null
+    }
+
+    /** Forget cached titles (a note was just created or renamed). */
+    fun forgetTitles() {
+        titleCache = null
+    }
+
     fun openIntent(context: Context, notesPackage: String, id: String): Intent? {
         val cn = ComponentName(notesPackage, OPEN_BY_ID)
         val info = runCatching { context.packageManager.getActivityInfo(cn, 0) }.getOrNull() ?: return null

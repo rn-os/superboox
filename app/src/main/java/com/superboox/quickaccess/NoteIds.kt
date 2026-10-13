@@ -33,7 +33,7 @@ object NoteIds {
     fun resolve(context: Context, prefs: Prefs, pin: Pin, done: (path: String, noteId: String?) -> Unit) {
         io.execute {
             val path = runCatching { currentPath(context, prefs, pin) }.getOrDefault(pin.value)
-            done(path, pin.noteId.ifEmpty { null })
+            done(withFolders(context, pin, path), pin.noteId.ifEmpty { null })
         }
     }
 
@@ -51,6 +51,20 @@ object NoteIds {
         DebugLog.i("pin", "note \"$oldName\" was renamed to \"$title\"; updating the pin")
         update(prefs, pin.id) { it.copy(value = path, label = if (it.label == oldName) title else it.label) }
         return path
+    }
+
+    /**
+     * A note pinned by name alone that sits in a folder: walk the library through its folders
+     * (from BOOX's database), for firmware that can't open a note by id (Note Air 2, 2022).
+     */
+    private fun withFolders(context: Context, pin: Pin, path: String): String {
+        val steps = BooxNotes.splitPath(path)
+        if (steps.size != 1) return path
+        val id = pin.noteId.ifEmpty { NotesDb.findNoteId(context, steps) } ?: return path
+        val folders = runCatching { NotesDb.folderPath(context, id) }.getOrDefault(emptyList())
+        if (folders.isEmpty()) return path
+        DebugLog.i("pin", "\"${steps[0]}\" is in ${folders.joinToString(" / ")}")
+        return (folders + steps).joinToString(" ${BooxNotes.PATH_SEPARATOR} ")
     }
 
     private fun update(prefs: Prefs, pinId: String, change: (Pin) -> Pin) {

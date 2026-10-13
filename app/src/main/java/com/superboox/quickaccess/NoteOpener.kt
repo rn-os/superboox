@@ -32,6 +32,7 @@ import android.widget.Toast
 class NoteOpener(private val service: AccessibilityService) {
 
     private val handler = Handler(Looper.getMainLooper())
+    private val prefs by lazy { Prefs(service) }
     private var job: Job? = null
 
     private class Job(val packages: Set<String>, val notesPackage: String, val steps: List<String>, val deadline: Long) {
@@ -43,6 +44,9 @@ class NoteOpener(private val service: AccessibilityService) {
 
         /** Set when we opened the BOOX launcher and still need to tap its "Notes" tab. */
         var needsNotesTab = false
+
+        /** Icon-only launcher tabs already tried while looking for Notes (older firmware). */
+        val tabsTried = HashSet<Int>()
         var index = 0
         var backs = 0
         var relaunches = 0
@@ -179,7 +183,11 @@ class NoteOpener(private val service: AccessibilityService) {
         if (root == null) return run { handler.postDelayed({ setupTick(notesPackage) }, POLL_MS) }
         if (!setupTabTapped && root.packageName?.toString() == BooxNotes.BOOX_HOME_PACKAGE) {
             setupTabTapped = true
-            findFirst(root) { n -> NotesScreen.textOf(n).lowercase().let { it == "notes" || it == "note" } && n.isVisibleToUser }?.let {
+            val tab = findFirst(root) { n -> NotesScreen.textOf(n).lowercase().let { it == "notes" || it == "note" } && n.isVisibleToUser }
+                // Icon-only tabs (older launchers): the Notes tab learned while opening a note.
+                ?: prefs.launcherNotesTab.takeIf { !NotesScreen.isLauncherNotesLibrary(root) }
+                    ?.let { NotesScreen.launcherTabs(root).getOrNull(it) }
+            tab?.let {
                 click(it, null)
                 handler.postDelayed({ setupTick(notesPackage) }, AFTER_TAP_MS)
                 return
@@ -332,6 +340,7 @@ class NoteOpener(private val service: AccessibilityService) {
             }
 
             is NotesScreen.State.Library -> {
+                if (root.packageName?.toString() == BooxNotes.BOOX_HOME_PACKAGE && NotesScreen.isLauncherNotesLibrary(root)) learnNotesTab(root)
                 val list = state.list
                 if (!j.rewound) {
                     // Start each folder from the top when the list scrolls; paged
@@ -418,25 +427,57 @@ class NoteOpener(private val service: AccessibilityService) {
         return true
     }
 
-    /** Taps the BOOX launcher's "Notes" tab, once, when we came in through the launcher. */
+    /**
+     * Taps the BOOX launcher's "Notes" tab when we came in through the launcher. Tabs with a
+     * "Notes" label are tapped once. Older launchers (Note Air 2, 2022 firmware) have icons
+     * only: there the tab learned earlier is tried first, then each tab in turn until the
+     * Notes library shows (recognised by its own views), and that position is remembered.
+     */
     private fun openNotesTab(j: Job, root: AccessibilityNodeInfo, now: Long, signature: String): Boolean {
         if (!j.needsNotesTab || root.packageName?.toString() != BooxNotes.BOOX_HOME_PACKAGE) return false
-        j.needsNotesTab = false
-        val tab = findFirst(root) { n ->
+        if (NotesScreen.isLauncherNotesLibrary(root)) {
+            j.needsNotesTab = false
+            learnNotesTab(root)
+            return false
+        }
+        val labelled = findFirst(root) { n ->
             val t = NotesScreen.textOf(n).lowercase()
             (t == "notes" || t == "note") && n.isVisibleToUser
         }
-        if (tab == null) {
-            DebugLog.w("note", "no Notes tab found in the BOOX launcher")
-            return false
+        val tab = if (labelled != null) {
+            j.needsNotesTab = false
+            DebugLog.i("note", "not on the BOOX home screen; tapping its Notes tab")
+            labelled
+        } else {
+            val tabs = NotesScreen.launcherTabs(root)
+            val selected = NotesScreen.selectedLauncherTab(root)
+            j.tabsTried += selected
+            val learned = prefs.launcherNotesTab
+            val next = (listOf(learned) + tabs.indices).firstOrNull { it in tabs.indices && it !in j.tabsTried }
+            if (next == null) {
+                j.needsNotesTab = false
+                DebugLog.w("note", "no Notes tab found in the BOOX launcher" + if (tabs.isEmpty()) "" else " (tried ${tabs.size} tabs)")
+                return false
+            }
+            j.tabsTried += next
+            DebugLog.i("note", "trying BOOX launcher tab ${next + 1}/${tabs.size} for Notes" + if (next == learned) " (learned)" else "")
+            tabs[next]
         }
-        DebugLog.i("note", "not on the BOOX home screen; tapping its Notes tab")
         click(tab, null)
         j.resetFolder()
         j.awaitChangeFrom = signature
         j.awaitUntil = now + AFTER_BACK_MS
+        j.notBefore = now
         later(POLL_MS)
         return true
+    }
+
+    /** Remembers which icon-only launcher tab is Notes, when its library is showing. */
+    private fun learnNotesTab(root: AccessibilityNodeInfo) {
+        val selected = NotesScreen.selectedLauncherTab(root)
+        if (selected < 0 || selected == prefs.launcherNotesTab) return
+        prefs.launcherNotesTab = selected
+        DebugLog.i("note", "BOOX launcher: Notes is tab ${selected + 1}")
     }
 
     private fun back(j: Job, now: Long, signature: String, why: String) {

@@ -142,6 +142,53 @@ object NotesScreen {
             runCatching { root.findAccessibilityNodeInfosByViewId("com.onyx.android.note:id/$id") }.getOrNull()?.any { it.isVisibleToUser } == true
         }
 
+    /**
+     * Visible texts in the editor's top bar, left to right. They're candidates for the note's
+     * name on firmware without a note_name view (Note Air 2, 2022 firmware). Only trust one that
+     * matches a real note in BOOX's database ([NotesDb.matchTitle]).
+     */
+    fun topBarTexts(root: AccessibilityNodeInfo): List<String> {
+        val screen = Rect().also(root::getBoundsInScreen)
+        return all(root)
+            .filter { it.isVisibleToUser }
+            .mapNotNull { n ->
+                val t = textOf(n)
+                val r = Rect().also(n::getBoundsInScreen)
+                val inTopBar = r.centerY() < screen.top + screen.height() * 12 / 100 && r.left < screen.left + screen.width() * 2 / 3
+                if (inTopBar && t.isNotEmpty() && !isMeta(t)) t to r.left else null
+            }
+            .sortedBy { it.second }
+            .map { it.first }
+            .distinct()
+    }
+
+    // ---- BOOX launcher with icon-only tabs (older firmware) --------------------------------
+
+    /**
+     * True when the BOOX launcher is showing its Notes library. On the Note Air 2 (2022 firmware)
+     * the library lives in the launcher's MainActivity, so the activity name doesn't say "note".
+     */
+    fun isLauncherNotesLibrary(root: AccessibilityNodeInfo): Boolean =
+        LAUNCHER_NOTES_IDS.any { id ->
+            runCatching { root.findAccessibilityNodeInfosByViewId("${BooxNotes.BOOX_HOME_PACKAGE}:id/$id") }.getOrNull()
+                ?.any { it.isVisibleToUser } == true
+        }
+
+    /** The launcher's left tab bar (icons only, no labels): its tappable tabs, top to bottom. */
+    fun launcherTabs(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> =
+        runCatching { root.findAccessibilityNodeInfosByViewId("${BooxNotes.BOOX_HOME_PACKAGE}:id/function_item") }.getOrNull()
+            .orEmpty()
+            .map { item -> generateSequence(item) { it.parent }.take(3).firstOrNull { it.isClickable } ?: item }
+
+    /** Which launcher tab is selected (it carries a border image), or -1. */
+    fun selectedLauncherTab(root: AccessibilityNodeInfo): Int =
+        launcherTabs(root).indexOfFirst { tab ->
+            runCatching { tab.findAccessibilityNodeInfosByViewId("${BooxNotes.BOOX_HOME_PACKAGE}:id/image_function_border") }.getOrNull()
+                ?.isNotEmpty() == true
+        }
+
+    private val LAUNCHER_NOTES_IDS = listOf("create_icon", "note_association_recent", "note_association_tab1")
+
     private fun noteNameView(root: AccessibilityNodeInfo): String? =
         runCatching { root.findAccessibilityNodeInfosByViewId("com.onyx.android.note:id/note_name") }.getOrNull()
             ?.firstOrNull { it.isVisibleToUser }

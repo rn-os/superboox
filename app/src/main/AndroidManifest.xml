@@ -101,10 +101,11 @@
             android:multiprocess="false"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
-        <!-- Clipboard images kept by SuperBoox, for pasting and sharing them again. -->
+        <!-- Clipboard images kept by SuperBoox, for pasting and sharing them again. The second
+             authority is for handwriting put back for BOOX Notes (ClipHistory.putBack). -->
         <provider
             android:name=".ClipProvider"
-            android:authorities="com.superboox.quickaccess.clips"
+            android:authorities="com.superboox.quickaccess.clips;com.superboox.quickaccess.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true" />
 

@@ -56,6 +56,8 @@ object ClipHistory {
     private const val K_STAMP = "stamp"
     private const val K_BOOT = "boot"
     const val AUTHORITY = "com.superboox.quickaccess.clips"
+    /** Also [ClipProvider]'s: the name is what makes BOOX Notes read a handwriting link put back by [putBack]. */
+    const val NOTES_LINK_AUTHORITY = "com.superboox.quickaccess.fileprovider"
 
     /** Password managers: their copies are never kept. */
     val DEFAULT_IGNORED = setOf(
@@ -150,7 +152,7 @@ object ClipHistory {
         if (!prefs.clipKeepAfterRestart && last != 0L && abs(boot - last) > 60_000L) clear(context)
         // Copies BOOX already holds aren't new; the one on the clipboard is still read when the panel opens.
         if (hasFileAccess()) io.execute { File(NOTES_COPY_DIR).list()?.let { seenCopies += it } }
-        watchNotesCopies(context, prefs)
+        if (prefs.clipKeepHandwriting) watchNotesCopies(context, prefs)
     }
 
     // ---- Capture -----------------------------------------------------------------------------
@@ -469,22 +471,26 @@ object ClipHistory {
     /**
      * BOOX removes its previous lasso copy when a new one is made, so a copy that's only read when
      * the panel next opens loses every copy before the last. With All files access the copy
-     * folder is watched instead, and each copy is kept as it's made.
+     * folder is watched instead, and each copy is kept as it's made. Watches the folder above
+     * too, and is set up again after each look, because BOOX may recreate the copy folder itself.
      */
     private fun watchNotesCopies(context: Context, prefs: Prefs) {
-        if (copyWatcher != null || !hasFileAccess()) return
-        val root = File(NOTES_COPY_DIR).takeIf { it.isDirectory } ?: return
+        if (!hasFileAccess()) return
+        val dirs = listOf(File(NOTES_COPY_DIR).parentFile, File(NOTES_COPY_DIR)).filterNotNull().filter { it.isDirectory }
+        if (dirs.isEmpty()) return
         val app = context.applicationContext
-        copyWatcher = object : android.os.FileObserver(root, CREATE or MOVED_TO) {
+        val watcher = object : android.os.FileObserver(dirs, CREATE or MOVED_TO) {
             override fun onEvent(event: Int, path: String?) = checkNotesCopies(app, prefs)
-        }.also { it.startWatching() }
-        DebugLog.i("clipboard", "watching BOOX's copy folder")
+        }
+        synchronized(pendingCopies) {
+            copyWatcher?.stopWatching()
+            copyWatcher = watcher.also { it.startWatching() }
+        }
     }
 
     /** Keeps any lasso copy in BOOX's copy folder that hasn't been looked at yet. Debounced: BOOX is still writing it. */
     fun checkNotesCopies(context: Context, prefs: Prefs) {
         if (!prefs.clipKeepHandwriting || !hasFileAccess()) return
-        watchNotesCopies(context, prefs)
         main.removeCallbacksAndMessages(pendingCopies)
         main.postAtTime({
             io.execute {
@@ -501,6 +507,7 @@ object ClipHistory {
                     DebugLog.i("clipboard", "kept a lasso copy as BOOX made it")
                     main.post { add(context, prefs, Kind.HANDWRITING, NOTES_COPY_LINK + folder.name, preview, source, "NOTE_SHAPES", ClipDescription.MIMETYPE_TEXT_URILIST) }
                 }
+                watchNotesCopies(context, prefs)
             }
         }, pendingCopies, SystemClock.uptimeMillis() + 500L)
     }
@@ -587,20 +594,19 @@ object ClipHistory {
     // ---- Back onto the clipboard ----------------------------------------------------------------
 
     /**
-     * Puts an older handwriting copy's files back into BOOX's copy folder, if BOOX has since
-     * removed them (needs All files access). Returns what happened, for the log.
+     * Puts a handwriting copy's files back into its folder in BOOX's copy folder, which BOOX
+     * empties at every new copy (needs All files access). Returns what happened, for the log.
      */
     private fun restoreHandwriting(context: Context, clip: Clip): String {
         val folder = notesCopyDir(Uri.parse(clip.text)) ?: return "not a BOOX copy folder"
         val target = File(folder)
-        if (target.isDirectory && target.list()?.isNotEmpty() == true) return "BOOX's folder still there"
-        if (!hasFileAccess()) return "BOOX's folder is gone; restoring it needs All files access"
-        val keep = clip.image?.removeSuffix(".png")?.let { File(dir(context), it) }?.takeIf { it.isDirectory }
-            ?: return "no kept copy of the strokes"
+        val there = target.isDirectory && target.list()?.isNotEmpty() == true
+        if (!hasFileAccess()) return if (there) "BOOX's folder still there" else "BOOX's folder is gone; restoring it needs All files access"
+        val keep = keptDir(context, clip) ?: return if (there) "BOOX's folder still there" else "no kept copy of the strokes"
         return runCatching {
             target.mkdirs()
             strokeFiles(keep).forEach { f -> f.copyTo(File(target, f.name), overwrite = true) }
-            "restored BOOX's folder"
+            if (there) "BOOX's folder refreshed" else "restored BOOX's folder"
         }.getOrElse { e -> "restoring BOOX's folder failed: ${e.message}" }
     }
 
@@ -608,34 +614,8 @@ object ClipHistory {
     private fun strokeFiles(keep: File): List<File> =
         keep.listFiles().orEmpty().filter { it.isFile && !it.name.startsWith("drawn-failed") && it.name != "redrawn" }
 
-    /** True when the last [putBack] left BOOX's own link on the clipboard and changed the strokes behind it. */
-    var swappedIntoNotes = false
-        private set
-
-    /**
-     * BOOX Notes only pastes from a link of its own, and Android won't let SuperBoox put one
-     * on the clipboard. While BOOX's link to its latest copy is still there, the older copy's
-     * strokes are written into that copy's folder instead (needs All files access), and the
-     * clipboard is left alone. BOOX Notes reads the folder when it next starts; while it stays
-     * open it pastes the copy it remembers (Note Air 6C, firmware 4.3). Returns the folder, or
-     * null if this couldn't be done.
-     */
-    private fun swapIntoNotesCopy(context: Context, cm: ClipboardManager, clip: Clip): String? {
-        if (!hasFileAccess()) return null
-        val keep = keptDir(context, clip) ?: return null
-        val files = strokeFiles(keep).takeIf { it.isNotEmpty() } ?: return null
-        val live = runCatching { cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri }.getOrNull() ?: return null
-        val folder = notesCopyDir(live)?.takeIf { it.startsWith("$NOTES_COPY_DIR/") } ?: return null
-        return runCatching {
-            val target = File(folder).apply { mkdirs() }
-            files.forEach { f -> f.copyTo(File(target, f.name), overwrite = true) }
-            target.name
-        }.onFailure { DebugLog.w("clipboard", "handwriting: writing into BOOX's copy failed: ${it.message}") }.getOrNull()
-    }
-
     fun putBack(context: Context, clip: Clip): Boolean {
         val cm = context.getSystemService(ClipboardManager::class.java) ?: return false
-        swappedIntoNotes = false
         val data = when (clip.kind) {
             Kind.IMAGE -> ClipData.newUri(context.contentResolver, "Image", contentUri(clip) ?: return false)
             // BOOX's own clip, as BOOX made it: pastes back into BOOX Notes while BOOX still has the copy.
@@ -648,18 +628,15 @@ object ClipHistory {
         }
         val set = runCatching { cm.setPrimaryClip(data) }.recoverCatching {
             // Android only lets BOOX re-share its own handwriting link (Tab Ultra C report: older
-            // handwriting pasted as a text link). Put BOOX's copy folder back if it's gone, and
-            // offer a link of our own with the same path, which BOOX may read the folder from.
+            // handwriting pasted as a text link). Put the copy's files back in BOOX's copy folder
+            // and offer a link of our own with the same path. BOOX Notes turns a link into a
+            // folder from its path alone when the link's authority contains "fileprovider"
+            // (Note Air 6C, firmware 4.3), so it pastes this like a copy of its own.
             if (clip.kind != Kind.HANDWRITING || it !is SecurityException) throw it
-            if (swapIntoNotesCopy(context, cm, clip) != null) {
-                swappedIntoNotes = true
-                DebugLog.i("clipboard", "handwriting: can't re-share BOOX's link; wrote the older copy's strokes into BOOX's latest copy")
-                return@recoverCatching
-            }
             val restored = restoreHandwriting(context, clip)
-            val mirror = Uri.parse(clip.text).path?.let { p -> Uri.parse("content://$AUTHORITY$p") }
+            val mirror = Uri.parse(clip.text).path?.let { p -> Uri.parse("content://$NOTES_LINK_AUTHORITY$p") }
                 ?: throw it
-            DebugLog.i("clipboard", "handwriting: can't re-share BOOX's link; putting back SuperBoox's link to the same folder ($restored)")
+            DebugLog.i("clipboard", "handwriting: can't re-share BOOX's link; put back SuperBoox's link to the same folder ($restored)")
             cm.setPrimaryClip(ClipData(data.description, ClipData.Item(mirror)))
         }
         return set

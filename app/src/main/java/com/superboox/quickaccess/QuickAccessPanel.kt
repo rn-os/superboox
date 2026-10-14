@@ -782,12 +782,23 @@ class QuickAccessPanel(
 
     private fun lastDocumentRow(): View {
         val doc = Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.DOCUMENT && !isCurrent(it) }
+            ?: readerFallback()
         val app = doc?.let { Launcher.appLabel(service, it.pkg) }
         val sub = doc?.let { if (it.title == app) app else "${it.title} · $app" }
         val library = { service.openDocumentHome(doc?.pkg) }
         // Nothing opened yet: the row opens BOOX's Library.
         if (doc == null) return lastRow(R.drawable.ic_book, "Open Documents", "Nothing opened yet · hold for document library", onHold = library, onClick = library)
         return lastRow(R.drawable.ic_book, "Last Opened Document", sub, onHold = library) { openRecentDocument(doc) }
+    }
+
+    /**
+     * No document in SuperBoox's recents: NeoReader's own last one, unless NeoReader is in front
+     * (then that's the book open now). Null on a fresh tablet, where the row opens BOOX's Library.
+     */
+    private fun readerFallback(): RecentItem? {
+        if (foregroundPackage == ReaderLibrary.NEOREADER) return null
+        val doc = service.readerLast ?: return null
+        return RecentItem(RecentItem.Kind.DOCUMENT, doc.title, ReaderLibrary.NEOREADER, 0L, doc.path)
     }
 
     /** Tap reopens the note or document; hold opens where it lives. */

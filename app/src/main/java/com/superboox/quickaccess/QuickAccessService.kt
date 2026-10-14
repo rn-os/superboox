@@ -74,6 +74,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         BootRestore.clearNotification(this)
         NoteIds.capture(this, prefs)
         ClipHistory.onStart(this, prefs)
+        refreshReaderLast()
         val filter = android.content.IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
@@ -254,9 +255,20 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (foregroundPackage != ReaderLibrary.NEOREADER) return@Runnable
         io.execute {
             val doc = ReaderLibrary.lastOpened(this) ?: return@execute
+            readerLast = doc
             Recents.record(prefs, RecentItem(RecentItem.Kind.DOCUMENT, doc.title, ReaderLibrary.NEOREADER, System.currentTimeMillis(), doc.path))
         }
     }
+
+    /**
+     * NeoReader's most recent document, read from its library off the main thread: the panel's
+     * Last Opened Document falls back to it when SuperBoox's own recents have none (cleared, or
+     * nothing opened since install). Null until read, or when NeoReader has none.
+     */
+    @Volatile var readerLast: ReaderLibrary.Doc? = null
+        private set
+
+    private fun refreshReaderLast() = io.execute { readerLast = ReaderLibrary.lastOpened(this) }
 
     /** Called by [NoteOpener] when it has opened a note. */
     fun noteOpened(title: String) {
@@ -381,6 +393,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     fun showPanel(keepCover: Boolean = false, fresh: Boolean = true) {
         if (panel != null) return
+        refreshReaderLast()
         hidePreview()
         if (!keepCover) cover.hide()
         if (fresh && !prefs.rememberPages) {

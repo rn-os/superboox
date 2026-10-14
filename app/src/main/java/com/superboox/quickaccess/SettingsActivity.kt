@@ -870,7 +870,7 @@ class SettingsActivity : Activity() {
                     permissionRow("Modify system settings", "Lets the Auto-rotate Quick Control switch rotation directly.", Settings.System.canWrite(this)) {
                         Launcher.tryStart(this, Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName")))
                     },
-                    permissionRow("All files access", "Keeps every handwriting copy you make in BOOX Notes, with a preview, and lets you paste older ones. SuperBoox only uses BOOX's copy folder.", ClipHistory.hasFileAccess()) {
+                    permissionRow("All files access", "Keeps every handwriting copy you make in BOOX Notes, with a preview, and lets you paste older ones, and keeps your screenshots in the Clipboard. SuperBoox only uses BOOX's copy folder and the screenshot folders.", ClipHistory.hasFileAccess()) {
                         openAllFilesAccess()
                     },
                 )))
@@ -1467,13 +1467,20 @@ class SettingsActivity : Activity() {
         list.addView(note("The Clipboard button sits at the top left of the panel (hold it to come here); Recent Files moves to the left end of the Quick Access bar. Off: Recent Files stays at the top."))
         list.addView(heading("What to keep"))
         val everyCopy = "Every copy with Advanced access"
-        list.addView(card(listOf(
+        // Started or stopped here too, so it follows All files access being allowed in Android settings.
+        ClipHistory.watchScreenshots(this, prefs)
+        val shots = prefs.clipKeepScreenshots && ClipHistory.hasFileAccess()
+        list.addView(card(listOfNotNull(
             keepRow("Text", "Words and passages you copy: from notes, books, web pages, messages.", everyCopy, prefs.clipKeepText) { prefs.clipKeepText = it },
             keepRow("Links", "Web addresses. Kept as links, so you can open them again from the clipboard.", everyCopy, prefs.clipKeepLinks) { prefs.clipKeepLinks = it },
             keepRow("Images", "Pictures an app copies, like “Copy image” in the browser or gallery. Large images are kept at a reduced size.",
                 "Only when the panel opens", prefs.clipKeepImages, advanced = false) { prefs.clipKeepImages = it },
             keepRow("Handwriting", "Strokes copied with the lasso in BOOX Notes. They paste back into BOOX Notes while BOOX still has the copy, usually until a restart.",
                 everyCopy, prefs.clipKeepHandwriting) { prefs.clipKeepHandwriting = it },
+            keepRow("Screenshots", "Adds each screenshot as you take it, with a preview. Needs All files access to see the screenshot folder. " +
+                "Without it, share a screenshot to “Copy to clipboard”.", "As you take it", shots, advanced = false) { on -> keepScreenshots(on) },
+            if (shots) check("Also put it on the clipboard, ready to paste", prefs.clipShotToClipboard) { prefs.clipShotToClipboard = it } else null,
+            if (shots) check("Open each one to mark up", prefs.clipShotMarkUp) { prefs.clipShotMarkUp = it } else null,
             keepRow("Codes", "Short codes on their own, like a 6-digit sign-in code. Off by default; they're usually only needed once.", everyCopy, prefs.clipKeepCodes) { prefs.clipKeepCodes = it },
             keepRow("Passwords and private copies", "Never kept: copies from password managers and anything an app marks as private.", null, true, locked = true) {},
         )))
@@ -1583,6 +1590,24 @@ class SettingsActivity : Activity() {
         addView(MiniPanel.view(context, listOfNotNull("Top bar", if (controls) "Quick Controls" else null, if (last) "Last Opened" else null),
             "Clipboard", listOfNotNull(if (apps) "Apps" else null)), lp(dp(78), dp(122)))
         addView(text(label, 12f).apply { gravity = Gravity.CENTER; setPadding(0, dp(4), 0, 0) })
+    }
+
+    /** The Screenshots tick: needs All files access, so asks for it first when it's off. */
+    private fun keepScreenshots(on: Boolean) {
+        if (on && !ClipHistory.hasFileAccess()) {
+            AlertDialog.Builder(this)
+                .setTitle("Keep screenshots")
+                .setMessage("To notice new screenshots, SuperBoox needs All files access, the same switch that shows handwriting previews. " +
+                    "It only reads the screenshot folders and BOOX's copy folder, and nothing leaves the tablet.")
+                .setPositiveButton("Allow") { _, _ -> prefs.clipKeepScreenshots = true; openAllFilesAccess() }
+                .setNegativeButton("Not now") { _, _ -> render() }
+                .setOnCancelListener { render() }
+                .show()
+            return
+        }
+        prefs.clipKeepScreenshots = on
+        ClipHistory.watchScreenshots(this, prefs)
+        render()
     }
 
     /** Android's "All files access" switch for SuperBoox (Special app access). */

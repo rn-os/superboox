@@ -1220,7 +1220,7 @@ class QuickAccessPanel(
             val kindIcon = when (c.kind) {
                 ClipHistory.Kind.TEXT -> R.drawable.ic_text
                 ClipHistory.Kind.LINK -> R.drawable.ic_link
-                ClipHistory.Kind.IMAGE -> R.drawable.ic_image
+                ClipHistory.Kind.IMAGE -> if (ClipHistory.isScreenshot(c)) R.drawable.ic_screenshot else R.drawable.ic_image
                 ClipHistory.Kind.HANDWRITING -> R.drawable.ic_edit
             }
             addView(FrameLayout(ctx).apply {
@@ -1250,7 +1250,8 @@ class QuickAccessPanel(
                     }, lp(WRAP, WRAP).apply { marginEnd = s(6) })
                     if (c.pinned) addView(icon(getDrawable(R.drawable.ic_pin), iconPx(13)), lp(s(14), s(14)).apply { marginEnd = s(3) })
                     val from = c.source?.let { Launcher.appLabel(service, it) }
-                    addView(oneLine(text(listOfNotNull(if (c.pinned) "Pinned" else null, from, ago(c.time)).joinToString(" · "), sp(12f), color = Ink.MUTED)))
+                    val what = if (ClipHistory.isScreenshot(c)) "Screenshot" else null
+                    addView(oneLine(text(listOfNotNull(if (c.pinned) "Pinned" else null, what, from, ago(c.time)).joinToString(" · "), sp(12f), color = Ink.MUTED)))
                 })
                 if (open) addView(clipActions(c), lp(MATCH, WRAP))
                 pressable()
@@ -1280,7 +1281,24 @@ class QuickAccessPanel(
             background = outline(1, 4)
             setPadding(s(2), s(2), s(2), s(2))
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
+            // Black-and-white screens: a screenshot's preview in grey with a little more contrast, so it reads on e-ink.
+            // Only the preview; pasting sends the picture as it is.
+            if (ClipHistory.isScreenshot(c) && Devices.colorScreen == false) colorFilter = monoFilter
         }
+    }
+
+    private val monoFilter by lazy {
+        val contrast = 1.15f
+        val shift = 128f * (1 - contrast)
+        android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix().apply {
+            setSaturation(0f)
+            postConcat(android.graphics.ColorMatrix(floatArrayOf(
+                contrast, 0f, 0f, 0f, shift,
+                0f, contrast, 0f, 0f, shift,
+                0f, 0f, contrast, 0f, shift,
+                0f, 0f, 0f, 1f, 0f,
+            )))
+        })
     }
 
     /**
@@ -1309,6 +1327,10 @@ class QuickAccessPanel(
             Triple(R.drawable.ic_paste, "Paste") { pasteClip(c) },
             if (c.kind == ClipHistory.Kind.LINK) Triple(R.drawable.ic_open, "Open") { openLink(c) } else null,
             if (c.kind == ClipHistory.Kind.HANDWRITING) null else Triple(R.drawable.ic_share, "Share…") { shareClip(c) },
+            if (c.kind == ClipHistory.Kind.IMAGE) Triple(R.drawable.ic_edit, "Mark up") {
+                service.hidePanel()
+                ClipHistory.markUp(service, c) { ok -> if (!ok) toast("Couldn't open the picture to mark up") }
+            } else null,
             Triple(R.drawable.ic_pin, if (c.pinned) "Unpin" else "Pin") {
                 ClipHistory.setPinned(service, c.id, !c.pinned)
                 fillClips()
@@ -1378,6 +1400,8 @@ class QuickAccessPanel(
             send.putExtra(Intent.EXTRA_TEXT, c.text)
         }
         val chooser = Intent.createChooser(send, "Share clip").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            // It's already in the Clipboard: SuperBoox's own "Copy to clipboard" would only add it again.
+            .putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(android.content.ComponentName(service, ShareToClipboardActivity::class.java)))
         if (Launcher.tryStart(service, chooser)) service.hidePanel()
     }
 

@@ -32,6 +32,13 @@ class SettingsActivity : Activity() {
     private lateinit var scroll: ScrollView
     private lateinit var list: LinearLayout
 
+    /** Sized for this screen ([UiScale]); dialogs opened from here follow it too. */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(newBase)
+        runCatching { applyOverrideConfiguration(UiScale.apply(newBase, newBase.resources.configuration)) }
+            .onFailure { DebugLog.w("settings", "UI scale not applied: ${it.javaClass.simpleName} ${it.message}") }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
@@ -39,6 +46,11 @@ class SettingsActivity : Activity() {
         scroll = ScrollView(this).apply {
             overScrollMode = View.OVER_SCROLL_NEVER
             addView(list)
+            // Wide screens (landscape, 13.3"): keep the column readable, centered.
+            addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+                val side = maxOf(0, (v.width - v.paddingLeft - v.paddingRight - dp(MAX_WIDTH_DP)) / 2)
+                if (list.paddingLeft != side) list.post { list.setPadding(side, 0, side, dp(48)) }
+            }
         }
         setContentView(scroll)
         // First launch: the tour (it also asks for the permissions SuperBoox uses).
@@ -151,7 +163,6 @@ class SettingsActivity : Activity() {
         HOME("SuperBoox"), GESTURE("Gesture"), LOOK("Look & size"), ITEMS("Quick Access items"),
         CONTROLS("Quick Controls"), APPS("Apps at the bottom"), RECENT("Recent files"), CLIPBOARD("Clipboard"),
         TROUBLESHOOTING("Troubleshooting"), BACKUP("Backup & restore"), ADVANCED_ACCESS("Advanced access"), ADVANCED("Advanced"),
-        DEVICE("Your device"),
     }
 
     private var page = Page.HOME
@@ -199,7 +210,6 @@ class SettingsActivity : Activity() {
                 Page.BACKUP -> backupSection()
                 Page.ADVANCED_ACCESS -> advancedAccessSection()
                 Page.ADVANCED -> advancedSection()
-                Page.DEVICE -> deviceSection()
                 Page.HOME -> Unit
             }
         }
@@ -281,8 +291,7 @@ class SettingsActivity : Activity() {
                 render()
             },
             actionRow(R.drawable.ic_optimize, "Keep SuperBoox running", keepRunningSummary()) { tourGo(TOUR_KEEP) },
-            menuRow(R.drawable.ic_check, Page.DEVICE, Devices.summary()),
-            menuRow(R.drawable.ic_bug, Page.TROUBLESHOOTING, "Copy or share a debug report"),
+            menuRow(R.drawable.ic_bug, Page.TROUBLESHOOTING, "Debug report · ${Devices.summary()}"),
             menuRow(R.drawable.ic_shield, Page.ADVANCED_ACCESS, when {
                 AdvancedAccess.independentPresets(prefs) -> "Independent Front Light presets on"
                 AdvancedAccess.allowed() -> "Connected"
@@ -779,7 +788,7 @@ class SettingsActivity : Activity() {
                 list.addView(card(listOf(
                     cardText("Your tablet: ${Devices.summary()}\n${Devices.verdict()} " +
                         if (Devices.known() == null) "Most of it should work; if something doesn't, a debug report (Settings → Troubleshooting) shows us what your BOOX does differently."
-                        else "Settings → Your device lists what's confirmed."),
+                        else "Settings → Troubleshooting lists what's confirmed."),
                 )))
             }
             1 -> {
@@ -1542,8 +1551,25 @@ class SettingsActivity : Activity() {
     }
 
     /** What SuperBoox knows about this tablet: each device-dependent feature and whether it's been seen working here. */
-    private fun deviceSection() {
+    /**
+     * The one place to go when something's wrong: the debug report first, then this tablet,
+     * what's been confirmed on it, and how Settings is sized for its screen.
+     */
+    private fun troubleshootingSection() {
         list.addView(View(this), lp(MATCH, dp(12)))
+        list.addView(card(listOf(
+            cardText(
+                "A debug report names your model and firmware and shows what BOOX's screens look like to SuperBoox. " +
+                    "It includes SuperBoox's log on this device (${DebugLog.entries().size} entries): gestures, the app " +
+                    "in front, launches, and each step of opening a note. It never leaves the device unless you copy or share it.",
+            ),
+            buttonRow(
+                "Copy debug report" to { copyReport() },
+                "Share…" to { shareReport() },
+            ),
+            buttonRow("Clear log" to { DebugLog.clear(); toast("Log cleared"); render() }),
+        )))
+        list.addView(heading("Your device"))
         list.addView(card(listOf(cardText(
             "${Devices.summary()}\n${Devices.verdict()}\n\nSuperBoox reads BOOX's own screens and files, which differ between " +
                 "models and firmware. \"Not yet tested\" means nobody has confirmed it on a tablet like yours, not that it's broken.",
@@ -1563,27 +1589,20 @@ class SettingsActivity : Activity() {
             list.addView(heading("Settings it was checked with"))
             list.addView(card(settings.map { cardText(it) }))
         }
-        list.addView(heading("Something not working?"))
+        list.addView(heading("Screen"))
         list.addView(card(listOf(
-            cardText("A debug report names your model and firmware and shows what BOOX's screens look like to SuperBoox. That's what lets a feature be fixed and confirmed for your tablet."),
-            buttonRow("Copy debug report" to { copyReport() }, "Share…" to { shareReport() }),
-        )))
-        list.addView(View(this), lp(MATCH, dp(24)))
-    }
-
-    private fun troubleshootingSection() {
-        list.addView(View(this), lp(MATCH, dp(12)))
-        list.addView(card(listOf(
-            cardText(
-                "SuperBoox keeps a log of what it does on this device (${DebugLog.entries().size} entries): gestures, " +
-                    "the app in front, launches, and each step of opening a note. It never leaves the device " +
-                    "unless you copy or share the report.",
-            ),
-            buttonRow(
-                "Copy debug report" to { copyReport() },
-                "Share…" to { shareReport() },
-            ),
-            buttonRow("Clear log" to { DebugLog.clear(); toast("Log cleared"); render() }),
+            cardText(UiScale.describe(this)),
+            choiceRow("Settings size", prefs.settingsSize.let {
+                if (it == SettingsSize.AUTO) "Auto (${(UiScale.auto(this) * 100).toInt()}%)" else it.title
+            }) {
+                pick("Settings size", SettingsSize.entries.map {
+                    if (it == SettingsSize.AUTO) "Auto: fits this screen (${(UiScale.auto(this) * 100).toInt()}%)" else it.title
+                }, prefs.settingsSize.ordinal) {
+                    prefs.settingsSize = SettingsSize.entries[it]
+                    DebugLog.i("settings", "settings size ${prefs.settingsSize.name}")
+                    recreate()
+                }
+            },
         )))
         list.addView(View(this), lp(MATCH, dp(24)))
     }
@@ -1927,6 +1946,9 @@ class SettingsActivity : Activity() {
     }
 
     companion object {
+        /** Widest the settings column gets; wider screens center it. */
+        private const val MAX_WIDTH_DP = 760
+
         /** The Settings screen on show, for [MainGuard] to redraw after an error. */
         private var current: java.lang.ref.WeakReference<SettingsActivity>? = null
 

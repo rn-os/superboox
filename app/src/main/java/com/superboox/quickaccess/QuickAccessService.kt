@@ -200,7 +200,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 .firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName?.toString() == prefs.notesPackage } }
         }.getOrNull() ?: return@Runnable
         NotesScreen.trustedTitle(root)?.let { title ->
-            Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, title, prefs.notesPackage, System.currentTimeMillis()))
+            recordNote(title)
             return@Runnable
         }
         if (NotesScreen.isCreateNoteScreen(root)) return@Runnable
@@ -212,7 +212,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             val title = NotesDb.matchTitle(this, shown)
             handler.post {
                 if (title != null) {
-                    Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, title, prefs.notesPackage, System.currentTimeMillis()))
+                    recordNote(title)
                 } else if (tree != null && !editorTreeLogged) {
                     // Once per run, so the next debug report shows how this firmware lays out an open note.
                     editorTreeLogged = true
@@ -279,7 +279,25 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     /** Called by [NoteOpener] when it has opened a note. */
     fun noteOpened(title: String) {
-        Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, title, prefs.notesPackage, System.currentTimeMillis()))
+        recordNote(title)
+    }
+
+    /**
+     * Remembers an open note with its folder ("Folder / Note", from BOOX's database), so
+     * holding Last Opened Note can open that folder. Recorded at once, the folder added after.
+     */
+    private fun recordNote(title: String) {
+        val now = System.currentTimeMillis()
+        // Already known with its folder (the editor reports the name every few seconds): keep that.
+        val known = Recents.lastNote(prefs)?.title?.takeIf {
+            BooxNotes.splitPath(it).size > 1 && Recents.noteName(it).equals(Recents.noteName(title), ignoreCase = true)
+        }
+        Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, known ?: title, prefs.notesPackage, now))
+        if (known != null || BooxNotes.splitPath(title).size > 1) return
+        io.execute {
+            val path = NotesDb.pathOf(this, title)
+            if (path != title) handler.post { Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, path, prefs.notesPackage, now)) }
+        }
     }
 
     // ---- Edge handle ---------------------------------------------------------------------

@@ -68,7 +68,7 @@ class QuickAccessPanel(
     private val currentNote: String? = (notesState as? NotesScreen.State.Editor)?.title
 
     private fun isCurrentNote(item: RecentItem) =
-        item.kind == RecentItem.Kind.NOTE && currentNote != null && NotesScreen.matches(item.title, currentNote)
+        item.kind == RecentItem.Kind.NOTE && currentNote != null && NotesScreen.matches(Recents.noteName(item.title), currentNote)
 
     /**
      * The document open right now: the newest one remembered from the reading
@@ -1436,7 +1436,7 @@ class QuickAccessPanel(
             val ago = ago(item.time)
             val forget = { Recents.remove(prefs, item.key) }
             when (item.kind) {
-                RecentItem.Kind.NOTE -> RecentRow(R.drawable.ic_note, item.title, "Note · $ago", item.time, forget) { service.openBooxNote(item.title) }
+                RecentItem.Kind.NOTE -> RecentRow(R.drawable.ic_note, Recents.noteName(item.title), "Note · $ago", item.time, forget) { service.openBooxNote(item.title) }
                 RecentItem.Kind.DOCUMENT -> {
                     val app = Launcher.appLabel(service, item.pkg)
                     RecentRow(R.drawable.ic_book, item.title, if (item.title == app) "Document · $ago" else "$app · $ago", item.time, forget) {

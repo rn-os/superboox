@@ -44,7 +44,7 @@ From top to bottom:
 | **⚙** (top bar) | Opens Settings | |
 | **Quick Controls** | Switches Wi‑Fi, Bluetooth, Do Not Disturb, Auto-rotate, Full Refresh, Back/Home/Recents and more | Opens that control's settings |
 | **Front Light** control | Turns the light on or off | Shows the presets (see below) |
-| **Last Opened Note / Document** | Reopens the note you had open before this one, or the last book or PDF | |
+| **Last Opened Note / Document** | Reopens the note you had open before this one, or the last book or PDF | Note: BOOX Notes' library, in that note's folder. Document: its app's start screen (NeoReader: BOOX's Library) |
 | **Recent** (on the Quick Access bar) | Lists recently opened notes and books, newest first | |
 | **Quick Access** | Opens a pinned item | Lets you drag to reorder or remove items |
 | **Add** (on the Quick Access bar) | Pins what's open (see below) | |

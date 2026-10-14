@@ -744,7 +744,7 @@ class QuickAccessPanel(
 
     private fun lastNoteRow(): View {
         val note = Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.NOTE && !isCurrentNote(it) }
-        return lastRow(R.drawable.ic_note, "Last Opened Note", note?.title, enabled = note != null) {
+        return lastRow(R.drawable.ic_note, "Last Opened Note", note?.title, enabled = note != null, onHold = { service.openNotesFolder(note?.title) }) {
             note?.let { service.openBooxNote(it.title) }
         }
     }
@@ -753,12 +753,13 @@ class QuickAccessPanel(
         val doc = Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.DOCUMENT && !isCurrent(it) }
         val app = doc?.let { Launcher.appLabel(service, it.pkg) }
         val sub = doc?.let { if (it.title == app) app else "${it.title} · $app" }
-        return lastRow(R.drawable.ic_book, "Last Opened Document", sub, enabled = doc != null) {
+        return lastRow(R.drawable.ic_book, "Last Opened Document", sub, enabled = doc != null, onHold = { service.openDocumentHome(doc?.pkg) }) {
             doc?.let { openRecentDocument(it) }
         }
     }
 
-    private fun lastRow(iconRes: Int, label: String, subtitle: String?, enabled: Boolean, onClick: () -> Unit): View = with(ctx) {
+    /** Tap reopens the note or document; hold opens where it lives (works on a grey row too). */
+    private fun lastRow(iconRes: Int, label: String, subtitle: String?, enabled: Boolean, onHold: () -> Unit, onClick: () -> Unit): View = with(ctx) {
         val color = if (enabled) Ink.INK else Ink.DISABLED
         hbox().apply {
             setPadding(s(16), s(12), s(16), s(12))
@@ -768,10 +769,9 @@ class QuickAccessPanel(
                 addView(text(label, sp(17f), color = color, medium = true))
                 if (subtitle != null) addView(oneLine(text(subtitle, sp(13f), color = if (enabled) Ink.MUTED else Ink.DISABLED)))
             }, lp(0, WRAP, 1f))
-            if (enabled) {
-                pressable()
-                setOnClickListener { onClick() }
-            }
+            pressable()
+            if (enabled) setOnClickListener { onClick() }
+            setOnLongClickListener { onHold(); true }
         }
     }
 

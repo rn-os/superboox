@@ -478,6 +478,23 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         cover.show { noteOpener.open(prefs.notesPackage, path, inNotes, noteId) }
     }
 
+    /** Hold Last Opened Note: BOOX Notes' library, in the folder that holds [path] (top level if none). */
+    fun openNotesFolder(path: String?) {
+        hidePanel()
+        val folder = path?.let { BooxNotes.splitPath(it).dropLast(1) }.orEmpty()
+        val inNotes = BooxNotes.isNotesScreen(foregroundPackage, foregroundActivity, prefs.notesPackage)
+        DebugLog.i("note", "open folder \"${folder.joinToString(" / ")}\" (Notes in front: $inNotes)")
+        cover.show { noteOpener.openFolder(prefs.notesPackage, folder, inNotes) }
+    }
+
+    /** Hold Last Opened Document: the app it lives in, on its start screen (NeoReader: BOOX's Library). */
+    fun openDocumentHome(pkg: String?) {
+        hidePanel()
+        DebugLog.i("doc", "open home of ${pkg ?: "NeoReader (no document yet)"}")
+        if (pkg == null || pkg == ReaderLibrary.NEOREADER) return cover.show { noteOpener.openLibraryTab() }
+        Launcher.launchApp(this, pkg)
+    }
+
     /**
      * Quick Controls test (debug report): reads the BOOX Control Center behind
      * the screen hold, taps nothing.

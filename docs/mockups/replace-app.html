@@ -1,0 +1,49 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;background:#e8e8e8;font-family:Roboto,"Helvetica Neue",Arial,sans-serif;color:#000}
+.stage{display:flex;gap:44px;padding:36px;align-items:flex-start;background:#e8e8e8;width:max-content}
+.notes{width:330px;font-size:16px;line-height:1.45}.notes h2{font-size:22px;margin:0 0 12px}.notes li{margin-bottom:9px}
+.col{display:flex;flex-direction:column;gap:10px}.cap{font-size:15px;max-width:400px}.cap b{display:block;font-size:18px;margin-bottom:3px}
+.scr{width:400px;background:#fff;border:2px solid #000;border-radius:10px;overflow:hidden;position:relative}
+.hd{font-size:13px;font-weight:700;letter-spacing:.06em;padding:16px 16px 4px}.hd+.rule{height:2px;background:#000;margin:0 16px 10px}
+.card{margin:0 12px 12px;border:2px solid #000;border-radius:10px}
+.row{display:flex;align-items:center;gap:10px;padding:11px 12px;font-size:16px;border-bottom:1px solid #000}.row:last-child{border:0}
+.ai{width:32px;height:32px;border-radius:7px;background:#333;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;flex:none}
+.ib{width:30px;height:30px;border:2px solid #000;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;box-sizing:border-box}
+.ib.hl{outline:3px dashed #000;outline-offset:3px}
+.sp{flex:1}
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.35)}
+.dlg{position:absolute;left:26px;right:26px;top:120px;background:#fff;border:2px solid #000;border-radius:10px;padding:18px 20px 12px}
+.dlg h3{margin:0 0 12px;font-size:19px}.lbl{font-size:12px}.fld{border-bottom:2px solid #000;font-size:17px;padding:6px 0 4px;margin-bottom:16px}
+.rep{border:2px solid #000;border-radius:6px;padding:10px;font-weight:700;font-size:15px;text-align:center;display:flex;gap:8px;justify-content:center;align-items:center}
+.rep.hl{outline:3px dashed #000;outline-offset:3px}
+.btns{display:flex;justify-content:space-between;margin-top:16px;font-weight:700;font-size:14px;letter-spacing:.04em}
+.btns span+span{margin-left:22px}
+.pick .row{border-bottom:1px solid #999}
+</style></head><body><div class="stage">
+<div class="notes"><h2>Replace an app at the bottom</h2><ul>
+<li>Settings › Apps at the bottom › <b>✎</b> on an app opens <b>Edit app</b> (today's Rename dialog).</li>
+<li>New <b>Replace app…</b> button in that dialog opens the usual app list.</li>
+<li>The app you pick takes the old one's place: same spot in the row, nothing to move with ↑ ↓.</li>
+<li>It shows the new app's own name. A custom name on the old app isn't carried over.</li>
+<li>Name, Reset, Cancel and Save work as before. "Previous app" has no ✎, so it can't be replaced.</li>
+<li>Black and white only; nothing changes on monochrome screens.</li></ul></div>
+<div class="col"><div class="cap"><b>1. Settings</b>Tap ✎ on Kindle.</div><div class="scr" style="height:520px">
+<div class="hd">APPS AT THE BOTTOM</div><div class="rule"></div><div class="card">
+<div class="row">☑ Show "Previous app"</div>
+<div class="row"><div class="ai">N</div>Notes<span class="sp"></span><div class="ib">↑</div><div class="ib">↓</div><div class="ib">✎</div><div class="ib">🗑</div></div>
+<div class="row"><div class="ai">K</div>Kindle<span class="sp"></span><div class="ib">↑</div><div class="ib">↓</div><div class="ib hl">✎</div><div class="ib">🗑</div></div>
+<div class="row"><div class="ai">10</div>Calendar<span class="sp"></span><div class="ib">↑</div><div class="ib">↓</div><div class="ib">✎</div><div class="ib">🗑</div></div>
+<div class="row" style="justify-content:center;font-weight:700">+ Add app</div></div></div></div>
+<div class="col"><div class="cap"><b>2. Edit app</b>Replace app… is new.</div><div class="scr" style="height:520px">
+<div class="hd">APPS AT THE BOTTOM</div><div class="rule"></div><div class="dim"></div>
+<div class="dlg"><h3>Edit app</h3><div class="lbl">Name</div><div class="fld">Kindle</div>
+<div class="rep hl">⇄ Replace app…</div>
+<div class="btns"><span>RESET</span><span class="sp"></span><span>CANCEL</span><span>SAVE</span></div></div></div></div>
+<div class="col"><div class="cap"><b>3. Pick, and it's swapped in place</b>Libby takes Kindle's spot.</div><div class="scr" style="height:520px">
+<div class="hd">APPS AT THE BOTTOM</div><div class="rule"></div><div class="card">
+<div class="row">☑ Show "Previous app"</div>
+<div class="row"><div class="ai">N</div>Notes<span class="sp"></span><div class="ib">↑</div><div class="ib">↓</div><div class="ib">✎</div><div class="ib">🗑</div></div>
+<div class="row"><div class="ai">Li</div><b>Libby</b><span class="sp"></span><div class="ib">↑</div><div class="ib">↓</div><div class="ib">✎</div><div class="ib">🗑</div></div>
+<div class="row"><div class="ai">10</div>Calendar<span class="sp"></span><div class="ib">↑</div><div class="ib">↓</div><div class="ib">✎</div><div class="ib">🗑</div></div>
+<div class="row" style="justify-content:center;font-weight:700">+ Add app</div></div></div></div>
+</div></body></html>

@@ -1,6 +1,7 @@
 package com.superboox.quickaccess
 
 import android.os.Build
+import java.lang.reflect.Modifier
 
 /**
  * Which BOOX this is, and what has been checked on it. SuperBoox works by reading BOOX's own
@@ -18,6 +19,7 @@ object Devices {
         NEW_NOTE("Hold New Note for BOOX's create-note screen"),
         HANDWRITING_KEEP("Keep every handwriting copy"),
         HANDWRITING_PASTE("Paste an older handwriting clip"),
+        THIS_APP("This app: BOOX's Optimize and EinkWise for the app that's open"),
     }
 
     enum class Status(val label: String) {
@@ -30,13 +32,15 @@ object Devices {
         val name: String,
         val firmware: String,
         val checkedOn: String,
+        /** Color (Kaleido) screen, as opposed to black and white. */
+        val color: Boolean,
         val confirmed: Set<Feature>,
         val settings: List<String>,
     )
 
     private val TABLE = listOf(
         Known(
-            model = "NoteAir6C", name = "Note Air 6C", firmware = "4.3", checkedOn = "1.1.0-dev.79",
+            model = "NoteAir6C", name = "Note Air 6C", firmware = "4.3", checkedOn = "1.1.0-dev.85", color = true,
             confirmed = Feature.values().toSet(),
             settings = listOf(
                 "All files access on: needed to keep every handwriting copy and to paste older ones.",
@@ -67,8 +71,29 @@ object Devices {
         }
     }
 
-    /** "Note Air 6C · firmware 4.3", or the model as Android names it. */
-    fun summary(): String = (known()?.name ?: "${Build.MANUFACTURER.orEmpty()} $model".trim()) + " · firmware ${firmware ?: "unknown"}"
+    /**
+     * Color screen or black and white, from BOOX's own DeviceController.getColorType()
+     * (0 = black and white; what BOOX's SDK isColorDevice() checks), else the table. Null if unknown.
+     * Features that only make sense in color must check this; BOOX's own menus adapt by themselves.
+     */
+    val colorScreen: Boolean? by lazy {
+        runCatching {
+            val c = Class.forName("android.onyx.hardware.DeviceController")
+            val m = c.getMethod("getColorType")
+            val target = if (Modifier.isStatic(m.modifiers)) null else c.getDeclaredConstructor().newInstance()
+            (m.invoke(target) as Number).toInt() != 0
+        }.onFailure { DebugLog.w("device", "color type not readable: ${it.javaClass.simpleName} ${it.message}") }
+            .getOrNull() ?: known()?.color
+    }
+
+    fun screenLabel(): String = when (colorScreen) {
+        true -> "color screen"
+        false -> "black-and-white screen"
+        null -> "screen type unknown"
+    }
+
+    /** "Note Air 6C · firmware 4.3 · color screen", or the model as Android names it. */
+    fun summary(): String = (known()?.name ?: "${Build.MANUFACTURER.orEmpty()} $model".trim()) + " · firmware ${firmware ?: "unknown"} · ${screenLabel()}"
 
     /** One line on how far SuperBoox has been checked on this tablet. */
     fun verdict(): String {
@@ -80,6 +105,7 @@ object Devices {
     /** For the debug report. */
     fun describe(): String = buildString {
         append("known to SuperBoox: ${verdict()}")
+        append("\nscreen: ${screenLabel()}")
         Feature.values().forEach { f -> append("\n  ${status(f).name.lowercase()}: ${f.title}") }
     }
 }

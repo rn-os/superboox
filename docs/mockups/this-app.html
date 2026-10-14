@@ -1,0 +1,194 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+<style>
+  @font-face { font-family: Roboto; src: url(fonts/roboto-latin-400-normal.woff2); }
+  @font-face { font-family: Roboto; font-weight: 500; src: url(fonts/roboto-latin-500-normal.woff2); }
+  @font-face { font-family: Roboto; font-weight: 700; src: url(fonts/roboto-latin-700-normal.woff2); }
+  body { margin: 0; background: #e8e8e8; font-family: Roboto, sans-serif; color: #000; }
+  .stage { display: flex; gap: 28px; padding: 28px; width: max-content; align-items: flex-start; }
+  .notes { width: 330px; font-size: 15px; line-height: 1.45; }
+  .notes h3 { font-size: 20px; margin: 0 0 10px; }
+  .notes li { margin-bottom: 8px; }
+  .panel { width: 480px; height: 1000px; background: #fff; border-left: 3px solid #000; display: flex; flex-direction: column; box-shadow: 0 4px 16px rgba(0,0,0,.15); position: relative; }
+  svg { display: block; flex: none; }
+  .top { display: flex; border-bottom: 1.5px solid #000; }
+  .top .c { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 12px 0 9px; font-size: 15px; font-weight: 500; gap: 4px; }
+  .top .sep { width: 1.5px; background: #000; }
+  .top .gear { width: 50px; display: flex; align-items: center; justify-content: center; }
+  .qc { border-bottom: 2.5px solid #000; padding: 12px 6px 4px; }
+  .tiles { display: grid; grid-template-columns: repeat(5, 1fr); row-gap: 10px; }
+  .tile { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 12px; text-align: center; line-height: 1.15; }
+  .dot { width: 54px; height: 54px; border-radius: 50%; border: 2px solid #000; display: flex; align-items: center; justify-content: center; box-sizing: border-box; background: #fff; }
+  .dot.on { background: #000; }
+  .pager { display: flex; justify-content: center; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; padding: 6px 0 4px; }
+  .last { display: flex; align-items: center; padding: 11px 16px; gap: 14px; }
+  .last b { display: block; font-size: 17px; font-weight: 500; } .last span { display: block; font-size: 13px; color: #333; }
+  .ir { height: 1px; background: #000; margin: 0 16px; flex: none; }
+  .qa { position: relative; text-align: center; font-size: 17px; font-weight: 700; padding: 13px 16px; border-top: 2.5px solid #000; border-bottom: 1px solid #000; }
+  .qa .add { position: absolute; right: 10px; top: 7px; display: flex; flex-direction: column; align-items: center; font-size: 11px; font-weight: 400; }
+  .pin { display: flex; align-items: center; gap: 12px; padding: 12px 18px; font-size: 17px; }
+  .apps { margin-top: auto; border-top: 2.5px solid #000; }
+  .apps .row { display: flex; } .apps .row + .row { border-top: 1px solid #000; }
+  .apps .cell { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 8px 0; font-size: 14px; gap: 3px; }
+  .apps .vs { width: 1px; background: #000; margin: 10px 0; }
+  .appi { width: 40px; height: 40px; border-radius: 10px; background: #3a3a3a; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; }
+  .bubble { position: absolute; background: #fff; border: 2px solid #000; border-radius: 12px; padding: 6px 10px; font-size: 13px; font-weight: 500; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+  /* settings */
+  .set { width: 620px; height: 1000px; background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.15); overflow: hidden; position: relative; }
+  .title { font-size: 28px; font-weight: 700; padding: 18px 16px 10px; } .rule3 { height: 3px; background: #000; }
+  .sec { padding: 18px 20px 8px; font-size: 14px; font-weight: 700; letter-spacing: .06em; }
+  .card { margin: 0 12px; border: 2px solid #000; border-radius: 8px; overflow: hidden; }
+  .card > * + * { border-top: 1px solid #000; }
+  .choice { display: flex; align-items: center; padding: 12px 16px; font-size: 17px; font-weight: 500; } .choice b { margin-left: auto; font-size: 15px; }
+  .check { display: flex; align-items: center; gap: 14px; padding: 10px 16px 10px 18px; font-size: 17px; }
+  .box { width: 18px; height: 18px; border: 2px solid #000; border-radius: 2px; position: relative; flex: none; }
+  .box.on { background: #000; }
+  .box.on::after { content: ""; position: absolute; left: 5px; top: 1px; width: 5px; height: 10px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .item { display: flex; align-items: center; padding: 7px 10px 7px 14px; gap: 6px; }
+  .item .t { flex: 1; min-width: 0; padding-left: 6px; } .item .t1 { font-size: 17px; font-weight: 500; } .item .t2 { font-size: 13px; color: #333; }
+  .ib { width: 38px; height: 38px; border: 2px solid #000; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .ib.off { border-color: #888; } .ib.off path { fill: #888; }
+  .btns { display: flex; gap: 8px; padding: 10px 12px; }
+  .btn { flex: 1; min-height: 42px; border: 2px solid #000; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; }
+  .para { font-size: 14px; color: #333; padding: 8px 20px 4px; line-height: 1.4; }
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,.35); }
+  .dialog { position: absolute; left: 36px; right: 36px; top: 40px; bottom: 24px; background: #fff; border: 2px solid #000; border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; }
+  .dialog h4 { margin: 0; padding: 16px 18px 10px; font-size: 20px; }
+  .grp { padding: 12px 18px 4px; font-size: 13px; font-weight: 700; letter-spacing: .06em; }
+  .opt { display: flex; align-items: center; gap: 12px; padding: 6px 18px; }
+  .opt .added { margin-left: auto; font-size: 12.5px; font-weight: 700; color: #555; }
+  .opt .t1 { font-size: 16px; font-weight: 500; } .opt .t2 { font-size: 12.5px; color: #333; }
+  .fl { margin: 6px 10px 10px; border: 2px solid #000; border-radius: 10px; padding: 8px 6px 10px; }
+  .fl .hd { display: flex; align-items: center; padding: 0 8px 8px; font-size: 16px; font-weight: 700; }
+  .fl .hd .x { margin-left: auto; }
+  .fl .row { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .opt2 { display: flex; gap: 14px; padding: 12px 16px; align-items: flex-start; }
+  .radio { width: 20px; height: 20px; border: 2px solid #000; border-radius: 50%; flex: none; margin-top: 2px; box-sizing: border-box; position: relative; }
+  .radio.on::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: #000; }
+  .opt2 .t1 { font-size: 17px; font-weight: 500; } .opt2 .t2 { font-size: 13px; color: #333; margin-top: 2px; line-height: 1.35; }
+  .back { width: 40px; height: 40px; border: 2px solid #000; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+  .fl .hint { font-size: 12.5px; color: #333; text-align: center; padding-top: 8px; }
+</style></head>
+<body><div class="stage" id="stage"></div><script>
+const F = {
+  clock: "M11.99,2C6.47,2 2,6.48 2,12s4.47,10 9.99,10C17.52,22 22,17.52 22,12S17.52,2 11.99,2zM12,20c-4.42,0 -8,-3.58 -8,-8s3.58,-8 8,-8 8,3.58 8,8 -3.58,8 -8,8zM12.5,7H11v6l5.25,3.15 0.75,-1.23 -4.5,-2.67z",
+  book: "M21,5c-1.11,-0.35 -2.33,-0.5 -3.5,-0.5 -1.95,0 -4.05,0.4 -5.5,1.5 -1.45,-1.1 -3.55,-1.5 -5.5,-1.5S2.45,4.9 1,6v14.65c0,0.25 0.25,0.5 0.5,0.5 0.1,0 0.15,-0.05 0.25,-0.05C3.1,20.45 5.05,20 6.5,20c1.95,0 4.05,0.4 5.5,1.5 1.35,-0.85 3.8,-1.5 5.5,-1.5 1.65,0 3.35,0.3 4.75,1.05 0.1,0.05 0.15,0.05 0.25,0.05 0.25,0 0.5,-0.25 0.5,-0.5V6c-0.6,-0.45 -1.25,-0.75 -2,-1zM21,18.5c-1.1,-0.35 -2.3,-0.5 -3.5,-0.5 -1.7,0 -4.15,0.65 -5.5,1.5V8c1.35,-0.85 3.8,-1.5 5.5,-1.5 1.2,0 2.4,0.15 3.5,0.5v11.5z",
+  link_add: "M8,11h8v2H8zM20.1,12H22c0,-2.76 -2.24,-5 -5,-5h-4v1.9h4c1.71,0 3.1,1.39 3.1,3.1zM3.9,12c0,-1.71 1.39,-3.1 3.1,-3.1h4V7H7c-2.76,0 -5,2.24 -5,5s2.24,5 5,5h4v-1.9H7c-1.71,0 -3.1,-1.39 -3.1,-3.1zM19,12h-2v3h-3v2h3v3h2v-3h3v-2h-3z",
+  settings: "M3,17v2h6v-2H3zM3,5v2h10V5H3zM13,21v-2h8v-2h-8v-2h-2v6h2zM7,9v2H3v2h4v2h2V9H7zM21,13v-2H11v2h10zM15,9h2V7h4V5h-4V3h-2v6z",
+  wifi: "M1,9l2,2c4.97,-4.97 13.03,-4.97 18,0l2,-2C16.93,2.93 7.08,2.93 1,9zM9,17l3,3 3,-3c-1.65,-1.66 -4.34,-1.66 -6,0zM5,13l2,2c2.76,-2.76 7.24,-2.76 10,0l2,-2C15.14,9.14 8.87,9.14 5,13z",
+  bt: "M17.71,7.71L12,2h-1v7.59L6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 11,14.41V22h1l5.71,-5.71 -4.3,-4.29 4.3,-4.29zM13,5.83l1.88,1.88L13,9.59V5.83zM14.88,16.29L13,18.17v-3.76l1.88,1.88z",
+  plane: "M21,16v-2l-8,-5V3.5c0,-0.83 -0.67,-1.5 -1.5,-1.5S10,2.67 10,3.5V9l-8,5v2l8,-2.5V19l-2,1.5V22l3.5,-1 3.5,1v-1.5L13,19v-5.5l8,2.5z",
+  moon: "M12,3c-4.97,0 -9,4.03 -9,9s4.03,9 9,9 9,-4.03 9,-9c0,-0.46 -0.04,-0.92 -0.1,-1.36 -0.98,1.37 -2.58,2.26 -4.4,2.26 -2.98,0 -5.4,-2.42 -5.4,-5.4 0,-1.81 0.89,-3.42 2.26,-4.4C12.92,3.04 12.46,3 12,3z",
+  light: "M20,8.69V4h-4.69L12,0.69 8.69,4H4v4.69L0.69,12 4,15.31V20h4.69L12,23.31 15.31,20H20v-4.69L23.31,12 20,8.69zM12,18c-3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6 6,2.69 6,6 -2.69,6 -6,6zM12,8c-2.21,0 -4,1.79 -4,4s1.79,4 4,4 4,-1.79 4,-4 -1.79,-4 -4,-4z",
+  refresh: "M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z",
+  lock: "M18,8h-1V6c0,-2.76 -2.24,-5 -5,-5S7,3.24 7,6v2H6c-1.1,0 -2,0.9 -2,2v10c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V10c0,-1.1 -0.9,-2 -2,-2zM12,17c-1.1,0 -2,-0.9 -2,-2s0.9,-2 2,-2 2,0.9 2,2 -0.9,2 -2,2zM15.1,8H8.9V6c0,-1.71 1.39,-3.1 3.1,-3.1 1.71,0 3.1,1.39 3.1,3.1v2z",
+  back: "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z",
+  home: "M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z",
+  recents: "M3,5v14h18V5H3zM19,17H5V7h14v10z",
+  bell: "M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.89,2 2,2zM18,16v-5c0,-3.07 -1.64,-5.64 -4.5,-6.32V4c0,-0.83 -0.67,-1.5 -1.5,-1.5s-1.5,0.67 -1.5,1.5v0.68C7.63,5.36 6,7.92 6,11v5l-2,2v1h16v-1l-2,-2z",
+  crop: "M17,15h2V7c0,-1.1 -0.9,-2 -2,-2H9v2h8v8zM7,17V1H5v4H1v2h4v10c0,1.1 0.9,2 2,2h10v4h2v-4h4v-2H7z",
+  rotate: "M7.11,8.53L5.7,7.11C4.8,8.27 4.24,9.61 4.07,11h2.02c0.14,-0.87 0.49,-1.72 1.02,-2.47zM6.09,13H4.07c0.17,1.39 0.72,2.73 1.62,3.89l1.41,-1.42c-0.52,-0.75 -0.87,-1.59 -1.01,-2.47zM7.1,18.32c1.16,0.9 2.51,1.44 3.9,1.61V17.9c-0.87,-0.15 -1.71,-0.49 -2.46,-1.03L7.1,18.32zM13,4.07V1L8.45,5.55 13,10V6.09c2.84,0.48 5,2.94 5,5.91s-2.16,5.43 -5,5.91v2.02c3.95,-0.49 7,-3.85 7,-7.93s-3.05,-7.44 -7,-7.93z",
+  mute: "M16.5,12c0,-1.77 -1.02,-3.29 -2.5,-4.03v2.21l2.45,2.45c0.03,-0.2 0.05,-0.41 0.05,-0.63zM19,12c0,0.94 -0.2,1.82 -0.54,2.64l1.51,1.51C20.63,14.91 21,13.5 21,12c0,-4.28 -2.99,-7.86 -7,-8.77v2.06c2.89,0.86 5,3.54 5,6.71zM4.27,3L3,4.27 7.73,9H3v6h4l5,5v-6.73l4.25,4.25c-0.67,0.52 -1.42,0.93 -2.25,1.18v2.06c1.38,-0.31 2.63,-0.95 3.69,-1.81L19.73,21 21,19.73l-9,-9L4.27,3zM12,4L9.91,6.09 12,8.18V4z",
+  rec: "M17,10.5V7c0,-0.55 -0.45,-1 -1,-1H4c-0.55,0 -1,0.45 -1,1v10c0,0.55 0.45,1 1,1h12c0.55,0 1,-0.45 1,-1v-3.5l4,4v-11l-4,4z",
+  left: "M15.41,7.41L14,6l-6,6 6,6 1.41,-1.41L10.83,12z", right: "M10,6L8.59,7.41 13.17,12l-4.58,4.59L10,18l6,-6z",
+  up: "M7.41,15.41L12,10.83l4.59,4.58L18,14l-6,-6 -6,6z", down: "M7.41,8.59L12,13.17l4.59,-4.58L18,10l-6,6 -6,-6z",
+  del: "M6,19c0,1.1 0.9,2 2,2h8c1.1,0 2,-0.9 2,-2V7H6v12zM19,4h-3.5l-1,-1h-5l-1,1H5v2h14V4z",
+  navi: "M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM12,17c-2.76,0 -5,-2.24 -5,-5s2.24,-5 5,-5 5,2.24 5,5 -2.24,5 -5,5z",
+};
+const S = {
+  note: "M7,3h10a2,2 0 0 1 2,2v14a2,2 0 0 1 -2,2H7z M4,7.5h5 M4,12h5 M4,16.5h5 M12,8.5h4 M12,12h4 M12,15.5h3",
+  note_new: "M7,3h10a2,2 0 0 1 2,2v14a2,2 0 0 1 -2,2H7z M4,7.5h5 M4,12h5 M4,16.5h5 M14,8.5v7 M10.5,12h7",
+  split: "M4,4h7v16H4z M13,4h7v16h-7z",
+};
+const g = (k, s = 24, c = "#000") => S[k]
+  ? `<svg width="${s}" height="${s}" viewBox="0 0 24 24"><path fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round" d="${S[k]}"/></svg>`
+  : `<svg width="${s}" height="${s}" viewBox="0 0 24 24"><path fill="${c}" d="${F[k]}"/></svg>`;
+F.bright = F.light;
+F.close = "M19,6.41L17.59,5 12,10.59 6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 12,13.41 17.59,19 19,17.59 13.41,12z";
+S.off = "M12,7a5,5 0 1 1 0,10a5,5 0 1 1 0,-10 M12,1.5v2.5 M12,20v2.5 M1.5,12h2.5 M20,12h2.5 M3,3l18,18";
+let ALL = [["wifi", "Wi‑Fi", 1], ["bt", "Bluetooth", 0], ["light", "Front Light", 1], ["moon", "Do Not Disturb", 1], ["refresh", "Full Refresh", 0],
+  ["plane", "Airplane", 0], ["rotate", "Auto‑rotate", 0], ["back", "Back", 0], ["home", "Home", 0], ["recents", "Recents", 0]];
+const tile = ([k, l, on]) => `<div class="tile"><div class="dot ${on ? "on" : ""}">${g(k, 26, on ? "#fff" : "#000")}</div>${l}</div>`;
+function qc(rows, page, pages) {
+  const per = rows * 5, items = ALL.slice(page * per, page * per + per);
+  return `<div class="qc"><div class="tiles">${items.map(tile).join("")}</div>
+    <div class="pager">${g("left", 22, page === 0 ? "#999" : "#000")}${page + 1} / ${pages}${g("right", 22, page === pages - 1 ? "#999" : "#000")}</div></div>`;
+}
+const notes = (h, items) => `<div class="notes"><h3>${h}</h3><ul>${items.map(i => `<li>${i}</li>`).join("")}</ul></div>`;
+</script>
+<style>
+  .col { display: flex; flex-direction: column; gap: 12px; }
+  .cap2 { font-size: 15px; line-height: 1.4; max-width: 480px; } .cap2 b { font-size: 18px; display: block; margin-bottom: 4px; }
+  .strip { border-top: 2.5px solid #000; display: flex; align-items: center; gap: 10px; padding: 9px 12px; }
+  .strip .who { flex: 1; min-width: 0; } .strip .who b { display: block; font-size: 15px; font-weight: 500; } .strip .who span { font-size: 12px; color: #444; }
+  .sb { border: 2px solid #000; border-radius: 8px; padding: 6px 10px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; }
+  .sb.on { background: #000; color: #fff; }
+  .appi.sm { width: 34px; height: 34px; border-radius: 8px; font-size: 13px; flex: none; }
+  .box2 { margin: 6px 10px 8px; border: 2px solid #000; border-radius: 10px; }
+  .box2 .hd { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid #000; font-size: 16px; font-weight: 700; }
+  .box2 .hd .x { margin-left: auto; }
+  .box2 .r { display: flex; align-items: center; gap: 12px; padding: 10px 12px; font-size: 15px; }
+  .box2 .r + .r { border-top: 1px solid #ccc; }
+  .box2 .r small { display: block; font-size: 12px; color: #444; }
+  .box2 .r .end { margin-left: auto; }
+  .tg { width: 38px; height: 20px; border-radius: 10px; border: 2px solid #000; position: relative; box-sizing: border-box; flex: none; }
+  .tg.on { background: #000; } .tg::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #000; } .tg.on::after { left: 20px; background: #fff; }
+  .ask { border: 2px dashed #000; border-radius: 8px; padding: 10px 12px; font-size: 13.5px; line-height: 1.4; background: #fafafa; max-width: 460px; }
+  .bub { position: absolute; background: #fff; border: 2px solid #000; border-radius: 12px; padding: 5px 9px; font-size: 12.5px; font-weight: 500; box-shadow: 0 2px 6px rgba(0,0,0,.2); width: 190px; }
+.tab { width: 430px; height: 574px; background: #fff; border: 2px solid #000; border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,.15); }
+  .tab .app { flex: 1; background: repeating-linear-gradient(#f4f4f4 0 18px, #ddd 18px 19px); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: #555; }
+  .tab .app span { font-size: 12px; font-weight: 400; }
+  .ov { border-top: 2px solid #000; background: #fff; }
+  .ov .bar { display: flex; padding: 9px 14px; font-size: 16px; font-weight: 700; }
+  .tabs { display: flex; border-bottom: 1px solid #000; } .tabs > * { flex: 1; text-align: center; padding: 7px 0; font-size: 13px; }
+  .tabs b { border-bottom: 3px solid #000; }
+  .ov .srow { font-size: 12.5px; padding: 8px 14px; }
+.tg { margin-left:auto; }
+  .sl { margin-left: auto; width: 140px; height: 6px; background: #ccc; border-radius: 3px; position: relative; } .sl::after { content: ""; position: absolute; left: var(--v); top: -6px; width: 16px; height: 16px; border-radius: 50%; background: #000; }
+  .srow { display: flex; align-items: center; padding: 11px 14px; border-bottom: 1px solid #ccc; font-size: 15px; }
+</style>
+<script>
+F.opt = "M3,17v2h6v-2H3zM3,5v2h10V5H3zM13,21v-2h8v-2h-8v-2h-2v6h2zM7,9v2H3v2h4v2h2V9H7zM21,13v-2H11v2h10zM15,9h2V7h4V5h-4V3h-2v6z";
+F.ew = "M12,2l2.4,6.6L21,11l-6.6,2.4L12,20l-2.4,-6.6L3,11l6.6,-2.4z";
+const head = `<div class="top"><div class="c">${g("clock", 32)}Recent Files</div><div class="sep"></div><div class="c">${g("note_new", 32)}New Note</div><div class="sep"></div><div class="gear">${g("settings", 26)}</div></div>
+  ${qc(1, 0, 2)}
+  <div class="last">${g("note", 30)}<div><b>Last Opened Note</b><span>Daily Journal</span></div></div><div class="ir"></div>
+  <div class="last">${g("book", 30)}<div><b>Last Opened Document</b><span>Meditations · NeoReader</span></div></div>
+  <div class="qa">Quick Access<div class="add">${g("link_add", 24)}Add</div></div>
+  <div class="pin">${g("note", 22)}Meeting Notes</div><div class="ir"></div><div class="pin">${g("book", 22)}Meditations</div>`;
+const apps = `<div class="apps" style="margin-top:0;border-top:1.5px solid #000"><div class="row"><div class="cell"><div class="appi">10</div>Calendar</div><div class="vs"></div><div class="cell"><div class="appi">Aa</div>Dictionary</div></div></div>`;
+const panelA = `<div class="panel" style="height:auto;position:relative">${head}<div style="height:30px"></div>
+  <div class="strip"><div class="appi sm">K</div><div class="who"><b>Kindle</b><span>Open now</span></div>
+    <div class="sb">${g("opt", 18)}Optimize</div><div class="sb">${g("ew", 18)}EinkWise</div></div>${apps}
+  <div class="bub" style="left:270px;top:428px">Each opens BOOX’s menu for Kindle</div></div>`;
+const booxScr = `<div class="tab"><div class="app">Kindle (behind)<span>the app keeps running above</span></div>
+  <div class="ov"><div class="bar"><span>‹ Customize ✎</span><span style="margin-left:auto;border:2.5px solid #000;border-radius:50%;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center">↺</span></div>
+  <div class="tabs"><b>Refresh</b><span>Display</span><span>Color</span><span>Others</span></div>
+  <div class="srow">Switch to Speed Mode when dragging<div class="tg on"></div></div>
+  <div class="srow">Full Refresh after Drag Page: 1 s<div class="tg"></div></div>
+  <div class="srow">Auto Full Refresh When Switching Pages<div class="tg"></div></div>
+  <div class="srow">Full Refresh by Tap: 20 tap(s)<span style="margin-left:auto;display:flex;align-items:center;gap:6px"><b style="border:2px solid #000;border-radius:5px;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center">−</b><div class="sl" style="--v:40%;margin-left:0;width:110px"></div><b style="border:2px solid #000;border-radius:5px;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center">+</b></span></div>
+  <div class="srow" style="border:0">Animation Filter Time: 50 ms<span style="margin-left:auto;display:flex;align-items:center;gap:6px"><b style="border:2px solid #000;border-radius:5px;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center">−</b><div class="sl" style="--v:2%;margin-left:0;width:110px"></div><b style="border:2px solid #000;border-radius:5px;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center">+</b></span></div></div></div>`;
+
+const panelB = `<div class="panel" style="height:auto;position:relative">${head}<div style="height:30px"></div>
+  <div class="strip"><div class="appi sm">K</div><div class="who"><b>Kindle</b><span>Display for this app</span></div>${g("up", 26)}</div>
+  <div class="box2"><div class="hd">Kindle display<span class="x">${g("close", 20)}</span></div>
+    <div class="r">${g("ew", 22)}<div>EinkWise<small>On · same switch as the Control Center tile</small></div><div class="tg on end"></div></div>
+    <div class="r">${g("ew", 22)}<div>EinkWise settings…<small>BOOX’s EinkWise menu</small></div><span class="end">${g("right", 22)}</span></div>
+    <div class="r">${g("opt", 22)}<div>Optimize…<small>BOOX’s Customize panel: refresh, display, color</small></div><span class="end">${g("right", 22)}</span></div></div>
+  ${apps}</div>`;
+document.getElementById("stage").innerHTML = `
+${notes("This app: Optimize + EinkWise", [
+  "A strip just above the apps for the app open behind the panel (Kindle here). Not a Quick Control.",
+  "Both are plain buttons: each opens BOOX’s own menu for that app. Nothing switches on or off in SuperBoox.",
+  "<b>Optimize</b> → BOOX’s Customize panel (Refresh · Display · Color · Others) for Kindle, drawn over Kindle.",
+  "<b>EinkWise</b> → BOOX’s EinkWise menu, over the running app (BOOX’s usual way).",
+  "The panel closes first, so BOOX’s menu isn’t under it. Back closes BOOX’s menu and you’re in the app.",
+  "Hidden on BOOX home, in SuperBoox, and when no app is known.",
+  "Settings › Apps at the bottom: “Show This app”.",
+])}
+<div class="col"><div class="cap2"><b>Panel</b>Two launch buttons for the open app.</div>${panelA}</div>
+<div class="col"><div class="cap2"><b>Optimize while the app is open</b>BOOX’s menu over Kindle.</div>${booxScr}
+  <div class="ask"><b>↺ Return to default</b> (circled) stays: SuperBoox opens BOOX’s own panel unchanged, so its reset icon, the − / + buttons on every slider and all four tabs come along.<br><br><b>Safe with the app open</b>: BOOX’s code applies changes live and never stops the app; Ryan confirmed DPI changes in EinkWise adjust the running app live.</div></div>`;
+</script>
+</body></html>

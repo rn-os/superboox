@@ -448,3 +448,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - No Front Light presets in the Control Center on a tablet where none were ever seen: `K_WM_NO_LIGHT`, the light is skipped and hidden from the card.
 - Panel: `writingBar()` (solid black, "Turn off") under the Quick Controls while the mode is on.
 - **Not yet run on a device** (the Note Air 6C wasn't on adb). To check: on/off with everything on; Bluetooth already off stays off; light back on Soft / Custom / one of yours; turning Wi‑Fi on by hand mid-mode is left alone; `svc`/`cmd` through Shizuku.
+## This app: BOOX Optimize and EinkWise
+
+- Mockup `docs/mockups/51-this-app.png` (approved by the user). A strip just above the apps names the app in front of the panel and has two launch buttons: **Optimize** and **EinkWise**. Hidden on BOOX home, the default home app, SystemUI, inside SuperBoox, on non-ONYX devices, and when Settings › Apps at the bottom › "Show This app" is off.
+- How BOOX opens them (Note Air 6C capture plus reading BOOX's launcher/SystemUI code): no activity. SystemUI's `EACActionReceiver` (exported, no permission, no sender check) shows the `EInkCenterUI` overlay when it receives a broadcast:
+  - Optimize: `com.onyx.SHOW_EAC_SETTINGS_VIEW_REQUEST`, String extra `args_component` = the app's launcher component flattened ("pkg/activity"), the same as the BOOX launcher sends from hold app → Optimize.
+  - EinkWise: `action.open.eink.center.request` (device-wide E-Ink Center, no extras).
+- `EinkMenus` sends them; `QuickAccessService.openEinkMenu` hides the panel first and refuses while a Quick Controls session has the Control Center open. Changes in BOOX's panel apply live (SystemUI never stops the app; the user confirmed DPI changes live).

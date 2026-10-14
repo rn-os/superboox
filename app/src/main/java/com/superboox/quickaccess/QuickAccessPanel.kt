@@ -1011,12 +1011,12 @@ class QuickAccessPanel(
                     setOnClickListener { clipConfirmClear = !clipConfirmClear; clipOpen = null; fillClips() }
                     clipClear = this
                 })
-                addView(icon(getDrawable(R.drawable.ic_close), iconPx(24)).apply {
+                addView(FrameLayout(ctx).apply {
                     contentDescription = "Close the clipboard"
-                    setPadding(s(8), s(8), s(8), s(8))
-                    pressable()
+                    addView(icon(getDrawable(R.drawable.ic_close), iconPx(18)), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+                    pressable(outline(2, 8))
                     setOnClickListener { show(Mode.MAIN) }
-                })
+                }, lp(s(30), s(30)).apply { marginStart = s(6); marginEnd = s(6) })
             }, lp(MATCH, WRAP))
             // The search field is kept across redraws so typing (and the keyboard) isn't interrupted.
             val search = clipSearch ?: android.widget.EditText(ctx).apply {

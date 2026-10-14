@@ -237,7 +237,7 @@ class QuickAccessPanel(
             addView(vRule(), lp(dp(2), MATCH))
             addView(FrameLayout(ctx).apply {
                 contentDescription = "SuperBoox settings"
-                addView(icon(getDrawable(R.drawable.ic_settings), iconPx(26)), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+                addView(icon(getDrawable(R.drawable.ic_settings), iconPx(32)), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
                 pressable()
                 setOnClickListener { openSettings() }
             }, lp(s(52), MATCH))
@@ -1273,11 +1273,11 @@ class QuickAccessPanel(
             .getOrNull()?.also { synchronized(thumbs) { thumbs.put(key, it) } }
     }
 
-    /** Copy · Paste in app · Share… / Pin · Delete (· Open, for links), in place under the clip. */
+    /** Copy · Paste · Share… / Pin · Delete (· Open, for links), in place under the clip. */
     private fun clipActions(c: ClipHistory.Clip): View = with(ctx) {
         val actions = listOfNotNull(
             Triple(R.drawable.ic_copy, "Copy") { copyClip(c) },
-            Triple(R.drawable.ic_paste, "Paste in app") { pasteClip(c) },
+            Triple(R.drawable.ic_paste, "Paste") { pasteClip(c) },
             if (c.kind == ClipHistory.Kind.LINK) Triple(R.drawable.ic_open, "Open") { openLink(c) } else null,
             if (c.kind == ClipHistory.Kind.HANDWRITING) null else Triple(R.drawable.ic_share, "Share…") { shareClip(c) },
             Triple(R.drawable.ic_pin, if (c.pinned) "Unpin" else "Pin") {
@@ -1292,7 +1292,8 @@ class QuickAccessPanel(
         )
         vbox().apply {
             setPadding(0, s(8), 0, 0)
-            actions.chunked(3).forEach { row ->
+            // Rows of buttons that fill the width: 4 as 2 + 2, otherwise 3 to a row.
+            actions.chunked(if (actions.size == 4) 2 else 3).forEach { row ->
                 addView(hbox().apply {
                     row.forEachIndexed { i, (res, label, action) ->
                         val dark = i == 0 && label == "Copy"
@@ -1305,9 +1306,8 @@ class QuickAccessPanel(
                             contentDescription = label
                             pressable(outline(2, 6, if (dark) Ink.INK else Ink.PAPER))
                             setOnClickListener { action() }
-                        }, lp(0, WRAP, 1f).apply { if (i < 2) marginEnd = s(6) })
+                        }, lp(0, WRAP, 1f).apply { if (i < row.size - 1) marginEnd = s(6) })
                     }
-                    repeat(3 - row.size) { addView(View(ctx), lp(0, 1, 1f).apply { marginEnd = s(6) }) }
                 }, lp(MATCH, WRAP).apply { bottomMargin = s(6) })
             }
         }
@@ -1552,7 +1552,9 @@ class QuickAccessPanel(
     private fun dragHandle(row: View, index: Int, count: Int, onMove: (Int, Int) -> Unit): View = with(ctx) {
         icon(getDrawable(R.drawable.ic_drag), iconPx(26)).apply {
             contentDescription = "Drag to move"
-            setPadding(s(6), s(8), s(10), s(8))
+            // The padding is around the glyph, not taken out of it.
+            layoutParams = LinearLayout.LayoutParams(s(26 + 12), s(26 + 16))
+            setPadding(s(4), s(8), s(8), s(8))
             var startY = 0f
             setOnTouchListener { v, e ->
                 when (e.actionMasked) {

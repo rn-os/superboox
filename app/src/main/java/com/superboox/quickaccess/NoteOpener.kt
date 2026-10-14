@@ -726,6 +726,13 @@ class NoteOpener(private val service: AccessibilityService) {
         val title = runCatching { root.findAccessibilityNodeInfosByViewId("${BooxNotes.BOOX_HOME_PACKAGE}:id/text_title") }.getOrNull()
             ?.firstOrNull { it.isVisibleToUser && NotesScreen.textOf(it).isNotBlank() } ?: return null
         val t = Rect().also(title::getBoundsInScreen)
+        // Note Air 6C, firmware 4.3: the header is one clickable com.onyx:id/icon_back holding arrow and name.
+        runCatching { root.findAccessibilityNodeInfosByViewId("${BooxNotes.BOOX_HOME_PACKAGE}:id/icon_back") }.getOrNull()
+            ?.firstOrNull { it.isVisibleToUser }
+            ?.let { back -> return Rect().also(back::getBoundsInScreen).let { r -> Rect(r.left, r.top, minOf(r.right, t.right), r.bottom) } }
+        // A clickable parent wrapping the name (other layouts): tap it.
+        generateSequence(title.parent) { it.parent }.take(2).firstOrNull { it.isClickable && it.isVisibleToUser }
+            ?.let { return Rect().also(it::getBoundsInScreen) }
         val arrow = findFirst(root) { n ->
             if (!n.isVisibleToUser || !n.isClickable) return@findFirst false
             val r = Rect().also(n::getBoundsInScreen)

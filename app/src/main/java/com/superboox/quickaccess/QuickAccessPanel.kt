@@ -776,8 +776,11 @@ class QuickAccessPanel(
         val note = Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.NOTE && !isCurrentNote(it) }
             ?: notesFallback()
         val library = { service.openNotesFolder(note?.title) }
-        // Nothing opened yet: the row opens the Notes library instead of sitting greyed out.
-        if (note == null) return lastRow(R.drawable.ic_note, "Open Notes", "Nothing opened yet · hold for notes library", onHold = library, onClick = library)
+        // No other note to offer: the row opens the Notes library. "Library" when the only one is open now.
+        if (note == null) {
+            val sub = if (currentNote != null) "Library · hold for notes library" else "Nothing opened yet · hold for notes library"
+            return lastRow(R.drawable.ic_note, "Open Notes", sub, onHold = library, onClick = library)
+        }
         val name = BooxNotes.splitPath(note.title).lastOrNull() ?: note.title
         return lastRow(R.drawable.ic_note, "Last Opened Note", name, onHold = library) { service.openBooxNote(note.title) }
     }
@@ -788,8 +791,12 @@ class QuickAccessPanel(
         val app = doc?.let { Launcher.appLabel(service, it.pkg) }
         val sub = doc?.let { if (it.title == app) app else "${it.title} · $app" }
         val library = { service.openDocumentHome(doc?.pkg) }
-        // Nothing opened yet: the row opens BOOX's Library.
-        if (doc == null) return lastRow(R.drawable.ic_book, "Open Documents", "Nothing opened yet · hold for document library", onHold = library, onClick = library)
+        // No other document to offer: the row opens BOOX's Library. "Library" when the only one is open now.
+        if (doc == null) {
+            val reading = currentDocument != null || (foregroundPackage == ReaderLibrary.NEOREADER && service.readerLast != null)
+            val sub = if (reading) "Library · hold for document library" else "Nothing opened yet · hold for document library"
+            return lastRow(R.drawable.ic_book, "Open Documents", sub, onHold = library, onClick = library)
+        }
         return lastRow(R.drawable.ic_book, "Last Opened Document", sub, onHold = library) { openRecentDocument(doc) }
     }
 

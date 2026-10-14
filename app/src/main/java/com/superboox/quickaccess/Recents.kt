@@ -64,11 +64,46 @@ object Recents {
         val current = list(prefs)
         val sameAsNewest = current.firstOrNull()?.key == item.key
         val updated = (listOf(item) + current.filterNot { it.key == item.key }).take(MAX)
-        val arr = JSONArray()
-        updated.forEach { arr.put(it.toJson()) }
-        prefs.sp.edit().putString(Prefs.K_RECENTS, arr.toString()).apply()
+        save(prefs, updated)
         if (!sameAsNewest) DebugLog.i("recent", "${item.kind} \"${item.title}\" (${item.pkg})")
     }
+
+    private fun save(prefs: Prefs, items: List<RecentItem>) {
+        val arr = JSONArray()
+        items.forEach { arr.put(it.toJson()) }
+        prefs.sp.edit().putString(Prefs.K_RECENTS, arr.toString()).apply()
+    }
+
+    /** Takes one entry off the list (by [RecentItem.key]). It comes back the next time it's opened. */
+    fun remove(prefs: Prefs, key: String) {
+        save(prefs, list(prefs).filterNot { it.key == key })
+        DebugLog.i("recent", "removed one entry")
+    }
+
+    /** Empties the list. Only what SuperBoox remembers: no note or file is touched. */
+    fun clear(prefs: Prefs) {
+        prefs.sp.edit().remove(Prefs.K_RECENTS).apply()
+        DebugLog.i("recent", "list cleared")
+    }
+
+    // Files from the folder chosen in Settings aren't remembered, they're listed fresh each time,
+    // so clearing one is remembered instead: as it was then, so it shows again once it changes.
+
+    fun fileKey(uri: String, modified: Long): String = "$uri|$modified"
+
+    fun hiddenFiles(prefs: Prefs): Set<String> = runCatching {
+        val arr = JSONArray(prefs.sp.getString(Prefs.K_RECENT_HIDDEN, null) ?: return emptySet())
+        (0 until arr.length()).mapTo(LinkedHashSet()) { arr.getString(it) }
+    }.getOrDefault(emptySet())
+
+    fun hideFiles(prefs: Prefs, keys: Collection<String>) {
+        if (keys.isEmpty()) return
+        val arr = JSONArray()
+        (hiddenFiles(prefs) + keys).toList().takeLast(MAX_HIDDEN).forEach { arr.put(it) }
+        prefs.sp.edit().putString(Prefs.K_RECENT_HIDDEN, arr.toString()).apply()
+    }
+
+    private const val MAX_HIDDEN = 200
 
     /**
      * Reading apps whose "last document" is worth remembering. Known readers

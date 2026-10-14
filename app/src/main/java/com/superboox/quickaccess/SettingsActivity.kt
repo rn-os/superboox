@@ -1046,6 +1046,7 @@ class SettingsActivity : Activity() {
             check("Show Quick Controls in the panel", prefs.showSystemActions) { prefs.showSystemActions = it },
         )))
         if (controls.any { it.id == QuickControls.FRONT_LIGHT }) myLightPresets()
+        if (controls.any { it.id == QuickControls.WRITING } || WritingMode.isOn(prefs)) writingModeCards()
         list.addView(heading("Controls · ${QuickAccessPanel.QC_PER_PAGE} per page"))
         val rows = mutableListOf<View>()
         controls.forEachIndexed { i, c ->
@@ -1061,6 +1062,29 @@ class SettingsActivity : Activity() {
         )
         list.addView(card(rows))
         list.addView(note("Tap a control to switch it; hold it to open its settings (Front Light: hold for its presets). Swipe sideways or use ‹ › for more. Wi‑Fi, Bluetooth, Front Light and the BOOX tiles work through the BOOX Control Center."))
+    }
+
+    /** What Writing mode switches. Shown once the Writing control is added. */
+    private fun writingModeCards() {
+        val off = WritingMode.turnsOff(prefs)
+        fun item(id: String) = check(WritingMode.label(id), id in off) { on ->
+            WritingMode.setTurnsOff(prefs, WritingMode.turnsOff(prefs).let { if (on) it + id else it - id })
+        }
+        list.addView(heading("Writing mode turns off"))
+        val rows = mutableListOf(item("wifi"), item("bluetooth"))
+        // A tablet where BOOX shows no Front Light presets has no light to turn off.
+        if (WritingMode.hasLight(prefs)) rows += item(WritingMode.LIGHT)
+        rows += item("location")
+        list.addView(card(rows))
+        list.addView(note("Leave Bluetooth unticked if you write with a Bluetooth keyboard or headphones."))
+        list.addView(heading("And turns on"))
+        list.addView(card(listOf(check("Do Not Disturb", WritingMode.turnsOnDnd(prefs)) { WritingMode.setTurnsOnDnd(prefs, it) })))
+        list.addView(note(
+            (if (WritingMode.isOn(prefs)) "Writing mode is on now: changes here apply the next time you turn it on. " else "") +
+                "Turning Writing mode off puts back only what it switched: the same radios, and the light on the preset it was on. Anything you changed yourself in between is left alone. " +
+                (if (AdvancedAccess.allowed()) "With Advanced access connected, Wi‑Fi, Bluetooth and Location switch directly; the light still goes through BOOX's Control Center."
+                else "It switches through BOOX's Control Center, so the screen holds still for a moment. No extra permission is needed.")
+        ))
     }
 
     private fun controlRow(c: QuickControls.Control, index: Int, count: Int, onMove: (Int, Int) -> Unit, onRemove: () -> Unit): View = hbox().apply {
@@ -1099,6 +1123,7 @@ class SettingsActivity : Activity() {
         setPadding(dp(12), dp(10), dp(12), dp(14))
         val (tap, hold) = when {
             c.id == QuickControls.FRONT_LIGHT -> "light turns off / back on" to "opens the presets under the controls"
+            c.id == QuickControls.WRITING -> "radios and light off / back as they were" to "opens its settings here"
             c.id == "rotate" -> "rotation on / off" to "opens BOOX's rotation menu"
             c.momentary -> "a full e‑ink refresh" to "opens its settings"
             c.kind == QuickControls.Kind.TOGGLE -> "switches it on / off" to "opens its settings"
@@ -1173,6 +1198,7 @@ class SettingsActivity : Activity() {
 
     private fun describe(c: QuickControls.Control): String = when {
         c.id == QuickControls.FRONT_LIGHT -> "Tap: on/off · hold: Bright, Soft, Custom, Off"
+        c.id == QuickControls.WRITING -> "Tap: radios and Front Light off, tap again to put them back · hold: these settings"
         c.id == "rotate" -> "Tap: on/off · hold: rotation menu"
         c.momentary -> "Tap: ${c.label.lowercase()} · hold: its settings"
         else -> describeKind(c)

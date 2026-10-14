@@ -550,6 +550,11 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             }
             return
         }
+        // Writing mode: SuperBoox's own switch (hold opens its settings, from the panel).
+        if (control.id == QuickControls.WRITING) {
+            if (!hold) writingMode(!isWritingMode)
+            return
+        }
         // Front Light: hold shows the presets in the panel; tap goes off, or back to the last preset.
         if (control.id == QuickControls.FRONT_LIGHT) {
             if (hold) return
@@ -629,12 +634,12 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     private var pendingLevels: QuickControls.Levels? = null
 
-    private fun queuePreset(preset: String, levels: QuickControls.Levels?, read: Boolean, mine: String?) {
+    private fun queuePreset(preset: String, levels: QuickControls.Levels?, read: Boolean, mine: String?, writing: Boolean = false, onlyIfOff: Boolean = false) {
         val control = QuickControls.byId(QuickControls.FRONT_LIGHT) ?: return
         optimistic[control.id] = (preset != QuickControls.PRESET_OFF) to SystemClock.uptimeMillis() + OPTIMISTIC_MS
         optimisticPreset = preset to SystemClock.uptimeMillis() + OPTIMISTIC_MS
         panel?.refresh()
-        qcQueue.addLast(QcTask(control, hold = false, preset = preset, levels = levels, read = read, mine = mine))
+        qcQueue.addLast(QcTask(control, hold = false, preset = preset, levels = levels, read = read, mine = mine, writing = writing, onlyIfOff = onlyIfOff))
         if (!qcBusy) startSession()
     }
 
@@ -693,6 +698,12 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         val scrolled: Boolean = false,
         /** Only read which Front Light preset BOOX shows (holding Front Light in the panel). */
         val check: Boolean = false,
+        /** Switch the tile only if it isn't already in this state. */
+        val want: Boolean? = null,
+        /** Writing mode is switching this: what it changes is recorded, to put back later. */
+        val writing: Boolean = false,
+        /** Front Light: only if the light is still off (Writing mode putting it back). */
+        val onlyIfOff: Boolean = false,
     )
 
     /** States to show: the last known ones, with taps still being applied on top. */
@@ -701,6 +712,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         val now = SystemClock.uptimeMillis()
         optimistic.entries.removeAll { it.value.second < now }
         optimistic.forEach { (id, v) -> out[id] = v.first }
+        out[QuickControls.WRITING] = isWritingMode
         return out
     }
 
@@ -729,6 +741,16 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         task.preset?.let { return nextPreset(task, it) }
         val control = task.control
         val hold = task.hold
+        if (task.want != null) {
+            // What the tile shows now, else what Android reports (not the state a tap just assumed).
+            val now = QuickControls.tileState(this, prefs, control) ?: QuickControls.states(this, prefs)[control.id]
+            if (now == task.want) {
+                DebugLog.i("controls", "\"${control.label}\" is already ${if (task.want) "on" else "off"}")
+                optimistic.remove(control.id)
+                panel?.refresh()
+                return nextControl()
+            }
+        }
         val press = QuickControls.press(this, prefs, control, hold)
         if (!press.found || !press.pressed) {
             optimistic.remove(control.id)
@@ -743,6 +765,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                         optimistic[control.id] = it to SystemClock.uptimeMillis() + OPTIMISTIC_MS
                     }
                 }
+                if (task.writing && task.want != null) WritingMode.remember(prefs, control.id, if (task.want) "off" else "on")
                 panel?.refresh()
                 nextControl()
             } else {
@@ -794,13 +817,23 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     }
 
     private fun nextPreset(task: QcTask, preset: String) {
+        // Writing mode: the preset BOOX shows before the tap is the one to go back to.
+        val shown = if (task.writing || task.onlyIfOff) QuickControls.screenPreset(this) else null
+        if (task.onlyIfOff && shown != null && shown != QuickControls.PRESET_OFF) {
+            DebugLog.i("writing", "front light is already on ($shown): left as it is")
+            QuickControls.syncFromScreen(this, prefs)
+            optimistic.remove(task.control.id)
+            optimisticPreset = null
+            panel?.refresh()
+            return nextControl()
+        }
         // Which levels Custom holds decides where they're remembered (yours or BOOX's own).
         QuickControls.setActiveMine(prefs, if (preset == "Custom") task.mine else null)
         val press = QuickControls.pressPreset(this, prefs, preset)
         if (!press.found && !task.scrolled) {
             // The presets sit under the tiles: scroll the Control Center down and look again.
             QuickControls.scrollShade(this)
-            qcQueue.addFirst(QcTask(task.control, false, preset, task.levels, task.read, task.mine, scrolled = true))
+            qcQueue.addFirst(QcTask(task.control, false, preset, task.levels, task.read, task.mine, scrolled = true, writing = task.writing, onlyIfOff = task.onlyIfOff))
             handler.postDelayed({ nextControl() }, 400)
             return
         }
@@ -808,8 +841,17 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             optimistic.remove(task.control.id)
             optimisticPreset = null
             panel?.refresh()
-            Toast.makeText(this, "Couldn't find the Front Light presets in the Control Center", Toast.LENGTH_SHORT).show()
+            // A tablet without a front light has no presets: Writing mode just leaves the light out.
+            if (task.writing && !press.found) {
+                WritingMode.noLightSeen(prefs)
+                DebugLog.i("writing", "no Front Light presets in the Control Center: skipped")
+            } else {
+                Toast.makeText(this, "Couldn't find the Front Light presets in the Control Center", Toast.LENGTH_SHORT).show()
+            }
             return nextControl()
+        }
+        if (task.writing && shown != null && shown != QuickControls.PRESET_OFF && WritingMode.LIGHT !in WritingMode.switched(prefs)) {
+            WritingMode.remember(prefs, WritingMode.LIGHT, shown)
         }
         handler.postDelayed({
             QuickControls.settlePreset(this, prefs, preset)
@@ -839,6 +881,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         cover.hide(250)
         qcBusy = false
         error?.let { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
+        writingSettled(failed = error != null)
         var delay = 300L
         while (afterSession.isNotEmpty()) {
             val action = afterSession.removeFirst()
@@ -859,6 +902,105 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 wm.updateViewLayout(root, params)
             }
         }.onFailure { DebugLog.w("controls", "panel layering: ${it.message}") }
+    }
+
+    // ---- Writing mode --------------------------------------------------------------------
+
+    /** Writing mode is being switched on in the session that's running. */
+    private var writingEntering = false
+
+    val isWritingMode: Boolean get() = WritingMode.isOn(prefs)
+
+    /**
+     * Turns Writing mode on (radios and the front light off, as chosen in Settings) or off
+     * (puts back what it switched). Everything goes through one Control Center session behind
+     * the screen hold; with Advanced access the radios are switched directly instead.
+     */
+    fun writingMode(on: Boolean) {
+        if (on == WritingMode.isOn(prefs)) return
+        if (on) enterWritingMode() else leaveWritingMode()
+        panel?.refresh()
+    }
+
+    private fun enterWritingMode() {
+        WritingMode.setOn(prefs, true)
+        writingEntering = true
+        val targets = WritingMode.turnsOff(prefs)
+        val states = QuickControls.states(this, prefs)
+        DebugLog.i("writing", "on: turning off ${targets.joinToString()}${if (WritingMode.turnsOnDnd(prefs)) ", Do Not Disturb on" else ""}")
+        WritingMode.RADIOS.filter { it in targets }.mapNotNull(QuickControls::byId).forEach { control ->
+            // Known to be off already: nothing to switch, nothing to put back.
+            if (states[control.id] == false) return@forEach
+            switchForWriting(control, want = false, writing = true)
+        }
+        if (WritingMode.turnsOnDnd(prefs) && states["dnd"] != true) {
+            QuickControls.byId("dnd")?.let { switchForWriting(it, want = true, writing = true) }
+        }
+        if (WritingMode.LIGHT in targets && WritingMode.hasLight(prefs) && frontLightPreset() != QuickControls.PRESET_OFF) {
+            // One of your own presets is on: BOOX only knows it as Custom (or not at all), so note it now.
+            QuickControls.activeMine(prefs)?.let { WritingMode.remember(prefs, WritingMode.LIGHT, "mine:$it") }
+            val direct = QuickControls.activeMine(prefs) != null && AdvancedAccess.independentPresets(prefs)
+            if (direct) frontLight(QuickControls.PRESET_OFF)
+            else queuePreset(QuickControls.PRESET_OFF, levels = null, read = false, mine = null, writing = true)
+        }
+        if (!qcBusy) writingSettled(failed = false)
+    }
+
+    private fun leaveWritingMode() {
+        val back = WritingMode.switched(prefs)
+        WritingMode.setOn(prefs, false)
+        writingEntering = false
+        DebugLog.i("writing", "off: putting back ${back.entries.joinToString { "${it.key}=${it.value}" }.ifEmpty { "nothing" }}")
+        (WritingMode.RADIOS + WritingMode.DND).forEach { id ->
+            val value = back[id] ?: return@forEach
+            QuickControls.byId(id)?.let { switchForWriting(it, want = value == "on", writing = false) }
+        }
+        val light = back[WritingMode.LIGHT] ?: return
+        // Turned on again by hand in the meantime: leave it.
+        if (frontLightPreset() != QuickControls.PRESET_OFF && QuickControls.savedPreset(prefs) != null) return
+        val mine = light.removePrefix("mine:").takeIf { light.startsWith("mine:") }
+            ?.let { id -> QuickControls.myPresets(prefs).firstOrNull { it.id == id } }
+        when {
+            mine != null -> frontLightLevels(mine.levels, mine.id)
+            light.startsWith("mine:") -> queuePreset(QuickControls.lastOnPreset(prefs), levels = null, read = false, mine = null, onlyIfOff = true)
+            else -> queuePreset(light, levels = if (light == "Custom") QuickControls.booxCustom(prefs) else null, read = light == "Custom", mine = null, onlyIfOff = true)
+        }
+    }
+
+    /** Queues [control]'s tile to end up [want]; Wi-Fi, Bluetooth and Location go directly with Advanced access. */
+    private fun switchForWriting(control: QuickControls.Control, want: Boolean, writing: Boolean) {
+        optimistic[control.id] = want to SystemClock.uptimeMillis() + OPTIMISTIC_MS
+        fun viaTile() {
+            qcQueue.addLast(QcTask(control, hold = false, want = want, writing = writing))
+            if (!qcBusy) startSession()
+        }
+        val command = when (control.id) {
+            "wifi" -> arrayOf("svc", "wifi", if (want) "enable" else "disable")
+            "bluetooth" -> arrayOf("svc", "bluetooth", if (want) "enable" else "disable")
+            "location" -> arrayOf("cmd", "location", "set-location-enabled", want.toString())
+            else -> null
+        }
+        if (command == null || !AdvancedAccess.allowed()) return viaTile()
+        // Android's own record is reliable for these: only switch (and remember) a real change.
+        if (QuickControls.states(this, prefs)[control.id] == want) return
+        AdvancedAccess.shell(*command) { code, _ ->
+            if (code == 0) {
+                AdvancedAccess.markUsed(prefs)
+                if (writing) WritingMode.remember(prefs, control.id, if (want) "off" else "on")
+                panel?.refresh()
+            } else viaTile()
+        }
+    }
+
+    /** A session ended: if Writing mode couldn't switch anything because the Control Center never opened, it isn't on. */
+    private fun writingSettled(failed: Boolean) {
+        if (!writingEntering) return
+        writingEntering = false
+        if (failed && WritingMode.switched(prefs).isEmpty()) {
+            WritingMode.setOn(prefs, false)
+            DebugLog.w("writing", "couldn't switch anything: Writing mode left off")
+        }
+        panel?.refresh()
     }
 
     // ---- Previous app -------------------------------------------------------------------

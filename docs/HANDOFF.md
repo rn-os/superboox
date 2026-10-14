@@ -440,6 +440,14 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 - **Step 2:** Collect, a tab listing BOOX notes changed since they were last marked reviewed (from NoteModel `updatedAt`).
 - **Settings → Tasks:** coverage like Clipboard, auto-clear of done tasks, Collect scope. Tasks are included in backups.
 
+## Writing mode (mockup 52, `writing-mode.html`)
+
+- A Quick Control, `QuickControls.WRITING` (not a Control Center tile, not in the default set: added in Settings › Quick Controls, as the user asked). Tap: `QuickAccessService.writingMode(on)`. Hold: Settings › Quick Controls, where `writingModeCards()` chooses what it turns off (Wi‑Fi, Bluetooth, Front Light by default; Location optional) and whether Do Not Disturb goes on (off by default, the user's choice).
+- `WritingMode.kt` holds the state: `K_WM_ON`, and `K_WM_RESTORE`, a map of only what the mode actually switched ("on"/"off", a BOOX preset name, or `mine:<id>` for one of your presets). Not in backups.
+- Switching is one Control Center session. `QcTask.want` reads the tile first and skips it if it's already there; `QcTask.writing` records the change. The light goes to BOOX's Off preset (never written directly, or BOOX would put its level back on wake); the preset shown before the tap is the one restored, with `onlyIfOff` so a light turned on by hand is left alone. With Advanced access, radios use `svc wifi|bluetooth` and `cmd location` instead of tiles.
+- No Front Light presets in the Control Center on a tablet where none were ever seen: `K_WM_NO_LIGHT`, the light is skipped and hidden from the card.
+- Panel: `writingBar()` (solid black, "Turn off") under the Quick Controls while the mode is on.
+- **Not yet run on a device** (the Note Air 6C wasn't on adb). To check: on/off with everything on; Bluetooth already off stays off; light back on Soft / Custom / one of yours; turning Wi‑Fi on by hand mid-mode is left alone; `svc`/`cmd` through Shizuku.
 ## This app: BOOX Optimize and EinkWise
 
 - Mockup `docs/mockups/51-this-app.png` (approved by the user). A strip just above the apps names the app in front of the panel and has two launch buttons: **Optimize** and **EinkWise**. Hidden on BOOX home, the default home app, SystemUI, inside SuperBoox, on non-ONYX devices, and when Settings › Apps at the bottom › "Show This app" is off.

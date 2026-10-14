@@ -275,6 +275,7 @@ class Prefs(context: Context) {
         const val K_NOTES_PKG = "notes_package"
         const val K_RECENT_URI = "recent_uri"
         const val K_RECENT_COUNT = "recent_count"
+        const val K_RECENT_HIDDEN = "recent_hidden"
         const val K_PINS = "pins"
         const val K_DOCK = "dock"
         const val K_REMEMBER_PAGES = "remember_pages"
@@ -292,6 +293,12 @@ class Prefs(context: Context) {
         const val K_FL_LAST_ON = "front_light_last_on"
         /** Front-light settings seen with each BOOX preset, to recognise changes made outside SuperBoox. */
         const val K_FL_SIGNATURES = "front_light_signatures"
+        /** Writing mode: on, what it switched (to put back), and what it's set to switch. */
+        const val K_WM_ON = "writing_mode_on"
+        const val K_WM_RESTORE = "writing_mode_restore"
+        const val K_WM_OFF = "writing_mode_turns_off"
+        const val K_WM_DND = "writing_mode_dnd"
+        const val K_WM_NO_LIGHT = "writing_mode_no_light"
         const val K_CLIP_SHOW = "clip_show"
         const val K_CLIP_COVERS_APPS = "clip_covers_apps"
         const val K_CLIP_LIMIT = "clip_limit"

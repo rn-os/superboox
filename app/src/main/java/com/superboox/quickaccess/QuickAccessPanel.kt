@@ -1326,6 +1326,9 @@ class QuickAccessPanel(
             Triple(R.drawable.ic_paste, "Paste") { pasteClip(c) },
             if (c.kind == ClipHistory.Kind.LINK) Triple(R.drawable.ic_open, "Open") { openLink(c) } else null,
             if (c.kind == ClipHistory.Kind.HANDWRITING) null else Triple(R.drawable.ic_share, "Share…") { shareClip(c) },
+            if (c.kind == ClipHistory.Kind.IMAGE) Triple(R.drawable.ic_edit, "Mark up") {
+                if (ClipHistory.markUp(service, c)) service.hidePanel() else toast("No app here can mark up pictures")
+            } else null,
             Triple(R.drawable.ic_pin, if (c.pinned) "Unpin" else "Pin") {
                 ClipHistory.setPinned(service, c.id, !c.pinned)
                 fillClips()

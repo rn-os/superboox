@@ -142,15 +142,20 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(K_CLIP_IMAGES, true)
         set(v) = sp.edit().putBoolean(K_CLIP_IMAGES, v).apply()
 
-    /** New screenshots, kept as they're taken (needs All files access to see the screenshot folder). Off by default. */
+    /** New screenshots, kept as they're taken (needs All files access to see the screenshot folder). */
     var clipKeepScreenshots: Boolean
-        get() = sp.getBoolean(K_CLIP_SCREENSHOTS, false)
+        get() = sp.getBoolean(K_CLIP_SCREENSHOTS, true)
         set(v) = sp.edit().putBoolean(K_CLIP_SCREENSHOTS, v).apply()
 
     /** A kept screenshot is also put on the clipboard, ready to paste. */
     var clipShotToClipboard: Boolean
         get() = sp.getBoolean(K_CLIP_SHOT_CLIPBOARD, true)
         set(v) = sp.edit().putBoolean(K_CLIP_SHOT_CLIPBOARD, v).apply()
+
+    /** Each kept screenshot opens straight away in a picture editor, to mark it up. Off by default. */
+    var clipShotMarkUp: Boolean
+        get() = sp.getBoolean(K_CLIP_SHOT_MARKUP, false)
+        set(v) = sp.edit().putBoolean(K_CLIP_SHOT_MARKUP, v).apply()
 
     var clipKeepAfterRestart: Boolean
         get() = sp.getBoolean(K_CLIP_KEEP_RESTART, true)
@@ -350,6 +355,7 @@ class Prefs(context: Context) {
         const val K_CLIP_SHOW_APPS = "clip_show_apps"
         const val K_CLIP_SCREENSHOTS = "clip_screenshots"
         const val K_CLIP_SHOT_CLIPBOARD = "clip_shot_clipboard"
+        const val K_CLIP_SHOT_MARKUP = "clip_shot_markup"
         const val CLIP_PANEL = "panel"
         const val CLIP_EVERY = "every"
 

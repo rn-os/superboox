@@ -835,7 +835,7 @@ class SettingsActivity : Activity() {
                     permissionRow("Modify system settings", "Lets the Auto-rotate Quick Control switch rotation directly.", Settings.System.canWrite(this)) {
                         Launcher.tryStart(this, Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName")))
                     },
-                    permissionRow("All files access", "Keeps every handwriting copy you make in BOOX Notes, with a preview, and lets you paste older ones. SuperBoox only uses BOOX's copy folder.", ClipHistory.hasFileAccess()) {
+                    permissionRow("All files access", "Keeps every handwriting copy you make in BOOX Notes, with a preview, and lets you paste older ones, and keeps your screenshots in the Clipboard. SuperBoox only uses BOOX's copy folder and the screenshot folders.", ClipHistory.hasFileAccess()) {
                         openAllFilesAccess()
                     },
                 )))
@@ -1444,6 +1444,7 @@ class SettingsActivity : Activity() {
             keepRow("Screenshots", "Adds each screenshot as you take it, with a preview. Needs All files access to see the screenshot folder. " +
                 "Without it, share a screenshot to “Copy to clipboard”.", "As you take it", shots, advanced = false) { on -> keepScreenshots(on) },
             if (shots) check("Also put it on the clipboard, ready to paste", prefs.clipShotToClipboard) { prefs.clipShotToClipboard = it } else null,
+            if (shots) check("Open each one to mark up", prefs.clipShotMarkUp) { prefs.clipShotMarkUp = it } else null,
             keepRow("Codes", "Short codes on their own, like a 6-digit sign-in code. Off by default; they're usually only needed once.", everyCopy, prefs.clipKeepCodes) { prefs.clipKeepCodes = it },
             keepRow("Passwords and private copies", "Never kept: copies from password managers and anything an app marks as private.", null, true, locked = true) {},
         )))

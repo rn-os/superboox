@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.ContentProvider
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.database.Cursor
 import android.graphics.Bitmap
@@ -586,12 +587,30 @@ object ClipHistory {
                     main.post {
                         add(context, prefs, Kind.IMAGE, f.name, png, source, SCREENSHOT)
                         if (prefs.clipShotToClipboard) putNewestBack(context)
+                        if (prefs.clipShotMarkUp) list(context).firstOrNull { it.image == png }?.let { markUp(context, it) }
                     }
                 }
                 // A screenshot folder may have just been made.
                 startShotWatcher(context, prefs)
             }
         }, pendingShots, SystemClock.uptimeMillis() + 800L)
+    }
+
+    /**
+     * Opens a picture clip in the tablet's picture editor (Android's Edit with…), to mark it up. The editor
+     * may write its result back over the kept picture (the clip then shows and pastes the marked-up
+     * version); editors that save a new file instead save it to the gallery, where a screenshot folder
+     * is watched and the new picture is kept too. False if no app can edit pictures.
+     */
+    fun markUp(context: Context, clip: Clip): Boolean {
+        val uri = contentUri(clip)?.takeIf { clip.kind == Kind.IMAGE } ?: return false
+        val edit = Intent(Intent.ACTION_EDIT).setDataAndType(uri, "image/png")
+            .putExtra(android.provider.MediaStore.EXTRA_OUTPUT, uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        edit.clipData = ClipData.newRawUri("Image", uri)
+        val ok = Launcher.tryStart(context, edit)
+        DebugLog.i("clipboard", if (ok) "opened a picture to mark up" else "no app can edit pictures")
+        return ok
     }
 
     // ---- BOOX Notes' lasso copies, as they're made ---------------------------------------------
@@ -808,8 +827,9 @@ class ClipProvider : ContentProvider() {
     // Only kept images are files here; a handwriting link (BOOX's folder path) has no type.
     override fun getType(uri: Uri): String? = file(uri)?.let { "image/png" }
 
+    // Writing is only possible for an app granted it: a picture editor opened by ClipHistory.markUp.
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? =
-        file(uri)?.let { ParcelFileDescriptor.open(it, ParcelFileDescriptor.MODE_READ_ONLY) }
+        file(uri)?.let { ParcelFileDescriptor.open(it, if (mode.contains('w')) ParcelFileDescriptor.parseMode(mode) else ParcelFileDescriptor.MODE_READ_ONLY) }
 
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, args: Array<out String>?, sort: String?): Cursor? {
         val f = file(uri) ?: return null

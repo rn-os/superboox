@@ -592,7 +592,8 @@ object ClipHistory {
         main.postAtTime({
             val source = appInFront(context)
             io.execute {
-                val files = watchedDirs.flatMap { d -> d.listFiles { f -> f.isFile && f.extension.lowercase() in PICTURE_TYPES }.orEmpty().toList() }
+                // Hidden names are files still being written: BOOX saves ".pending-<n>-Screenshot_….png" and renames it when done.
+                val files = watchedDirs.flatMap { d -> d.listFiles { f -> f.isFile && !f.name.startsWith(".") && f.extension.lowercase() in PICTURE_TYPES }.orEmpty().toList() }
                     .filter { it.length() > 0 }.sortedBy { it.lastModified() }
                 for (f in files) {
                     val known = shotTimes[f.path]

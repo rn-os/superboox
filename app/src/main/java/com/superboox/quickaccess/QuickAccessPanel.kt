@@ -93,6 +93,7 @@ class QuickAccessPanel(
             if (event.keyCode == KeyEvent.KEYCODE_BACK) {
                 if (event.action == KeyEvent.ACTION_UP) {
                     if (renaming != null) endRename(save = false)
+                    else if (mode == Mode.CLIPBOARD && clipConfirmClear) { clipConfirmClear = false; fillClips() }
                     else if (mode == Mode.CLIPBOARD && clipOpen != null) { clipOpen = null; fillClips() }
                     else if (mode != Mode.MAIN) show(Mode.MAIN) else service.hidePanel()
                 }
@@ -119,6 +120,10 @@ class QuickAccessPanel(
     private var clipSearch: android.widget.EditText? = null
     private var clipBody: LinearLayout? = null
     private var clipCount: TextView? = null
+    private var clipClear: View? = null
+
+    /** "Clear" in the clipboard's header was tapped and is waiting to be confirmed. */
+    private var clipConfirmClear = false
 
     init {
         // Tapping outside the sheet closes it (no dimming: it only costs an e-ink refresh).
@@ -165,6 +170,7 @@ class QuickAccessPanel(
     private fun iconPx(v: Int): Int = (v * scale).roundToInt()
 
     private fun show(newMode: Mode) {
+        if (newMode != mode) clipConfirmClear = false
         mode = newMode
         val screenW = service.screenWidth()
         val width = if (mode == Mode.PICK) maxOf(s(300), screenW * maxOf(62, prefs.panelWidthPct) / 100).coerceAtMost(screenW)
@@ -995,7 +1001,16 @@ class QuickAccessPanel(
                 setPadding(s(14), s(10), s(6), s(4))
                 addView(icon(getDrawable(R.drawable.ic_clipboard), iconPx(24)))
                 addView(text("Clipboard", sp(18f), bold = true).apply { setPadding(s(8), 0, 0, 0) })
-                addView(text("", sp(13f), color = Ink.MUTED).apply { setPadding(s(6), 0, 0, 0); clipCount = this }, lp(0, WRAP, 1f))
+                addView(oneLine(text("", sp(13f), color = Ink.MUTED)).apply { setPadding(s(6), 0, s(6), 0); clipCount = this }, lp(0, WRAP, 1f))
+                // Clears the history (pinned clips stay), after a confirm that takes the top of the list.
+                addView(text("Clear", sp(13.5f), bold = true).apply {
+                    contentDescription = "Clear clipboard history"
+                    gravity = Gravity.CENTER
+                    setPadding(s(10), s(4), s(10), s(4))
+                    pressable(outline(2, 16))
+                    setOnClickListener { clipConfirmClear = !clipConfirmClear; clipOpen = null; fillClips() }
+                    clipClear = this
+                })
                 addView(icon(getDrawable(R.drawable.ic_close), iconPx(24)).apply {
                     contentDescription = "Close the clipboard"
                     setPadding(s(8), s(8), s(8), s(8))
@@ -1075,6 +1090,24 @@ class QuickAccessPanel(
             }
         }
         clipCount?.text = "· ${all.size} ${if (all.size == 1) "item" else "items"}"
+        // Nothing to clear when every clip is pinned (or there are none).
+        val unpinned = all.count { !it.pinned }
+        if (unpinned == 0) clipConfirmClear = false
+        clipClear?.visibility = if (unpinned == 0) View.GONE else View.VISIBLE
+        if (clipConfirmClear) body.addView(confirmBox(
+            "Clear clipboard history?",
+            if (unpinned < all.size) "Removes $unpinned ${if (unpinned == 1) "clip" else "clips"}. Pinned clips are kept."
+            else "Removes ${if (unpinned == 1) "the 1 clip" else "all $unpinned clips"} kept here.",
+            "Clear",
+            onCancel = { clipConfirmClear = false; fillClips() },
+        ) {
+            ClipHistory.clear(service)
+            clipConfirmClear = false
+            clipPage = 0
+            clipOpen = null
+            toast("Clipboard history cleared")
+            fillClips()
+        }, lp(MATCH, WRAP).apply { setMargins(s(10), 0, s(10), s(8)) })
         with(ctx) {
             // Filter chips; the row scrolls sideways if they don't all fit (narrow panel, large menu size).
             body.addView(android.widget.HorizontalScrollView(ctx).apply {
@@ -1320,7 +1353,8 @@ class QuickAccessPanel(
 
     // ---- Recent Files ----------------------------------------------------------------------
 
-    private class RecentRow(val iconRes: Int, val title: String, val subtitle: String, val time: Long, val open: () -> Unit)
+    /** [forget]: takes the row off the list for good (until it's opened, or the file changes, again). */
+    private class RecentRow(val iconRes: Int, val title: String, val subtitle: String, val time: Long, val forget: () -> Unit, val open: () -> Unit)
 
     private fun recentList(): View = with(ctx) {
         val box = vbox()
@@ -1338,39 +1372,76 @@ class QuickAccessPanel(
         val list = vbox()
         box.addView(list)
 
-        val remembered = Recents.list(prefs).filterNot(::isCurrent).map { item ->
+        var remembered = Recents.list(prefs).filterNot(::isCurrent).map { item ->
             val ago = ago(item.time)
+            val forget = { Recents.remove(prefs, item.key) }
             when (item.kind) {
-                RecentItem.Kind.NOTE -> RecentRow(R.drawable.ic_note, item.title, "Note · $ago", item.time) { service.openBooxNote(item.title) }
+                RecentItem.Kind.NOTE -> RecentRow(R.drawable.ic_note, item.title, "Note · $ago", item.time, forget) { service.openBooxNote(item.title) }
                 RecentItem.Kind.DOCUMENT -> {
                     val app = Launcher.appLabel(service, item.pkg)
-                    RecentRow(R.drawable.ic_book, item.title, if (item.title == app) "Document · $ago" else "$app · $ago", item.time) {
+                    RecentRow(R.drawable.ic_book, item.title, if (item.title == app) "Document · $ago" else "$app · $ago", item.time, forget) {
                         openRecentDocument(item)
                     }
                 }
             }
         }
-        fillRecent(list, remembered)
+        var fileRows = emptyList<RecentRow>()
+        var confirmClear = false
+
+        // Redrawn in place (not through show()), so the list stays where it was scrolled to.
+        fun render() {
+            val rows = if (fileRows.isEmpty()) remembered else (remembered + fileRows).sortedByDescending { it.time }
+            fillRecent(list, rows) { row ->
+                // The rows above the list ("Last Opened Note / Document") show the newest of these too.
+                val last = Recents.lastNote(prefs)?.key to Recents.lastDocument(prefs)?.key
+                row.forget()
+                remembered = remembered - row
+                fileRows = fileRows - row
+                if (last != Recents.lastNote(prefs)?.key to Recents.lastDocument(prefs)?.key) show(mode) else render()
+            }
+            if (rows.isEmpty()) return
+            if (!confirmClear) {
+                list.addView(inkButton("Clear all", sp(14f)) { confirmClear = true; render() }.apply { minHeight = s(40) },
+                    lp(MATCH, WRAP).apply { setMargins(s(16), s(12), s(16), s(12)) })
+                return
+            }
+            val confirm = confirmBox(
+                "Clear all recent files?",
+                "This only empties the list. No note or file is deleted.",
+                "Clear all",
+                onCancel = { confirmClear = false; render() },
+            ) {
+                Recents.clear(prefs)
+                fileRows.forEach { it.forget() }
+                show(mode)
+            }
+            list.addView(confirm, lp(MATCH, WRAP).apply { setMargins(s(12), s(12), s(12), s(12)) })
+            // Taller than the button it replaces: bring all of it into view.
+            confirm.post { confirm.requestRectangleOnScreen(android.graphics.Rect(0, 0, confirm.width, confirm.height + s(12)), true) }
+        }
+        render()
 
         // Merge in the newest files from the folder chosen in Settings.
         prefs.recentFolderUri?.let { uri ->
             io.execute {
                 val files = runCatching { Folders.newestFiles(service, Uri.parse(uri), prefs.recentCount.coerceIn(1, 20)) }.getOrNull().orEmpty()
                 main.post {
-                    if (!root.isAttachedToWindow || mode != Mode.RECENT) return@post
-                    val fileRows = files.map { f ->
-                        RecentRow(R.drawable.ic_file, f.name, "Document · ${ago(f.modified)}", f.modified) {
+                    if (!root.isAttachedToWindow || mode != Mode.RECENT || !list.isAttachedToWindow) return@post
+                    val hidden = Recents.hiddenFiles(prefs)
+                    fileRows = files.filterNot { Recents.fileKey(it.uri.toString(), it.modified) in hidden }.map { f ->
+                        RecentRow(R.drawable.ic_file, f.name, "Document · ${ago(f.modified)}", f.modified,
+                            { Recents.hideFiles(prefs, listOf(Recents.fileKey(f.uri.toString(), f.modified))) }) {
                             launchAndClose { Launcher.openFile(service, f.uri) }
                         }
                     }
-                    fillRecent(list, (remembered + fileRows).sortedByDescending { it.time })
+                    if (fileRows.isNotEmpty()) render()
                 }
             }
         }
         box
     }
 
-    private fun fillRecent(list: LinearLayout, rows: List<RecentRow>) {
+    private fun fillRecent(list: LinearLayout, rows: List<RecentRow>, onRemove: (RecentRow) -> Unit) {
         list.removeAllViews()
         if (rows.isEmpty()) {
             list.addView(hint("Notes and documents you open will appear here."))
@@ -1379,16 +1450,39 @@ class QuickAccessPanel(
         rows.forEachIndexed { i, r ->
             if (i > 0) list.addView(insetRule())
             list.addView(ctx.hbox().apply {
-                setPadding(s(16), s(11), s(16), s(11))
+                setPadding(s(16), s(5), s(6), s(5))
                 addView(ctx.icon(ctx.getDrawable(r.iconRes), iconPx(24)))
                 addView(ctx.vbox().apply {
-                    setPadding(s(12), 0, 0, 0)
+                    setPadding(s(12), s(6), s(4), s(6))
                     addView(oneLine(ctx.text(r.title, sp(17f))))
                     addView(oneLine(ctx.text(r.subtitle, sp(13f), color = Ink.MUTED)))
                 }, lp(0, WRAP, 1f))
+                addView(FrameLayout(ctx).apply {
+                    contentDescription = "Remove ${r.title} from Recent Files"
+                    addView(ctx.icon(ctx.getDrawable(R.drawable.ic_close), iconPx(20)), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+                    pressable()
+                    setOnClickListener { onRemove(r) }
+                }, lp(s(42), s(42)))
                 pressable()
                 setOnClickListener { r.open() }
             })
+        }
+    }
+
+    /** A question with Cancel and a filled button to go ahead, drawn in place: the panel is an overlay, not an activity with dialogs. */
+    private fun confirmBox(title: String, detail: String, action: String, onCancel: () -> Unit, onConfirm: () -> Unit): View = with(ctx) {
+        vbox().apply {
+            background = outline(2, 8)
+            setPadding(s(10), s(8), s(10), s(8))
+            addView(text(title, sp(14.5f), bold = true))
+            addView(text(detail, sp(13f), color = Ink.MUTED).apply { setPadding(0, s(2), 0, s(8)) })
+            addView(hbox().apply {
+                addView(inkButton("Cancel", sp(14f)) { onCancel() }, lp(0, WRAP, 1f).apply { marginEnd = s(8) })
+                addView(inkButton(action, sp(14f)) { onConfirm() }.apply {
+                    setTextColor(Ink.PAPER)
+                    background = android.graphics.drawable.GradientDrawable().apply { setColor(Ink.INK); cornerRadius = dp(6).toFloat() }
+                }, lp(0, WRAP, 1f))
+            }, lp(MATCH, WRAP))
         }
     }
 

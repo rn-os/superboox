@@ -66,8 +66,9 @@ object BooxNotes {
 
     /**
      * Ways to bring up Notes, best first: the Notes app's own launcher entry
-     * (older firmware), the library activity inside the BOOX launcher, then the
-     * BOOX launcher itself (the opener then taps its "Notes" tab).
+     * (older firmware), the library activity inside the BOOX launcher, BOOX's
+     * tab router asked for Notes, then the BOOX launcher itself (the opener then
+     * taps its "Notes" tab or widget).
      */
     fun launchCandidates(context: Context, notesPackage: String): List<Pair<String, Intent>> {
         val pm = context.packageManager
@@ -77,9 +78,27 @@ object BooxNotes {
             val info = runCatching { pm.getActivityInfo(cn, 0) }.getOrNull() ?: continue
             if (info.exported) out += "notes library ${cn.shortClassName}" to Intent(Intent.ACTION_MAIN).setComponent(cn)
         }
+        notesLibraryIntent(context)?.let { out += "BOOX tab router" to it }
         pm.getLaunchIntentForPackage(BOOX_HOME_PACKAGE)?.let { out += "BOOX launcher" to it }
         out.forEach { it.second.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
         return out
+    }
+
+    /** BOOX's main screen tab router (exported on the Note Air 6C, firmware 4.3). */
+    private val TAB_ROUTER = ComponentName(BOOX_HOME_PACKAGE, "com.onyx.tablet.main.ui.TabletMainActivity")
+    private const val TAB_ROUTER_ACTION = "com.onyx.intent.action.MAIN_ACTIVITY"
+
+    /**
+     * Opens the Notes library straight away: BOOX's tab router passes OPEN_NOTE on to its
+     * (unexported) NoteActivity, the same screen the home Notes widget opens. Null where the
+     * firmware doesn't export the router.
+     */
+    fun notesLibraryIntent(context: Context): Intent? {
+        val info = runCatching { context.packageManager.getActivityInfo(TAB_ROUTER, 0) }.getOrNull() ?: return null
+        if (!info.exported || !info.enabled) return null
+        return Intent(TAB_ROUTER_ACTION).setComponent(TAB_ROUTER)
+            .putExtra("json", """{"action":"OPEN_NOTE"}""")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
     /** BOOX's "new quick note" screen; other apps may open it on firmware 4.3. */

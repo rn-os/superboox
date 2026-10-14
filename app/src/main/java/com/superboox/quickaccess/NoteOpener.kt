@@ -51,7 +51,7 @@ class NoteOpener(private val service: AccessibilityService) {
         /** Hold Last Opened Note: [steps] is a folder path (maybe empty); stop there, open no note. */
         var folderOnly = false
 
-        /** Hold Last Opened Note: pressed Home once after Back landed on another BOOX screen (e.g. the book Library). */
+        /** Hold Last Opened Note: left another BOOX screen (e.g. the book Library) once, after Back landed there. */
         var wentHome = false
 
         /** Real taps on BOOX home's Notes widget title bar so far. */
@@ -438,16 +438,26 @@ class NoteOpener(private val service: AccessibilityService) {
             is NotesScreen.State.Library -> {
                 if (root.packageName?.toString() == BooxNotes.BOOX_HOME_PACKAGE && NotesScreen.isLauncherNotesLibrary(root)) learnNotesTab(root)
                 // Hold Last Opened Note: Back out of a note can land on whatever BOOX screen was behind
-                // Notes (BOOX's book Library, seen on the 6C). Go Home and open Notes from its widget.
+                // Notes (BOOX's book Library, seen on the 6C). Open the Notes library directly, or
+                // go Home and open it from the widget where the firmware has no direct way.
                 if (j.folderOnly && !j.wentHome && !j.needsNotesTab && root.packageName?.toString() == BooxNotes.BOOX_HOME_PACKAGE &&
                     !NotesScreen.isLauncherNotesLibrary(root)
                 ) {
-                    if (now < j.notBefore + UNKNOWN_GRACE_MS) return later(POLL_MS) // the Notes library may still be loading
+                    // The Notes library may still be loading, unless another BOOX screen is known to be in front.
+                    val qs = service as? QuickAccessService
+                    val otherScreen = qs != null && qs.foregroundPackage == BooxNotes.BOOX_HOME_PACKAGE && qs.foregroundActivity != null &&
+                        !BooxNotes.isNotesScreen(qs.foregroundPackage, qs.foregroundActivity, j.notesPackage)
+                    if (!otherScreen && now < j.notBefore + UNKNOWN_GRACE_MS) return later(POLL_MS)
                     j.wentHome = true
-                    j.needsNotesTab = true
                     j.resetFolder()
-                    DebugLog.i("note", "Back left Notes for another BOOX screen; going Home to open Notes")
-                    service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
+                    val direct = BooxNotes.notesLibraryIntent(service)
+                    if (direct != null && Launcher.tryStart(service, direct)) {
+                        DebugLog.i("note", "Back left Notes for another BOOX screen; opened the Notes library directly")
+                    } else {
+                        j.needsNotesTab = true
+                        DebugLog.i("note", "Back left Notes for another BOOX screen; going Home to open Notes")
+                        service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
+                    }
                     j.awaitChangeFrom = signature
                     j.awaitUntil = now + AFTER_BACK_MS
                     j.notBefore = now

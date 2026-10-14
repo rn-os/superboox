@@ -127,6 +127,11 @@
         </receiver>
 
         <service
+            android:name=".BootRestore$CheckJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <service
             android:name=".PanelTileService"
             android:exported="true"
             android:icon="@drawable/ic_panel"

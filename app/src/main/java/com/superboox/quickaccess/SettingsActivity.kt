@@ -32,6 +32,13 @@ class SettingsActivity : Activity() {
     private lateinit var scroll: ScrollView
     private lateinit var list: LinearLayout
 
+    /** Sized for this screen ([UiScale]); dialogs opened from here follow it too. */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(newBase)
+        runCatching { applyOverrideConfiguration(UiScale.apply(newBase, newBase.resources.configuration)) }
+            .onFailure { DebugLog.w("settings", "UI scale not applied: ${it.javaClass.simpleName} ${it.message}") }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
@@ -39,6 +46,11 @@ class SettingsActivity : Activity() {
         scroll = ScrollView(this).apply {
             overScrollMode = View.OVER_SCROLL_NEVER
             addView(list)
+            // Wide screens (landscape, 13.3"): keep the column readable, centered.
+            addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+                val side = maxOf(0, (v.width - v.paddingLeft - v.paddingRight - dp(MAX_WIDTH_DP)) / 2)
+                if (list.paddingLeft != side) list.post { list.setPadding(side, 0, side, dp(48)) }
+            }
         }
         setContentView(scroll)
         // First launch: the tour (it also asks for the permissions SuperBoox uses).
@@ -1509,6 +1521,21 @@ class SettingsActivity : Activity() {
                 })
             }
         }))
+        list.addView(heading("Screen"))
+        list.addView(card(listOf(
+            cardText(UiScale.describe(this)),
+            choiceRow("Settings size", prefs.settingsSize.let {
+                if (it == SettingsSize.AUTO) "Auto (${(UiScale.auto(this) * 100).toInt()}%)" else it.title
+            }) {
+                pick("Settings size", SettingsSize.entries.map {
+                    if (it == SettingsSize.AUTO) "Auto: fits this screen (${(UiScale.auto(this) * 100).toInt()}%)" else it.title
+                }, prefs.settingsSize.ordinal) {
+                    prefs.settingsSize = SettingsSize.entries[it]
+                    DebugLog.i("settings", "settings size ${prefs.settingsSize.name}")
+                    recreate()
+                }
+            },
+        )))
         Devices.known()?.settings?.takeIf { it.isNotEmpty() }?.let { settings ->
             list.addView(heading("Settings it was checked with"))
             list.addView(card(settings.map { cardText(it) }))
@@ -1877,6 +1904,9 @@ class SettingsActivity : Activity() {
     }
 
     companion object {
+        /** Widest the settings column gets; wider screens center it. */
+        private const val MAX_WIDTH_DP = 760
+
         /** The Settings screen on show, for [MainGuard] to redraw after an error. */
         private var current: java.lang.ref.WeakReference<SettingsActivity>? = null
 

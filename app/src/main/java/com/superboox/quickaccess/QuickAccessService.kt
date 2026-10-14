@@ -71,6 +71,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         }
         attachHandle()
         instance = this
+        BootRestore.clearNotification(this)
         NoteIds.capture(this, prefs)
         ClipHistory.onStart(this, prefs)
         val filter = android.content.IntentFilter().apply {

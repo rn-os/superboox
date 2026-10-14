@@ -67,6 +67,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(K_HANDLE_ENABLED, true)
         set(v) = sp.edit().putBoolean(K_HANDLE_ENABLED, v).apply()
 
+    /** After the tablet restarts, check the service came back and bring it back if not ([BootRestore]). */
+    var restoreAfterRestart: Boolean
+        get() = sp.getBoolean(K_RESTORE_AFTER_RESTART, true)
+        set(v) = sp.edit().putBoolean(K_RESTORE_AFTER_RESTART, v).apply()
+
     var panelWidthPct: Int
         get() = sp.getInt(K_PANEL_WIDTH, 45)
         set(v) = sp.edit().putInt(K_PANEL_WIDTH, v).apply()
@@ -322,6 +327,7 @@ class Prefs(context: Context) {
         const val K_CLIP_IGNORED = "clip_ignored"
         const val K_CLIP_MODE = "clip_mode"
         const val K_TOUR_DONE = "tour_done"
+        const val K_RESTORE_AFTER_RESTART = "restore_after_restart"
         /** When SuperBoox last stopped on an error (written as it stops), for Settings' status. */
         const val K_LAST_CRASH = "last_crash"
         const val K_NOTES_TAB = "boox_launcher_notes_tab"

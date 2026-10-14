@@ -22,7 +22,7 @@ No computer or adb needed. No internet permission.
    You can also download the latest `superboox-build-N.apk` from [Releases](https://github.com/rn-os/superboox/releases) and open it on the device.
 2. **Open SuperBoox.** A short tour (9 steps, with Next, Previous and Skip) walks you through:
    - **Turning on the service.** Android settings → Accessibility → SuperBoox Quick Access → On. This is the only required step.
-   - **Keeping it running.** On BOOX, the tour opens BOOX's Optimize panel for SuperBoox: tap **Others** and turn on **Stay active in the background**, or BOOX may stop SuperBoox in the background. It also asks Android to leave SuperBoox's battery use alone.
+   - **Keeping it running.** On BOOX, the tour opens BOOX's Optimize panel for SuperBoox: tap **Others** and turn on **Stay active in the background**, or BOOX may stop SuperBoox in the background. It also asks Android to leave SuperBoox's battery use alone. And it has the switch that turns the edge strip back on after a restart (see below).
    - **Trying it.** Your swipe strip is drawn in black, so you can see where to swipe.
    - **A guided look at the real panel** and the clipboard.
    - **Permissions,** each with a button and a line about why. All are optional:
@@ -180,6 +180,7 @@ Tested on a Note Air 6C (Android 16, firmware 4.3). Other BOOX models and firmwa
 SuperBoox catches errors in Settings and the panel and recovers by itself, so changing settings shouldn't stop it. If it does stop, the top of Settings shows it.
 - **Running but misbehaving:** tap **Restart service**.
 - **Turned on, but stopped:** Android keeps an accessibility service stopped after an error until it's switched off and on again. **Restart service** does that for you with Advanced access. Without it, Restart service opens SuperBoox's switch so you can turn it off and on.
+- **After a restart:** Right after the tablet starts, BOOX stops SuperBoox (and other apps), and Android then leaves its switch on but doesn't start it again. With **Turn the edge strip back on after a restart** (top of Settings, on by default), SuperBoox checks once the tablet has started. If the strip isn't back, it switches the service off and on by itself when allowed, or shows a notification you can tap. To let it do this by itself, tap **Allow** there while Advanced access is connected (needed only once; it keeps working after restarts without Shizuku), or run `adb shell pm grant com.superboox.quickaccess android.permission.WRITE_SECURE_SETTINGS` from a computer.
 
 ## Reporting bugs
 

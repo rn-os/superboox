@@ -321,6 +321,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
     - **running:** Open panel / Restart service. `QuickAccessService.restart()` clears its overlays and re-adds the strip.
     - **on but stopped:** shows the crash time. Restart service uses Shizuku if allowed (`settings put secure enabled_accessibility_services` without the service, then with it). Otherwise it opens `ACCESSIBILITY_DETAILS_SETTINGS` for the component.
     - **off.**
+- **After a restart (`BootRestore`).** On the Note Air 6C (Android 16) Android binds the service at boot, then about a second later BOOX kills every third-party app (`am_kill ... eac_enable_status_changed`, launcher and Key Mapper too). Android then lists the service under "Crashed services" and doesn't bind it again until it's switched off and on. `BootRestore.Receiver` gets `BOOT_COMPLETED` (in the process that's about to be killed), so it only schedules two `CheckJob`s (about 25 s and 90 s later), which run in a fresh process. Each waits up to 8 s for `QuickAccessService.instance`, then:
+  - with `WRITE_SECURE_SETTINGS` (granted once through Shizuku `pm grant`, or adb; persists across restarts and updates) writes the setting without the service, then with it (`switchOffAndOn`), and checks again;
+  - otherwise (or if that didn't work) posts a notification that opens Settings (needs `POST_NOTIFICATIONS` on Android 13+).
+  - The switch is `Prefs.restoreAfterRestart` (default on), in the status card when the service is on. Restart service also uses `switchOffAndOn` when the permission is held. Everything is logged under `[boot]`.
 - **Still unknown.** The exact exception: the next debug report's `[crash]` entry has the stack.
 
 ## Build 65: the actual crash

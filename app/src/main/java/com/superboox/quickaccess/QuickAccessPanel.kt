@@ -37,7 +37,7 @@ import kotlin.math.roundToInt
  *
  * The middle switches between Quick Access, Recent Files and edit mode; the
  * library "Add" picker takes over the whole (wider) sheet, like Supernote's
- * file manager. Everything is sized through [s]/[sp] for the Menu size setting.
+ * file manager. Everything is sized through [s]/[sp] for the Size setting (Look & size).
  */
 class QuickAccessPanel(
     private val service: QuickAccessService,
@@ -164,7 +164,7 @@ class QuickAccessPanel(
         }
     }
 
-    /** dp scaled by the "Menu size" setting. */
+    /** dp scaled by the Size setting. */
     private fun s(v: Int): Int = ctx.dp(v * scale)
     private fun sp(v: Float): Float = v * scale
     private fun iconPx(v: Int): Int = (v * scale).roundToInt()
@@ -774,33 +774,34 @@ class QuickAccessPanel(
 
     private fun lastNoteRow(): View {
         val note = Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.NOTE && !isCurrentNote(it) }
-        return lastRow(R.drawable.ic_note, "Last Opened Note", note?.title, enabled = note != null, onHold = { service.openNotesFolder(note?.title) }) {
-            note?.let { service.openBooxNote(it.title) }
-        }
+        val library = { service.openNotesFolder(note?.title) }
+        // Nothing opened yet: the row opens the Notes library instead of sitting greyed out.
+        if (note == null) return lastRow(R.drawable.ic_note, "Open Notes", null, onHold = library, onClick = library)
+        return lastRow(R.drawable.ic_note, "Last Opened Note", note.title, onHold = library) { service.openBooxNote(note.title) }
     }
 
     private fun lastDocumentRow(): View {
         val doc = Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.DOCUMENT && !isCurrent(it) }
         val app = doc?.let { Launcher.appLabel(service, it.pkg) }
         val sub = doc?.let { if (it.title == app) app else "${it.title} · $app" }
-        return lastRow(R.drawable.ic_book, "Last Opened Document", sub, enabled = doc != null, onHold = { service.openDocumentHome(doc?.pkg) }) {
-            doc?.let { openRecentDocument(it) }
-        }
+        val library = { service.openDocumentHome(doc?.pkg) }
+        // Nothing opened yet: the row opens BOOX's Library.
+        if (doc == null) return lastRow(R.drawable.ic_book, "Open Documents", null, onHold = library, onClick = library)
+        return lastRow(R.drawable.ic_book, "Last Opened Document", sub, onHold = library) { openRecentDocument(doc) }
     }
 
-    /** Tap reopens the note or document; hold opens where it lives (works on a grey row too). */
-    private fun lastRow(iconRes: Int, label: String, subtitle: String?, enabled: Boolean, onHold: () -> Unit, onClick: () -> Unit): View = with(ctx) {
-        val color = if (enabled) Ink.INK else Ink.DISABLED
+    /** Tap reopens the note or document; hold opens where it lives. */
+    private fun lastRow(iconRes: Int, label: String, subtitle: String?, onHold: () -> Unit, onClick: () -> Unit): View = with(ctx) {
         hbox().apply {
             setPadding(s(16), s(12), s(16), s(12))
-            addView(icon(getDrawable(iconRes), iconPx(30)).apply { imageTintList = ColorStateList.valueOf(color) })
+            addView(icon(getDrawable(iconRes), iconPx(30)).apply { imageTintList = ColorStateList.valueOf(Ink.INK) })
             addView(vbox().apply {
                 setPadding(s(14), 0, 0, 0)
-                addView(text(label, sp(17f), color = color, medium = true))
-                if (subtitle != null) addView(oneLine(text(subtitle, sp(13f), color = if (enabled) Ink.MUTED else Ink.DISABLED)))
+                addView(text(label, sp(17f), color = Ink.INK, medium = true))
+                if (subtitle != null) addView(oneLine(text(subtitle, sp(13f), color = Ink.MUTED)))
             }, lp(0, WRAP, 1f))
             pressable()
-            if (enabled) setOnClickListener { onClick() }
+            setOnClickListener { onClick() }
             setOnLongClickListener { onHold(); true }
         }
     }

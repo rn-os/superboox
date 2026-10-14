@@ -20,8 +20,9 @@ No computer or adb needed. No internet permission.
 
 1. **Install.** Install [Obtainium](https://github.com/ImranR98/Obtainium) on the BOOX. In Obtainium, tap **Add App**, paste `https://github.com/rn-os/superboox`, then tap **Add** and **Install**. Obtainium will let you know when there's a new build.
    You can also download the latest `superboox-build-N.apk` from [Releases](https://github.com/rn-os/superboox/releases) and open it on the device.
-2. **Open SuperBoox.** A short tour (9 steps, with Next, Previous and Skip) walks you through:
+2. **Open SuperBoox.** A short tour (10 steps, with Next, Previous and Skip) walks you through:
    - **Turning on the service.** Android settings → Accessibility → SuperBoox Quick Access → On. This is the only required step.
+   - **Picking your size.** Small, Standard, Large or Extra large, shown live on the real panel and on Settings itself. One choice sizes both.
    - **Keeping it running.** On BOOX, the tour opens BOOX's Optimize panel for SuperBoox: tap **Others** and turn on **Stay active in the background**, or BOOX may stop SuperBoox in the background. It also asks Android to leave SuperBoox's battery use alone. And it has the switch that turns the edge strip back on after a restart (see below).
    - **Trying it.** Your swipe strip is drawn in black, so you can see where to swipe.
    - **A guided look at the real panel** and the clipboard.
@@ -30,7 +31,7 @@ No computer or adb needed. No internet permission.
      - All files access: to show copied handwriting
 3. **Swipe** up or down along the right edge of the screen.
 
-You can replay the tour any time from **Settings → Help → Show the tour again**, and get back to the keep-running switches from **Settings → Help → Keep SuperBoox running**.
+You can replay the tour any time from **Settings → Help → Show the tour again**, and find the keep-running switches at the top of **Settings → Help → Troubleshooting**.
 
 ## What's in the panel
 
@@ -44,7 +45,7 @@ From top to bottom:
 | **Quick Controls** | Switches Wi‑Fi, Bluetooth, Do Not Disturb, Auto-rotate, Full Refresh, Back/Home/Recents and more | Opens that control's settings |
 | **Front Light** control | Turns the light on or off | Shows the presets (see below) |
 | **Writing** control (add it in Settings → Quick Controls) | Turns off Wi‑Fi, Bluetooth and the Front Light together; tap again to put back what it switched | Opens its settings |
-| **Last Opened Note / Document** | Reopens the note you had open before this one, or the last book or PDF | Note: BOOX Notes' library, in that note's folder. Document: its app's start screen (NeoReader: BOOX's Library) |
+| **Last Opened Note / Document** | Reopens the note you had open before this one, or the last book or PDF. Before anything's been opened, the rows read **Open Notes** / **Open Documents** and open the library | Note: BOOX Notes' library, in that note's folder. Document: its app's start screen (NeoReader: BOOX's Library) |
 | **Recent** (on the Quick Access bar) | Lists recently opened notes and books, newest first | |
 | **Quick Access** | Opens a pinned item | Lets you drag to reorder or remove items |
 | **Add** (on the Quick Access bar) | Pins what's open (see below) | |
@@ -57,7 +58,7 @@ What **Add** pins depends on where you are:
 - in the Notes library: opens a picker so you can tick several notes at once
 - anywhere else: the current app
 
-The panel is black on white with no animations, so it draws cleanly on e-ink. Its width, the menu size, the screen edge and the gesture can all be changed in Settings.
+The panel is black on white with no animations, so it draws cleanly on e-ink. Its width, its size, the screen edge and the gesture can all be changed in Settings.
 
 ### Clipboard
 
@@ -114,7 +115,7 @@ Settings is grouped into three sections.
 
 **Opening the panel:**
 - **Gesture.** Which edge, swipe along or swipe in or double-tap, and the strip's size and position. While you change these, the real strip is drawn on the screen.
-- **Look & size.** Panel width, menu size, and whether it remembers the last page.
+- **Look & size.** Size (the panel and Settings together), panel width, and whether it remembers the last page.
 
 **In the panel:**
 - **Recent files**
@@ -127,7 +128,7 @@ Pages that change the panel can show the **real panel beside them** while you ad
 
 **Help:**
 - **Show the tour again**
-- **Troubleshooting**
+- **Troubleshooting.** The switches that keep SuperBoox running, a debug report, and what has been checked on your tablet.
 - **Advanced access**
 - **Backup & restore.** Saves every setting (pins, Quick Controls, Front Light presets, apps, clipboard choices, gesture and look) to one small file you keep wherever you like, and restores it later.
 - **Advanced**
@@ -171,7 +172,7 @@ Tested on a Note Air 6C (Android 16, firmware 4.3). Other BOOX models and firmwa
   - **Required:** the accessibility service.
   - **Optional:**
     - Modify system settings (Auto-rotate)
-    - Ignore battery optimisation (keeps it running)
+    - Ignore battery optimization (keeps it running)
     - All files access (handwriting pictures). This is used only to read the copy BOOX Notes makes when you lasso-copy.
     - Shizuku (Advanced access)
 

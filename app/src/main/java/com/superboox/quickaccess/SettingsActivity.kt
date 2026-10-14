@@ -24,6 +24,7 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import java.util.concurrent.Executors
+import kotlin.math.roundToInt
 
 /** Setup and customisation. Built in code, re-rendered after every change. */
 class SettingsActivity : Activity() {
@@ -113,7 +114,7 @@ class SettingsActivity : Activity() {
         val svc = QuickAccessService.instance
         val touring = tourStep != null && page == Page.HOME
         svc?.stripPreview = page == Page.GESTURE || (touring && tourStep == TOUR_TRY)
-        if (touring && tourStep in listOf(TOUR_PANEL, TOUR_CLIPBOARD, TOUR_ADVANCED) && svc != null) {
+        if (touring && tourStep in listOf(TOUR_SIZE, TOUR_PANEL, TOUR_CLIPBOARD, TOUR_ADVANCED) && svc != null) {
             // The real panel beside the page: as it is, open on the clipboard, or on Front Light's presets.
             svc.showPreview(clipboard = tourStep == TOUR_CLIPBOARD, lightPresets = tourStep == TOUR_ADVANCED)
             scroll.post { insetForPreview(svc) }
@@ -185,6 +186,7 @@ class SettingsActivity : Activity() {
 
     private fun rebuild() {
         list.removeCallbacks(renderNow)
+        tourPoll.removeCallbacksAndMessages(null)  // each page starts its own checks
         val y = scroll.scrollY
         list.removeAllViews()
         if (tourStep != null && page == Page.HOME) {
@@ -270,7 +272,7 @@ class SettingsActivity : Activity() {
             menuRow(R.drawable.ic_qc_touch, Page.GESTURE,
                 if (prefs.handleEnabled) "${prefs.edge.name.lowercase().replaceFirstChar { it.uppercase() }} edge · ${prefs.trigger.title}" else "Edge gesture off"),
             menuRow(R.drawable.ic_panel, Page.LOOK,
-                "${prefs.panelWidthPct}% wide · ${prefs.menuSize.title} menu · ${if (prefs.rememberPages) "Remembers last page" else "Starts on page 1"}"),
+                "${prefs.panelWidthPct}% wide · ${prefs.menuSize.title} size · ${if (prefs.rememberPages) "Remembers last page" else "Starts on page 1"}"),
         )))
         list.addView(heading("In the panel"))
         list.addView(card(listOf(
@@ -290,8 +292,7 @@ class SettingsActivity : Activity() {
                 tourStep = 0
                 render()
             },
-            actionRow(R.drawable.ic_optimize, "Keep SuperBoox running", keepRunningSummary()) { tourGo(TOUR_KEEP) },
-            menuRow(R.drawable.ic_bug, Page.TROUBLESHOOTING, "Debug report · ${Devices.summary()}"),
+            menuRow(R.drawable.ic_bug, Page.TROUBLESHOOTING, keepRunningSummary()),
             menuRow(R.drawable.ic_shield, Page.ADVANCED_ACCESS, when {
                 AdvancedAccess.independentPresets(prefs) -> "Independent Front Light presets on"
                 AdvancedAccess.allowed() -> "Connected"
@@ -668,6 +669,24 @@ class SettingsActivity : Activity() {
             .show()
     }
 
+    /**
+     * The one size choice (tour and Look & size): sets the panel's menus and these Settings
+     * pages together ([UiScale]). Settings is redrawn at once to show it.
+     */
+    private fun sizeRows(): List<View> = MenuSize.entries.map { size ->
+        radioRow(size.title, when (size) {
+            MenuSize.SMALL -> "More fits on the screen"
+            MenuSize.STANDARD -> "Android's usual size"
+            MenuSize.LARGE -> "Easier to read and tap on e-ink"
+            MenuSize.XL -> "Biggest; fewer items per page"
+        }, size == prefs.menuSize) {
+            prefs.menuSize = size
+            DebugLog.i("settings", "size ${size.name}")
+            if (page == Page.LOOK) previewOn = true
+            recreate()
+        }
+    }
+
     /** One choice of several: a round radio, a title and what it does. */
     private fun radioRow(title: String, detail: String, selected: Boolean, onPick: () -> Unit): View = hbox().apply {
         setPadding(dp(16), dp(12), dp(16), dp(12))
@@ -758,12 +777,43 @@ class SettingsActivity : Activity() {
         on, if (on == null) "Open BOOX's Optimize panel" else "Turn on",
     ) { if (!EinkMenus.openOptimize(this, packageName)) toast("Couldn't open BOOX's Optimize panel") }
 
-    /** Help row summary: which of the keep-running switches are on. */
-    private fun keepRunningSummary(): String {
-        val battery = if (ignoringBattery()) "Battery optimisation off" else "Battery optimisation on"
-        if (!EinkMenus.available) return battery
-        val stay = when (EinkMenus.stayActive(packageName)) { true -> "Stay active on"; false -> "Stay active off"; null -> "Stay active: check it" }
-        return "$stay · $battery"
+    /** Troubleshooting row summary: the first keep-running switch that's off, else that all is well. */
+    private fun keepRunningSummary(): String = when {
+        EinkMenus.available && EinkMenus.stayActive(packageName) == false -> "Stay active is off"
+        !ignoringBattery() -> "Battery optimization is on"
+        else -> null
+    }?.let { "$it · debug report" } ?: "Kept running · debug report"
+
+    /**
+     * The switches that keep SuperBoox running: BOOX's Stay active, Android's battery exemption,
+     * and turning the strip back on after a restart. Shown in the tour and at the top of
+     * Troubleshooting; [showing] says whether that page is still the one on screen.
+     */
+    private fun keepRunningCards(showing: () -> Boolean, intro: (String) -> Unit) {
+        val boox = EinkMenus.available
+        val stay = if (boox) EinkMenus.stayActive(packageName) else null
+        val battery = ignoringBattery()
+        intro(if (boox) "BOOX stops apps running in the background to save battery, and SuperBoox is always in the background. When it's stopped, the edge strip stops working until you open SuperBoox again. Two switches keep it running."
+            else "Android may stop apps running in the background to save battery, and SuperBoox is always in the background. When it's stopped, the edge strip stops working until you open SuperBoox again.")
+        list.addView(card(listOfNotNull(
+            if (boox) stayActiveRow(stay) else null,
+            permissionRow("Battery optimization off", "Android's switch: allow SuperBoox to run in the background.", battery) { requestIgnoreBattery() },
+        )))
+        list.addView(View(this), lp(MATCH, dp(10)))
+        // BOOX also stops every app right after the tablet starts; this brings the strip back.
+        list.addView(card(afterRestartRows()))
+        // Notice the switches without the user having to leave this page: BOOX's panel is an
+        // overlay, so nothing resumes when it closes. Checks until something changes.
+        if ((boox && stay == false) || !battery) {
+            val check = object : Runnable {
+                override fun run() {
+                    if (!showing()) return
+                    if ((boox && EinkMenus.stayActive(packageName) != stay) || ignoringBattery() != battery) render()
+                    else tourPoll.postDelayed(this, 1500)
+                }
+            }
+            tourPoll.postDelayed(check, 1500)
+        }
     }
 
     private fun ignoringBattery(): Boolean =
@@ -801,32 +851,17 @@ class SettingsActivity : Activity() {
                 )))
                 list.addView(note("SuperBoox only reads what's on screen to find your notes and switches. Nothing leaves the tablet."))
             }
+            TOUR_SIZE -> {
+                title("Pick your size")
+                para(if (svc != null) "Choose what's easiest for you to read and tap. The panel beside this page and these Settings pages both follow it."
+                    else "Choose what's easiest for you to read and tap. These Settings pages follow it now, and the panel will once SuperBoox is on.")
+                list.addView(card(sizeRows()))
+                list.addView(note("Change it any time in Settings → Look & size."))
+            }
             TOUR_KEEP -> {
                 title("Keep SuperBoox running")
-                val boox = EinkMenus.available
-                val stay = if (boox) EinkMenus.stayActive(packageName) else null
-                val battery = ignoringBattery()
-                para(if (boox) "BOOX stops apps running in the background to save battery, and SuperBoox is always in the background. When it's stopped, the edge strip stops working until you open SuperBoox again. Two switches keep it running."
-                    else "Android may stop apps running in the background to save battery, and SuperBoox is always in the background. When it's stopped, the edge strip stops working until you open SuperBoox again.")
-                list.addView(card(listOfNotNull(
-                    if (boox) stayActiveRow(stay) else null,
-                    permissionRow("Battery optimisation off", "Android's switch: allow SuperBoox to run in the background.", battery) { requestIgnoreBattery() },
-                )))
-                // BOOX also stops every app right after the tablet starts; this brings the strip back.
-                list.addView(card(afterRestartRows()))
-                list.addView(note("Back here any time: Settings → Help → Keep SuperBoox running."))
-                // Notice the switches without the user having to leave this page: BOOX's panel is an
-                // overlay, so nothing resumes when it closes. Checks until something changes.
-                if ((boox && stay == false) || !battery) {
-                    val check = object : Runnable {
-                        override fun run() {
-                            if (tourStep != TOUR_KEEP) return
-                            if ((boox && EinkMenus.stayActive(packageName) != stay) || ignoringBattery() != battery) render()
-                            else tourPoll.postDelayed(this, 1500)
-                        }
-                    }
-                    tourPoll.postDelayed(check, 1500)
-                }
+                keepRunningCards({ tourStep == TOUR_KEEP }) { para(it) }
+                list.addView(note("Back here any time: Settings → Help → Troubleshooting."))
             }
             TOUR_PERMISSIONS -> {
                 title("Permissions")
@@ -981,7 +1016,7 @@ class SettingsActivity : Activity() {
                 ).apply { setPadding(dp(16), dp(4), dp(16), dp(6)) }
                 rows += buttonRow("Restart service" to { restartStoppedService() })
                 if (EinkMenus.available && EinkMenus.stayActive(packageName) != true) rows += paragraph(
-                    "To keep BOOX from stopping it, turn on Stay active in the background (Help → Keep SuperBoox running).",
+                    "To keep BOOX from stopping it, turn on Stay active in the background (Help → Troubleshooting).",
                 ).apply { setPadding(dp(16), 0, dp(16), dp(10)) }
                 if (crashed != null) rows += paragraph("A debug report (Help → Troubleshooting) shows what went wrong; please send it.")
                     .apply { setPadding(dp(16), 0, dp(16), dp(10)) }
@@ -1101,14 +1136,15 @@ class SettingsActivity : Activity() {
 
     private fun lookSection() {
         list.addView(heading("Size"))
+        list.addView(card(sizeRows()))
+        list.addView(note("Panel menus and these Settings pages together. On this screen ${prefs.menuSize.title} draws the panel at " +
+            "${(prefs.menuSize.scale * 100).roundToInt()}% and Settings at ${(UiScale.factor(this) * 100).roundToInt()}%."))
+        list.addView(View(this), lp(MATCH, dp(10)))
         list.addView(card(listOf(
-            slider("Panel width", prefs.panelWidthPct, 25, 100, "% of screen") { prefs.panelWidthPct = it; previewOn = true; render() },
-            choiceRow("Menu size", prefs.menuSize.title) {
-                pick("Menu size", MenuSize.entries.map { it.title }, prefs.menuSize.ordinal) { prefs.menuSize = MenuSize.entries[it]; previewOn = true }
-            },
+            slider("Panel width", prefs.panelWidthPct, 25, 100, "% of screen", step = 5) { prefs.panelWidthPct = it; previewOn = true; render() },
             previewButton(),
         )))
-        list.addView(note("Changing the width or menu size shows the real panel beside this page, at that size, so you can see it before opening the panel. It can't be tapped; hide it with the button or by leaving this page."))
+        list.addView(note("Changing the size or width shows the real panel beside this page, at that size, so you can see it before opening the panel. It can't be tapped; hide it with the button or by leaving this page."))
         list.addView(heading("Icons"))
         list.addView(card(listOf(
             check("Use apps' own icons for pinned apps", prefs.appOwnIcons) { prefs.appOwnIcons = it },
@@ -1597,11 +1633,13 @@ class SettingsActivity : Activity() {
 
     /** What SuperBoox knows about this tablet: each device-dependent feature and whether it's been seen working here. */
     /**
-     * The one place to go when something's wrong: the debug report first, then this tablet,
-     * what's been confirmed on it, and how Settings is sized for its screen.
+     * The one place to go when something's wrong: the switches that keep SuperBoox running,
+     * the debug report, then this tablet and what's been confirmed on it.
      */
     private fun troubleshootingSection() {
-        list.addView(View(this), lp(MATCH, dp(12)))
+        list.addView(heading("Keep SuperBoox running"))
+        keepRunningCards({ page == Page.TROUBLESHOOTING && tourStep == null }) { list.addView(note(it)) }
+        list.addView(heading("Debug report"))
         list.addView(card(listOf(
             cardText(
                 "A debug report names your model and firmware and shows what BOOX's screens look like to SuperBoox. " +
@@ -1634,21 +1672,6 @@ class SettingsActivity : Activity() {
             list.addView(heading("Settings it was checked with"))
             list.addView(card(settings.map { cardText(it) }))
         }
-        list.addView(heading("Screen"))
-        list.addView(card(listOf(
-            cardText(UiScale.describe(this)),
-            choiceRow("Settings size", prefs.settingsSize.let {
-                if (it == SettingsSize.AUTO) "Auto (${(UiScale.auto(this) * 100).toInt()}%)" else it.title
-            }) {
-                pick("Settings size", SettingsSize.entries.map {
-                    if (it == SettingsSize.AUTO) "Auto: fits this screen (${(UiScale.auto(this) * 100).toInt()}%)" else it.title
-                }, prefs.settingsSize.ordinal) {
-                    prefs.settingsSize = SettingsSize.entries[it]
-                    DebugLog.i("settings", "settings size ${prefs.settingsSize.name}")
-                    recreate()
-                }
-            },
-        )))
         list.addView(View(this), lp(MATCH, dp(24)))
     }
 
@@ -1910,11 +1933,33 @@ class SettingsActivity : Activity() {
         layoutParams = lp(MATCH, WRAP).apply { marginStart = dp(10) }
     }
 
-    private fun slider(title: String, value: Int, min: Int, max: Int, unit: String, onChange: (Int) -> Unit): View = vbox().apply {
+    /**
+     * A labelled slider with − and + either side for small steps ([step] each tap). Saves on
+     * release, or a moment after the last − / + tap: each save rebuilds the overlay window.
+     */
+    private fun slider(title: String, value: Int, min: Int, max: Int, unit: String, step: Int = 1, onChange: (Int) -> Unit): View = vbox().apply {
         setPadding(dp(16), dp(8), dp(16), dp(8))
         val label = text("$title: $value $unit".trim(), 15f)
         addView(label)
-        addView(SeekBar(context).apply {
+        lateinit var seek: SeekBar
+        val save = Runnable { onChange(seek.progress + min) }
+        fun stepButton(sign: String, by: Int) = android.widget.FrameLayout(context).apply {
+            contentDescription = "$title ${if (by < 0) "down" else "up"}"
+            addView(text(sign, 20f, bold = true).apply { gravity = Gravity.CENTER },
+                android.widget.FrameLayout.LayoutParams(MATCH, MATCH))
+            pressable()
+            background = ovalButton()
+            setOnClickListener {
+                val to = (seek.progress + by).coerceIn(0, max - min)
+                if (to == seek.progress) return@setOnClickListener
+                seek.progress = to
+                removeCallbacks(save)
+                postDelayed(save, 800)
+            }
+        }
+        val row = hbox().apply { gravity = Gravity.CENTER_VERTICAL }
+        row.addView(stepButton("−", -step), lp(dp(40), dp(40)))
+        seek = SeekBar(context).apply {
             progressTintList = android.content.res.ColorStateList.valueOf(Ink.INK)
             thumbTintList = android.content.res.ColorStateList.valueOf(Ink.INK)
             progressBackgroundTintList = android.content.res.ColorStateList.valueOf(Ink.DISABLED)
@@ -1930,7 +1975,10 @@ class SettingsActivity : Activity() {
                 // Save on release only: each save rebuilds the overlay window.
                 override fun onStopTrackingTouch(sb: SeekBar) = onChange(sb.progress + min)
             })
-        }, lp(MATCH, WRAP))
+        }
+        row.addView(seek, lp(0, WRAP, 1f))
+        row.addView(stepButton("+", step), lp(dp(40), dp(40)))
+        addView(row, lp(MATCH, WRAP))
     }
 
     // ---- Dialog helpers ------------------------------------------------------------------
@@ -2015,13 +2063,14 @@ class SettingsActivity : Activity() {
         const val EXTRA_EDIT_PRESET = "edit_preset"
         private const val K_PREVIEW = "preview"
         private const val K_TOUR = "tour"
-        private const val TOUR_STEPS = 9
-        private const val TOUR_KEEP = 2
-        private const val TOUR_PERMISSIONS = 3
-        private const val TOUR_TRY = 4
-        private const val TOUR_PANEL = 5
-        private const val TOUR_CLIPBOARD = 6
-        private const val TOUR_ADVANCED = 7
+        private const val TOUR_STEPS = 10
+        private const val TOUR_SIZE = 2
+        private const val TOUR_KEEP = 3
+        private const val TOUR_PERMISSIONS = 4
+        private const val TOUR_TRY = 5
+        private const val TOUR_PANEL = 6
+        private const val TOUR_CLIPBOARD = 7
+        private const val TOUR_ADVANCED = 8
         const val REQ_FILE = 1
         const val REQ_FOLDER = 2
         const val REQ_RECENT = 3

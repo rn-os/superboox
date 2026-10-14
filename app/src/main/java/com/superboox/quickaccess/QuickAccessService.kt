@@ -422,6 +422,20 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         }, 450L)
     }
 
+    /**
+     * "This app" → Optimize / EinkWise: BOOX's own menu over the app in front. The panel
+     * goes first so the menu isn't under it, and never mid Quick Controls session, whose
+     * Control Center is also a SystemUI window.
+     */
+    fun openEinkMenu(optimize: Boolean, pkg: String) {
+        if (qcBusy) return run { Toast.makeText(this, "One moment: Quick Controls are still switching", Toast.LENGTH_SHORT).show() }
+        hidePanel()
+        handler.postDelayed({
+            val ok = if (optimize) EinkMenus.openOptimize(this, pkg) else EinkMenus.openEinkWise(this)
+            if (!ok) Toast.makeText(this, "BOOX's menu couldn't be opened", Toast.LENGTH_SHORT).show()
+        }, 150L)
+    }
+
     fun hidePanel() {
         panel?.let { runCatching { wm.removeView(it.root) } }
         panel = null
@@ -462,6 +476,23 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         DebugLog.i("note", "open \"$path\"${noteId?.let { " (id ${it.take(8)}…)" } ?: ""} (Notes in front: $inNotes, $foregroundPackage/$foregroundActivity)")
         // Hold the current screen so the BOOX home screen doesn't flash by on the way.
         cover.show { noteOpener.open(prefs.notesPackage, path, inNotes, noteId) }
+    }
+
+    /** Hold Last Opened Note: BOOX Notes' library, in the folder that holds [path] (top level if none). */
+    fun openNotesFolder(path: String?) {
+        hidePanel()
+        val folder = path?.let { BooxNotes.splitPath(it).dropLast(1) }.orEmpty()
+        val inNotes = BooxNotes.isNotesScreen(foregroundPackage, foregroundActivity, prefs.notesPackage)
+        DebugLog.i("note", "open folder \"${folder.joinToString(" / ")}\" (Notes in front: $inNotes)")
+        cover.show { noteOpener.openFolder(prefs.notesPackage, folder, inNotes) }
+    }
+
+    /** Hold Last Opened Document: the app it lives in, on its start screen (NeoReader: BOOX's Library). */
+    fun openDocumentHome(pkg: String?) {
+        hidePanel()
+        DebugLog.i("doc", "open home of ${pkg ?: "NeoReader (no document yet)"}")
+        if (pkg == null || pkg == ReaderLibrary.NEOREADER) return cover.show { noteOpener.openLibraryTab() }
+        Launcher.launchApp(this, pkg)
     }
 
     /**

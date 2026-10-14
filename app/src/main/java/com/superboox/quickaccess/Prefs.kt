@@ -175,6 +175,11 @@ class Prefs(context: Context) {
 
     private fun previousAppPin() = Pin(PinType.APP, "Previous app", PREVIOUS_APP)
 
+    /** "This app" strip above the apps: opens BOOX's Optimize and EinkWise menus for the app in front. */
+    var showThisApp: Boolean
+        get() = sp.getBoolean(K_THIS_APP, true)
+        set(v) = sp.edit().putBoolean(K_THIS_APP, v).apply()
+
     /** Quick Controls row in the panel (it grew out of the Back/Home/Recents row, same setting). */
     var showSystemActions: Boolean
         // Supernote's panel has no Back/Home row, so it's opt-in.
@@ -259,6 +264,7 @@ class Prefs(context: Context) {
         const val K_SYSTEM_ACTIONS = "system_actions"
         const val K_APP_OWN_ICONS = "app_own_icons"
         const val K_PREVIOUS_APP = "previous_app"
+        const val K_THIS_APP = "this_app"
 
         /** Dock item value standing for "the app used before this one". */
         const val PREVIOUS_APP = "@previous"

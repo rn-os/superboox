@@ -42,6 +42,9 @@ class NoteOpener(private val service: AccessibilityService) {
         /** "Open by id" held back until the note that's open has been closed (so it's saved first). */
         var pendingDirect: android.content.Intent? = null
 
+        /** Hold Last Opened Note: [steps] is a folder path (maybe empty); stop there, open no note. */
+        var folderOnly = false
+
         /** Set when we opened the BOOX launcher and still need to tap its "Notes" tab. */
         var needsNotesTab = false
 
@@ -140,6 +143,64 @@ class NoteOpener(private val service: AccessibilityService) {
         }
         DebugLog.w("note", "no way to open Notes. Activities: ${BooxNotes.describeActivities(service, j.notesPackage)}")
         return false
+    }
+
+    // ---- A folder in the Notes library (hold Last Opened Note) ------------------------------
+
+    /**
+     * Opens the Notes library in [folder] (empty = its top level), the way a note is opened
+     * but stopping before any note is tapped. An open note is closed with Back first.
+     */
+    fun openFolder(notesPackage: String, folder: List<String>, inNotes: Boolean) {
+        cancel()
+        toast(if (folder.isEmpty()) "Opening BOOX Notes…" else "Opening \"${folder.last()}\"…")
+        val j = Job(BooxNotes.packages(notesPackage), notesPackage, folder, SystemClock.uptimeMillis() + TIMEOUT_MS)
+        j.folderOnly = true
+        if (!inNotes && !launchNotes(j)) {
+            (service as? QuickAccessService)?.noteOpenFinished(false)
+            return toast("Couldn't open BOOX Notes on this device")
+        }
+        val now = SystemClock.uptimeMillis()
+        job = j.also { it.notBefore = now + FIRST_DELAY_MS }
+        handler.postDelayed(::tick, FIRST_DELAY_MS)
+    }
+
+    // ---- BOOX's Library tab (hold Last Opened Document, NeoReader) -------------------------
+
+    /**
+     * Opens BOOX home on its Library tab, where NeoReader's books are (NeoReader has no
+     * library screen of its own). Without a tab labelled Library, BOOX home stays open.
+     */
+    fun openLibraryTab() {
+        cancel()
+        val home = service.packageManager.getLaunchIntentForPackage(BooxNotes.BOOX_HOME_PACKAGE)
+            ?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (home == null || !Launcher.tryStart(service, home)) {
+            (service as? QuickAccessService)?.noteOpenFinished(false)
+            return toast("Couldn't open BOOX's Library")
+        }
+        val until = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
+        handler.postDelayed({ libraryTick(until) }, POLL_MS)
+    }
+
+    private fun libraryTick(until: Long) {
+        val root = notesRoot(setOf(BooxNotes.BOOX_HOME_PACKAGE))
+        val tab = root?.let { r ->
+            findFirst(r) { n -> n.isVisibleToUser && NotesScreen.textOf(n).trim().lowercase().let { it == "library" || it == "书库" } }
+        }
+        when {
+            tab != null -> {
+                DebugLog.i("doc", "BOOX home: tapping its Library tab")
+                click(tab, null)
+                handler.postDelayed({ (service as? QuickAccessService)?.noteOpenFinished(true) }, AFTER_TAP_MS)
+            }
+            SystemClock.uptimeMillis() > until -> {
+                DebugLog.w("doc", "no Library tab on BOOX home. Screen:\n" + (root?.let { DebugReport.describeTree(it) } ?: "BOOX home not found"))
+                (service as? QuickAccessService)?.noteOpenFinished(true)
+                toast("Tap Library on BOOX's home screen")
+            }
+            else -> handler.postDelayed({ libraryTick(until) }, POLL_MS)
+        }
     }
 
     // ---- BOOX's new-note screen (hold New Note) --------------------------------------------
@@ -332,15 +393,20 @@ class NoteOpener(private val service: AccessibilityService) {
             }
         }
 
-        val target = j.steps[j.index]
+        // A folder job with no folder to open (the note is at the top level): the library is the goal.
+        val target = j.steps.getOrNull(j.index)
         when (state) {
             is NotesScreen.State.Editor -> {
-                if (NotesScreen.matches(state.title, j.steps.last())) return succeed(j)
+                if (!j.folderOnly && NotesScreen.matches(state.title, j.steps.last())) return succeed(j)
                 back(j, now, signature, "another note is open (\"${state.title}\")")
             }
 
             is NotesScreen.State.Library -> {
                 if (root.packageName?.toString() == BooxNotes.BOOX_HOME_PACKAGE && NotesScreen.isLauncherNotesLibrary(root)) learnNotesTab(root)
+                if (target == null) {
+                    if (openNotesTab(j, root, now, signature)) return
+                    return succeed(j)
+                }
                 val list = state.list
                 if (!j.rewound) {
                     // Start each folder from the top when the list scrolls; paged
@@ -493,9 +559,9 @@ class NoteOpener(private val service: AccessibilityService) {
 
     private fun succeed(j: Job) {
         job = null
-        DebugLog.i("note", "opened \"${j.steps.joinToString(" / ")}\"")
+        DebugLog.i("note", "opened \"${j.steps.joinToString(" / ")}\"" + if (j.folderOnly) " (folder)" else "")
         (service as? QuickAccessService)?.apply {
-            noteOpened(j.steps.last())
+            if (!j.folderOnly) noteOpened(j.steps.last())
             noteOpenFinished(true)
         }
     }
@@ -509,7 +575,7 @@ class NoteOpener(private val service: AccessibilityService) {
                 if (root == null) "Notes window not found." else "Screen:\n" + DebugReport.describeTree(root),
         )
         (service as? QuickAccessService)?.noteOpenFinished(false)
-        toast("Couldn't open \"${j.steps.last()}\": $why")
+        toast("Couldn't open \"${j.steps.lastOrNull() ?: "BOOX Notes"}\": $why")
     }
 
     private fun wait(j: Job, now: Long, ms: Long) {

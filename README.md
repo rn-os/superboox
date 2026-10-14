@@ -46,9 +46,11 @@ From top to bottom:
 | **Front Light** control | Turns the light on or off | Shows the presets (see below) |
 | **Writing** control (add it in Settings → Quick Controls) | Turns off Wi‑Fi, Bluetooth and the Front Light together; tap again to put back what it switched | Opens its settings |
 | **Last Opened Note / Document** | Reopens the note you had open before this one, or the last book or PDF | |
+| **Last Opened Note / Document** | Reopens the note you had open before this one, or the last book or PDF | Note: BOOX Notes' library, in that note's folder. Document: its app's start screen (NeoReader: BOOX's Library) |
 | **Recent** (on the Quick Access bar) | Lists recently opened notes and books, newest first | |
 | **Quick Access** | Opens a pinned item | Lets you drag to reorder or remove items |
 | **Add** (on the Quick Access bar) | Pins what's open (see below) | |
+| **This app** (above the apps, BOOX only) | **Optimize** opens BOOX's Customize panel (refresh, display and, on color screens, color) for the app that's open; **EinkWise** opens BOOX's E-Ink Center. Both open over the app, and changes apply while it runs | |
 | **Apps** along the bottom | Opens the app; swipe for more pages. **Previous app** can be one of them | |
 
 What **Add** pins depends on where you are:

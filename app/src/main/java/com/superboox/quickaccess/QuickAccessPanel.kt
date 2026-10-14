@@ -213,6 +213,10 @@ class QuickAccessPanel(
         }
         content.addView(scrolling(middle), lp(MATCH, 0, 1f))
         content.addView(rule(3))
+        thisAppStrip()?.let {
+            content.addView(it, lp(MATCH, WRAP))
+            content.addView(rule(1))
+        }
         content.addView(dock(), lp(MATCH, WRAP))
     }
 
@@ -764,7 +768,7 @@ class QuickAccessPanel(
 
     private fun lastNoteRow(): View {
         val note = Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.NOTE && !isCurrentNote(it) }
-        return lastRow(R.drawable.ic_note, "Last Opened Note", note?.title, enabled = note != null) {
+        return lastRow(R.drawable.ic_note, "Last Opened Note", note?.title, enabled = note != null, onHold = { service.openNotesFolder(note?.title) }) {
             note?.let { service.openBooxNote(it.title) }
         }
     }
@@ -773,12 +777,13 @@ class QuickAccessPanel(
         val doc = Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.DOCUMENT && !isCurrent(it) }
         val app = doc?.let { Launcher.appLabel(service, it.pkg) }
         val sub = doc?.let { if (it.title == app) app else "${it.title} · $app" }
-        return lastRow(R.drawable.ic_book, "Last Opened Document", sub, enabled = doc != null) {
+        return lastRow(R.drawable.ic_book, "Last Opened Document", sub, enabled = doc != null, onHold = { service.openDocumentHome(doc?.pkg) }) {
             doc?.let { openRecentDocument(it) }
         }
     }
 
-    private fun lastRow(iconRes: Int, label: String, subtitle: String?, enabled: Boolean, onClick: () -> Unit): View = with(ctx) {
+    /** Tap reopens the note or document; hold opens where it lives (works on a grey row too). */
+    private fun lastRow(iconRes: Int, label: String, subtitle: String?, enabled: Boolean, onHold: () -> Unit, onClick: () -> Unit): View = with(ctx) {
         val color = if (enabled) Ink.INK else Ink.DISABLED
         hbox().apply {
             setPadding(s(16), s(12), s(16), s(12))
@@ -788,10 +793,9 @@ class QuickAccessPanel(
                 addView(text(label, sp(17f), color = color, medium = true))
                 if (subtitle != null) addView(oneLine(text(subtitle, sp(13f), color = if (enabled) Ink.MUTED else Ink.DISABLED)))
             }, lp(0, WRAP, 1f))
-            if (enabled) {
-                pressable()
-                setOnClickListener { onClick() }
-            }
+            pressable()
+            if (enabled) setOnClickListener { onClick() }
+            setOnLongClickListener { onHold(); true }
         }
     }
 
@@ -1601,6 +1605,37 @@ class QuickAccessPanel(
         toast(if (added == 1) "Added 1 item" else "Added $added items")
         picked.clear()
         show(Mode.MAIN)
+    }
+
+    // ---- This app: BOOX's Optimize / EinkWise for the app in front -----------------------
+
+    private fun thisAppStrip(): View? = with(ctx) {
+        if (!prefs.showThisApp) return null
+        val pkg = EinkMenus.target(service, foregroundPackage) ?: return null
+        hbox().apply {
+            setPadding(s(12), s(8), s(10), s(8))
+            addView(icon(Launcher.appIcon(service, pkg), iconPx(32), tint = false))
+            addView(vbox().apply {
+                setPadding(s(10), 0, s(6), 0)
+                addView(oneLine(text(Launcher.appLabel(service, pkg), sp(15f), medium = true)))
+                addView(oneLine(text("Open now", sp(12f), color = Ink.MUTED)))
+            }, lp(0, WRAP, 1f))
+            addView(menuButton(R.drawable.ic_optimize, "Optimize") { service.openEinkMenu(optimize = true, pkg = pkg) })
+            addView(menuButton(R.drawable.ic_einkwise, "EinkWise") { service.openEinkMenu(optimize = false, pkg = pkg) })
+        }
+    }
+
+    /** Outlined icon + label button that opens one of BOOX's menus. */
+    private fun menuButton(iconRes: Int, label: String, onClick: () -> Unit): View = with(ctx) {
+        hbox().apply {
+            contentDescription = label
+            setPadding(s(8), s(6), s(10), s(6))
+            addView(icon(getDrawable(iconRes), iconPx(18)))
+            addView(text(label, sp(14f), bold = true).apply { setPadding(s(5), 0, 0, 0) })
+            pressable(outline(2, 8))
+            layoutParams = lp(WRAP, WRAP).apply { marginStart = s(6) }
+            setOnClickListener { onClick() }
+        }
     }
 
     // ---- Apps: 2 columns, 4 per page ------------------------------------------------------

@@ -504,6 +504,12 @@ object ClipHistory {
      * here, so call it off the main thread while the sharing app's permission lasts. True if anything was kept.
      */
     fun keepShared(context: Context, prefs: Prefs, uris: List<Uri>, text: String?, source: String?): Boolean {
+        // A clip shared back from the Clipboard itself: just put it back on the clipboard.
+        uris.singleOrNull()?.takeIf { it.authority == AUTHORITY }?.let { own ->
+            val clip = list(context).firstOrNull { it.image == own.lastPathSegment } ?: return false
+            main.post { putBack(context, clip) }
+            return true
+        }
         val pictures = uris.mapNotNull { uri ->
             val name = displayName(context, uri)
             val png = "${System.currentTimeMillis()}-${uris.indexOf(uri)}.png"
@@ -523,8 +529,12 @@ object ClipHistory {
         return true
     }
 
-    // Screenshots already looked at (paths), and since when new ones count. Only touched on [io].
-    private val seenShots = HashSet<String>()
+    /** Where Mark up puts a gallery copy of a picture clip that has none; watched with the screenshot folders. */
+    private val MARKUP_DIR = File("/storage/emulated/0/Pictures/SuperBoox")
+    private val watchedDirs = SHOT_DIRS + MARKUP_DIR
+
+    // Pictures in the watched folders as last kept (path to last modified), and since when new ones count. Only touched on [io].
+    private val shotTimes = HashMap<String, Long>()
     private var shotsSince = 0L
     private var shotWatcher: android.os.FileObserver? = null
     private val pendingShots = Any()
@@ -553,7 +563,7 @@ object ClipHistory {
     }
 
     private fun startShotWatcher(context: Context, prefs: Prefs) {
-        val dirs = (SHOT_DIRS + SHOT_DIRS.mapNotNull { it.parentFile }).distinct().filter { it.isDirectory }
+        val dirs = (watchedDirs + watchedDirs.mapNotNull { it.parentFile }).distinct().filter { it.isDirectory }
         if (dirs.isEmpty()) return
         val watcher = object : android.os.FileObserver(dirs, CREATE or CLOSE_WRITE or MOVED_TO) {
             override fun onEvent(event: Int, path: String?) = checkScreenshots(context, prefs)
@@ -565,29 +575,55 @@ object ClipHistory {
         }
     }
 
-    /** Keeps screenshots saved since watching started that aren't kept yet. Debounced: the file is still being written. */
+    /** The picture clip a gallery file belongs to: its original (by name), or the copy Mark up made of it. */
+    private fun clipForFile(context: Context, name: String): Clip? =
+        list(context).firstOrNull { it.kind == Kind.IMAGE && (it.text == name || markUpName(it) == name) }
+
+    private fun markUpName(clip: Clip): String? = clip.image?.let { "SuperBoox_${it.removeSuffix(".png")}.png" }
+
+    /**
+     * Keeps screenshots saved since watching started that aren't kept yet, and takes in a picture marked
+     * up in place (its file changed): the clip then shows it and it goes on the clipboard. Debounced:
+     * the file is still being written.
+     */
     private fun checkScreenshots(context: Context, prefs: Prefs) {
         if (!prefs.clipKeepScreenshots || !hasFileAccess()) return
         main.removeCallbacksAndMessages(pendingShots)
         main.postAtTime({
             val source = appInFront(context)
             io.execute {
-                if (source != null && source in prefs.clipIgnored) return@execute
-                val fresh = SHOT_DIRS.flatMap { d -> d.listFiles { f -> f.isFile && f.extension.lowercase() in PICTURE_TYPES }.orEmpty().toList() }
-                    .filter { it.path !in seenShots && it.length() > 0 && it.lastModified() >= shotsSince - 2_000L }
-                    .sortedBy { it.lastModified() }
-                for (f in fresh) {
+                val files = watchedDirs.flatMap { d -> d.listFiles { f -> f.isFile && f.extension.lowercase() in PICTURE_TYPES }.orEmpty().toList() }
+                    .filter { it.length() > 0 }.sortedBy { it.lastModified() }
+                for (f in files) {
+                    val known = shotTimes[f.path]
+                    if (known != null && f.lastModified() <= known) continue
+                    if (known == null && f.lastModified() < shotsSince - 2_000L) continue
+                    // Already a clip (a picture saved over by an editor, or its Mark up copy): take in the new picture.
+                    val clip = clipForFile(context, f.name)
+                    if (clip != null) {
+                        val to = imageFile(context, clip)
+                        if (to != null && runCatching { copyImage(context, Uri.fromFile(f), to) }.getOrDefault(false)) {
+                            DebugLog.i("clipboard", "took in a picture marked up in place (${f.parentFile?.name}/…)")
+                            main.post { list(context).firstOrNull { it.id == clip.id }?.let { putBack(context, it) } }
+                        }
+                        shotTimes[f.path] = f.lastModified()
+                        continue
+                    }
+                    if (source != null && source in prefs.clipIgnored) continue
                     val png = "${System.currentTimeMillis()}.png"
                     val ok = runCatching { copyImage(context, Uri.fromFile(f), File(dir(context), png)) }
                         .onFailure { DebugLog.w("clipboard", "couldn't keep a screenshot: ${it.message}") }.getOrDefault(false)
                     // Not readable yet: tried again on the next change in the folder.
                     if (!ok) continue
-                    seenShots += f.path
-                    DebugLog.i("clipboard", "kept a screenshot as it was saved (${f.parentFile?.name}/…)")
+                    shotTimes[f.path] = f.lastModified()
+                    // A new file beside a mark-up copy is the editor's saved copy: a picture, not a screenshot.
+                    val shot = f.parentFile != MARKUP_DIR
+                    DebugLog.i("clipboard", "kept a ${if (shot) "screenshot" else "marked-up picture"} as it was saved (${f.parentFile?.name}/…)")
                     main.post {
-                        add(context, prefs, Kind.IMAGE, f.name, png, source, SCREENSHOT)
-                        if (prefs.clipShotToClipboard) putNewestBack(context)
-                        if (prefs.clipShotMarkUp) list(context).firstOrNull { it.image == png }?.let { markUp(context, it) }
+                        add(context, prefs, Kind.IMAGE, f.name, png, source, if (shot) SCREENSHOT else null)
+                        if (prefs.clipShotToClipboard || !shot) putNewestBack(context)
+                        // Not for a picture the editor itself just saved, or each mark-up would open another.
+                        if (shot && prefs.clipShotMarkUp && source?.contains("gallery") != true) list(context).firstOrNull { it.image == png }?.let { markUp(context, it) }
                     }
                 }
                 // A screenshot folder may have just been made.
@@ -597,20 +633,51 @@ object ClipHistory {
     }
 
     /**
-     * Opens a picture clip in the tablet's picture editor (Android's Edit with…), to mark it up. The editor
-     * may write its result back over the kept picture (the clip then shows and pastes the marked-up
-     * version); editors that save a new file instead save it to the gallery, where a screenshot folder
-     * is watched and the new picture is kept too. False if no app can edit pictures.
+     * Opens a picture clip in the tablet's picture editor (Android's Edit with…), to mark it up. BOOX's
+     * Gallery editor opens pictures by their file path, so it gets a gallery item: the screenshot itself
+     * when it's still there, else a copy in Pictures/SuperBoox. A mark-up saved over that file, or as a
+     * new file beside it, comes back to the Clipboard (while Screenshots are watched). [done]: whether an
+     * editor opened.
      */
-    fun markUp(context: Context, clip: Clip): Boolean {
-        val uri = contentUri(clip)?.takeIf { clip.kind == Kind.IMAGE } ?: return false
-        val edit = Intent(Intent.ACTION_EDIT).setDataAndType(uri, "image/png")
-            .putExtra(android.provider.MediaStore.EXTRA_OUTPUT, uri)
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        edit.clipData = ClipData.newRawUri("Image", uri)
-        val ok = Launcher.tryStart(context, edit)
-        DebugLog.i("clipboard", if (ok) "opened a picture to mark up" else "no app can edit pictures")
-        return ok
+    fun markUp(context: Context, clip: Clip, done: (Boolean) -> Unit = {}) {
+        if (clip.kind != Kind.IMAGE) return done(false)
+        val app = context.applicationContext
+        io.execute {
+            val uri = runCatching { galleryUri(app, clip) }
+                .onFailure { DebugLog.w("clipboard", "mark up: no gallery copy: ${it.javaClass.simpleName} ${it.message}") }.getOrNull()
+            main.post {
+                val ok = uri != null && Launcher.tryStart(app, Intent(Intent.ACTION_EDIT).setDataAndType(uri, "image/*")
+                    // A new task each time: an editor still open from last time would show its old picture.
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                DebugLog.i("clipboard", if (ok) "opened a picture to mark up" else "no picture editor opened")
+                done(ok)
+            }
+        }
+    }
+
+    /** The clip's picture as a gallery (MediaStore) item. Off the main thread. */
+    private fun galleryUri(context: Context, clip: Clip): Uri? {
+        val images = android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        val name = android.provider.MediaStore.Images.Media.DISPLAY_NAME
+        fun find(file: String): Uri? = context.contentResolver.query(images, arrayOf(android.provider.BaseColumns._ID), "$name=?", arrayOf(file),
+            "${android.provider.MediaStore.Images.Media.DATE_MODIFIED} DESC")?.use { c -> if (c.moveToFirst()) android.content.ContentUris.withAppendedId(images, c.getLong(0)) else null }
+        // The screenshot (or shared picture) itself, while it's still in the gallery. Others' pictures need All files access to find.
+        if (clip.text.isNotEmpty() && hasFileAccess()) find(clip.text)?.let { return it }
+        // Else a copy of the kept picture in Pictures/SuperBoox, made once.
+        val copyName = markUpName(clip) ?: return null
+        find(copyName)?.let { return it }
+        val src = imageFile(context, clip)?.takeIf { it.exists() } ?: return null
+        val values = ContentValues().apply {
+            put(name, copyName)
+            put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/SuperBoox")
+        }
+        val uri = context.contentResolver.insert(images, values) ?: return null
+        context.contentResolver.openOutputStream(uri)?.use { out -> src.inputStream().use { it.copyTo(out) } }
+        // In a watched folder: SuperBoox's own copy isn't a new picture, though a mark-up saved over it is.
+        File(MARKUP_DIR, copyName).let { shotTimes[it.path] = it.lastModified() }
+        return uri
     }
 
     // ---- BOOX Notes' lasso copies, as they're made ---------------------------------------------
@@ -827,9 +894,8 @@ class ClipProvider : ContentProvider() {
     // Only kept images are files here; a handwriting link (BOOX's folder path) has no type.
     override fun getType(uri: Uri): String? = file(uri)?.let { "image/png" }
 
-    // Writing is only possible for an app granted it: a picture editor opened by ClipHistory.markUp.
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? =
-        file(uri)?.let { ParcelFileDescriptor.open(it, if (mode.contains('w')) ParcelFileDescriptor.parseMode(mode) else ParcelFileDescriptor.MODE_READ_ONLY) }
+        file(uri)?.let { ParcelFileDescriptor.open(it, ParcelFileDescriptor.MODE_READ_ONLY) }
 
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, args: Array<out String>?, sort: String?): Cursor? {
         val f = file(uri) ?: return null

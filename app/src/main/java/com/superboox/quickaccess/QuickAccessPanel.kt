@@ -1327,7 +1327,8 @@ class QuickAccessPanel(
             if (c.kind == ClipHistory.Kind.LINK) Triple(R.drawable.ic_open, "Open") { openLink(c) } else null,
             if (c.kind == ClipHistory.Kind.HANDWRITING) null else Triple(R.drawable.ic_share, "Share…") { shareClip(c) },
             if (c.kind == ClipHistory.Kind.IMAGE) Triple(R.drawable.ic_edit, "Mark up") {
-                if (ClipHistory.markUp(service, c)) service.hidePanel() else toast("No app here can mark up pictures")
+                service.hidePanel()
+                ClipHistory.markUp(service, c) { ok -> if (!ok) toast("Couldn't open the picture to mark up") }
             } else null,
             Triple(R.drawable.ic_pin, if (c.pinned) "Unpin" else "Pin") {
                 ClipHistory.setPinned(service, c.id, !c.pinned)
@@ -1398,6 +1399,8 @@ class QuickAccessPanel(
             send.putExtra(Intent.EXTRA_TEXT, c.text)
         }
         val chooser = Intent.createChooser(send, "Share clip").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            // It's already in the Clipboard: SuperBoox's own "Copy to clipboard" would only add it again.
+            .putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(android.content.ComponentName(service, ShareToClipboardActivity::class.java)))
         if (Launcher.tryStart(service, chooser)) service.hidePanel()
     }
 

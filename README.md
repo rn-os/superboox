@@ -178,10 +178,10 @@ Tested on a Note Air 6C (Android 16, firmware 4.3). Other BOOX models and firmwa
 
 ## If the panel stops opening
 
-SuperBoox catches errors in Settings and the panel and recovers by itself, so changing settings shouldn't stop it. If it does stop, the top of Settings shows it.
-- **Running but misbehaving:** tap **Restart service**.
+SuperBoox catches errors in Settings and the panel and recovers by itself, so changing settings shouldn't stop it. If it does stop, a card at the top of Settings says so (it shows nothing while SuperBoox is running).
+- **Running but misbehaving:** tap **Restart service** in Settings → Troubleshooting.
 - **Turned on, but stopped:** Android keeps an accessibility service stopped after an error until it's switched off and on again. **Restart service** does that for you with Advanced access. Without it, Restart service opens SuperBoox's switch so you can turn it off and on.
-- **After a restart:** Right after the tablet starts, BOOX stops SuperBoox (and other apps), and Android then leaves its switch on but doesn't start it again. With **Turn the edge strip back on after a restart** (top of Settings, on by default), SuperBoox checks once the tablet has started. If the strip isn't back, it switches the service off and on by itself when allowed, or shows a notification you can tap. To let it do this by itself, tap **Allow** there while Advanced access is connected (needed only once; it keeps working after restarts without Shizuku), or run `adb shell pm grant com.superboox.quickaccess android.permission.WRITE_SECURE_SETTINGS` from a computer.
+- **After a restart:** Right after the tablet starts, BOOX stops SuperBoox (and other apps), and Android then leaves its switch on but doesn't start it again. With **Turn the edge strip back on after a restart** (Settings → Troubleshooting, on by default), SuperBoox checks once the tablet has started. If the strip isn't back, it switches the service off and on by itself when allowed, or shows a notification you can tap. To let it do this by itself, tap **Allow** there while Advanced access is connected (needed only once; it keeps working after restarts without Shizuku), or run `adb shell pm grant com.superboox.quickaccess android.permission.WRITE_SECURE_SETTINGS` from a computer.
 
 ## Reporting bugs
 

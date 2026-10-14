@@ -988,24 +988,29 @@ class SettingsActivity : Activity() {
         list.addView(View(this), lp(MATCH, dp(8)))
         list.addView(paragraph("A Supernote-style Quick Access panel for BOOX. Swipe from the screen edge on any page to open it."))
 
+        // Nothing to show while it's running: the card is only for a service that needs switching on.
         val running = QuickAccessService.instance != null
         val on = isServiceEnabled()
+        if (running) {
+            stoppedSince = 0L
+            return
+        }
+        // Right after an update or restart Android takes a moment to bind the service again; don't
+        // call it stopped (or show an old error) until it's stayed down for a few seconds.
+        if (on) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (stoppedSince == 0L) stoppedSince = now
+            val wait = STOPPED_GRACE_MS - (now - stoppedSince)
+            if (wait > 0) {
+                list.postDelayed({ if (page == Page.HOME) render() }, wait)
+                return
+            }
+        }
         val rows = mutableListOf<View>(
-            text(when {
-                running -> "● Service is running"
-                on -> "◐ Turned on, but stopped"
-                else -> "○ Service is off"
-            }, 17f, bold = true).apply { setPadding(dp(16), dp(14), dp(16), dp(10)) },
+            text(if (on) "◐ Turned on, but stopped" else "○ Service is off", 17f, bold = true)
+                .apply { setPadding(dp(16), dp(14), dp(16), dp(10)) },
         )
         when {
-            running -> rows += buttonRow(
-                "Open panel" to { QuickAccessService.instance?.showPanel() },
-                "Restart service" to {
-                    QuickAccessService.instance?.restart()
-                    toast("SuperBoox restarted")
-                    render()
-                },
-            )
             on -> {
                 // Android keeps a service that stopped on an error off until it's switched off and on again.
                 val crashed = prefs.sp.getLong(Prefs.K_LAST_CRASH, 0L).takeIf { it > 0 }
@@ -1029,9 +1034,11 @@ class SettingsActivity : Activity() {
                 rows += buttonRow("Accessibility settings" to { openServiceSwitch() })
             }
         }
-        if (on) rows += afterRestartRows()
         list.addView(card(rows))
     }
+
+    /** When the service was first seen enabled but not running ([statusSection]); 0 while it runs. */
+    private var stoppedSince = 0L
 
     /**
      * After a restart ([BootRestore]): the switch, and what SuperBoox can do about a service that
@@ -1650,7 +1657,14 @@ class SettingsActivity : Activity() {
                 "Copy debug report" to { copyReport() },
                 "Share…" to { shareReport() },
             ),
-            buttonRow("Clear log" to { DebugLog.clear(); toast("Log cleared"); render() }),
+            buttonRow(
+                "Restart service" to {
+                    val svc = QuickAccessService.instance
+                    if (svc == null) restartStoppedService()
+                    else { svc.restart(); toast("SuperBoox restarted") }
+                },
+                "Clear log" to { DebugLog.clear(); toast("Log cleared"); render() },
+            ),
         )))
         list.addView(heading("Your device"))
         list.addView(card(listOf(cardText(
@@ -2063,6 +2077,7 @@ class SettingsActivity : Activity() {
         const val EXTRA_EDIT_PRESET = "edit_preset"
         private const val K_PREVIEW = "preview"
         private const val K_TOUR = "tour"
+        private const val STOPPED_GRACE_MS = 3000L
         private const val TOUR_STEPS = 10
         private const val TOUR_SIZE = 2
         private const val TOUR_KEEP = 3

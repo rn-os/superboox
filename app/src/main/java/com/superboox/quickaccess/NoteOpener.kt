@@ -51,6 +51,9 @@ class NoteOpener(private val service: AccessibilityService) {
         /** Hold Last Opened Note: [steps] is a folder path (maybe empty); stop there, open no note. */
         var folderOnly = false
 
+        /** Hold Last Opened Note: pressed Home once after Back landed on another BOOX screen (e.g. the book Library). */
+        var wentHome = false
+
         /** Real taps on BOOX home's Notes widget title bar so far. */
         var titleBarTaps = 0
 
@@ -434,6 +437,22 @@ class NoteOpener(private val service: AccessibilityService) {
 
             is NotesScreen.State.Library -> {
                 if (root.packageName?.toString() == BooxNotes.BOOX_HOME_PACKAGE && NotesScreen.isLauncherNotesLibrary(root)) learnNotesTab(root)
+                // Hold Last Opened Note: Back out of a note can land on whatever BOOX screen was behind
+                // Notes (BOOX's book Library, seen on the 6C). Go Home and open Notes from its widget.
+                if (j.folderOnly && !j.wentHome && !j.needsNotesTab && root.packageName?.toString() == BooxNotes.BOOX_HOME_PACKAGE &&
+                    !NotesScreen.isLauncherNotesLibrary(root)
+                ) {
+                    if (now < j.notBefore + UNKNOWN_GRACE_MS) return later(POLL_MS) // the Notes library may still be loading
+                    j.wentHome = true
+                    j.needsNotesTab = true
+                    j.resetFolder()
+                    DebugLog.i("note", "Back left Notes for another BOOX screen; going Home to open Notes")
+                    service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
+                    j.awaitChangeFrom = signature
+                    j.awaitUntil = now + AFTER_BACK_MS
+                    j.notBefore = now
+                    return later(POLL_MS)
+                }
                 if (target == null) {
                     if (openNotesTab(j, root, now, signature)) return
                     // BOOX home's Notes widget also reads as a library: only the real one counts.

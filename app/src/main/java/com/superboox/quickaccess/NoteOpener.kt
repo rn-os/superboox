@@ -173,6 +173,14 @@ class NoteOpener(private val service: AccessibilityService) {
      */
     fun openLibraryTab() {
         cancel()
+        // BOOX's Library screen answers this action (Note Air 6C, firmware 4.3): no launcher driving needed.
+        val direct = android.content.Intent(LIBRARY_ACTION).addCategory(android.content.Intent.CATEGORY_DEFAULT)
+            .setPackage(BooxNotes.BOOX_HOME_PACKAGE).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (Launcher.tryStart(service, direct)) {
+            DebugLog.i("doc", "opened BOOX's Library directly")
+            handler.postDelayed({ (service as? QuickAccessService)?.noteOpenFinished(true) }, AFTER_TAP_MS)
+            return
+        }
         val home = service.packageManager.getLaunchIntentForPackage(BooxNotes.BOOX_HOME_PACKAGE)
             ?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         if (home == null || !Launcher.tryStart(service, home)) {
@@ -186,7 +194,8 @@ class NoteOpener(private val service: AccessibilityService) {
     private fun libraryTick(until: Long) {
         val root = notesRoot(setOf(BooxNotes.BOOX_HOME_PACKAGE))
         val tab = root?.let { r ->
-            findFirst(r) { n -> n.isVisibleToUser && NotesScreen.textOf(n).trim().lowercase().let { it == "library" || it == "书库" } }
+            widgetTitleBar(r, "library", "书库")
+                ?: findFirst(r) { n -> n.isVisibleToUser && n.isClickable && NotesScreen.textOf(n).trim().lowercase().let { it == "library" || it == "书库" } }
         }
         when {
             tab != null -> {
@@ -202,6 +211,11 @@ class NoteOpener(private val service: AccessibilityService) {
             else -> handler.postDelayed({ libraryTick(until) }, POLL_MS)
         }
     }
+
+    /** The title bar of a widget on BOOX home's desktop page whose title is one of [titles] (lowercase). */
+    private fun widgetTitleBar(root: AccessibilityNodeInfo, vararg titles: String): AccessibilityNodeInfo? =
+        runCatching { root.findAccessibilityNodeInfosByViewId("${BooxNotes.BOOX_HOME_PACKAGE}:id/title_bar") }.getOrNull().orEmpty()
+            .firstOrNull { bar -> bar.isVisibleToUser && findFirst(bar) { n -> NotesScreen.textOf(n).trim().lowercase() in titles } != null }
 
     // ---- BOOX's new-note screen (hold New Note) --------------------------------------------
 
@@ -405,7 +419,11 @@ class NoteOpener(private val service: AccessibilityService) {
                 if (root.packageName?.toString() == BooxNotes.BOOX_HOME_PACKAGE && NotesScreen.isLauncherNotesLibrary(root)) learnNotesTab(root)
                 if (target == null) {
                     if (openNotesTab(j, root, now, signature)) return
-                    return succeed(j)
+                    // BOOX home's Notes widget also reads as a library: only the real one counts.
+                    val library = root.packageName?.toString() != BooxNotes.BOOX_HOME_PACKAGE || NotesScreen.isLauncherNotesLibrary(root)
+                    if (library) return succeed(j)
+                    if (now < j.notBefore + UNKNOWN_GRACE_MS) return later(POLL_MS)
+                    return fail(j, "BOOX Notes' library didn't open")
                 }
                 val list = state.list
                 if (!j.rewound) {
@@ -506,7 +524,9 @@ class NoteOpener(private val service: AccessibilityService) {
             learnNotesTab(root)
             return false
         }
-        val labelled = findFirst(root) { n ->
+        // BOOX home as a desktop page (Note Air 6C, firmware 4.3): the Notes widget's title bar
+        // opens the full library. Its label under the widget says "Notes" too, but opens nothing.
+        val labelled = widgetTitleBar(root, "notes", "note") ?: findFirst(root) { n ->
             val t = NotesScreen.textOf(n).lowercase()
             (t == "notes" || t == "note") && n.isVisibleToUser
         }
@@ -675,6 +695,9 @@ class NoteOpener(private val service: AccessibilityService) {
         private const val MAX_TAP_ATTEMPTS = 2
         private const val DIRECT_WAIT_MS = 3_500L
         private const val SETUP_TIMEOUT_MS = 6_000L
+
+        /** Opens BOOX's Library screen (com.onyx LibraryActivity); seen on the Note Air 6C. */
+        private const val LIBRARY_ACTION = "com.onyx.action.LIBRARY"
 
         /**
          * Open-by-id is off until we know the extra OpenNoteByDocIdActivity reads:

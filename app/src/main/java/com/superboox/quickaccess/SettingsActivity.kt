@@ -1275,7 +1275,7 @@ class SettingsActivity : Activity() {
         }
         // Replace: another app takes this one's place in the row (its own name, not the custom one).
         lateinit var dialog: AlertDialog
-        val replace = inkButton("⇄ Replace app…") {
+        val replace = inkButton("⇄ Replace app…", 18f) {
             dialog.dismiss()
             pickApp { picked ->
                 prefs.dock = prefs.dock.map { if (it.id == app.id) picked.copy(id = app.id) else it }
@@ -1287,8 +1287,10 @@ class SettingsActivity : Activity() {
             .setTitle("Edit app")
             .setView(vbox().apply {
                 setPadding(dp(20), dp(8), dp(20), 0)
+                addView(text("Name", 13f, color = Ink.MUTED))
                 addView(f, lp(MATCH, WRAP))
-                addView(replace, lp(MATCH, WRAP).apply { topMargin = dp(16) })
+                // A gap below, so it doesn't sit on BOOX's button bar.
+                addView(replace, lp(MATCH, WRAP).apply { topMargin = dp(16); bottomMargin = dp(16) })
             })
             .setPositiveButton("Save") { _, _ -> f.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::save) }
             .setNeutralButton("Reset") { _, _ -> save(own) }
@@ -1694,6 +1696,8 @@ class SettingsActivity : Activity() {
                     )
                 }
                 .sortedBy { it.label.lowercase() }
+            // Two apps can share a name (e.g. two "Files"): show those apps' package names too.
+            val shared = apps.groupingBy { it.label.lowercase() }.eachCount().filterValues { it > 1 }.keys
             runOnUiThread {
                 if (isFinishing) return@runOnUiThread
                 val adapter = object : ArrayAdapter<AppEntry>(this, 0, apps) {
@@ -1702,7 +1706,11 @@ class SettingsActivity : Activity() {
                         return hbox().apply {
                             setPadding(dp(20), dp(10), dp(20), dp(10))
                             addView(icon(app.icon, 36, tint = false))
-                            addView(text(app.label, 17f).apply { setPadding(dp(16), 0, 0, 0) })
+                            addView(vbox().apply {
+                                setPadding(dp(16), 0, 0, 0)
+                                addView(text(app.label, 17f))
+                                if (app.label.lowercase() in shared) addView(text(app.component.packageName, 13f, color = Ink.MUTED))
+                            })
                         }
                     }
                 }

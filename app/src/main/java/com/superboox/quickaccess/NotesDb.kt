@@ -52,6 +52,15 @@ object NotesDb {
         return best?.id
     }
 
+    /**
+     * Indexes of the [names] that exactly one live note or folder has, so finding that name
+     * on screen means finding it. Empty if the database isn't readable.
+     */
+    fun uniqueNames(context: Context, names: List<String>): Set<Int> {
+        val live = runCatching { query(context) }.getOrNull()?.filter { it.status == 0 } ?: return emptySet()
+        return names.indices.filter { i -> live.count { NotesScreen.matches(it.title, names[i]) } == 1 }.toSet()
+    }
+
     /** The current name of the note with this id, or null if it's gone (deleted, or the database isn't readable). */
     fun titleForId(context: Context, id: String): String? {
         val rows = runCatching { query(context) }.getOrNull() ?: return null

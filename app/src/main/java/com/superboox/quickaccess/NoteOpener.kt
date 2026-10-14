@@ -42,6 +42,12 @@ class NoteOpener(private val service: AccessibilityService) {
         /** "Open by id" held back until the note that's open has been closed (so it's saved first). */
         var pendingDirect: android.content.Intent? = null
 
+        /**
+         * Steps whose name belongs to just one note or folder in BOOX's database. When one of
+         * these is already on screen, the walk can start there instead of at the top folder.
+         */
+        var uniqueSteps: Set<Int> = emptySet()
+
         /** Hold Last Opened Note: [steps] is a folder path (maybe empty); stop there, open no note. */
         var folderOnly = false
 
@@ -101,14 +107,16 @@ class NoteOpener(private val service: AccessibilityService) {
         pending = token
         io.execute {
             val id = knownId ?: NotesDb.findNoteId(service, steps)
-            handler.post { if (pending === token) start(notesPackage, steps, inNotes, id) }
+            val unique = if (steps.size > 1) NotesDb.uniqueNames(service, steps) else emptySet()
+            handler.post { if (pending === token) start(notesPackage, steps, inNotes, id, unique) }
         }
     }
 
     private var pending: Any? = null
 
-    private fun start(notesPackage: String, steps: List<String>, inNotes: Boolean, id: String?) {
+    private fun start(notesPackage: String, steps: List<String>, inNotes: Boolean, id: String?, unique: Set<Int> = emptySet()) {
         val j = Job(BooxNotes.packages(notesPackage), notesPackage, steps, SystemClock.uptimeMillis() + TIMEOUT_MS)
+        j.uniqueSteps = unique
         val direct = id?.let { NotesDb.openIntent(service, notesPackage, it) }
         if (direct != null && inNotes) {
             // Leave the open note the normal way first (Back saves it), then open by id.
@@ -446,6 +454,20 @@ class NoteOpener(private val service: AccessibilityService) {
                             DebugLog.i("note", "scrolled list to top ($n)")
                             return wait(j, now, AFTER_PAGE_MS)
                         }
+                    }
+                }
+
+                // A note in a folder, opened from another app: BOOX home's recent notes, or the folder
+                // Notes was last left in, may already show the note (or a folder on its way). Start
+                // there: Back from BOOX home leaves Notes instead of going up to the top folder.
+                if (j.index == 0 && j.steps.size > 1) {
+                    val deepest = (j.steps.size - 1 downTo 1).firstOrNull { k ->
+                        k in j.uniqueSteps && state.cards.any { NotesScreen.matches(it.label, j.steps[k]) }
+                    }
+                    if (deepest != null) {
+                        DebugLog.i("note", "\"${j.steps[deepest]}\" is already on screen; skipping ${j.steps.take(deepest).joinToString(" / ")}")
+                        j.index = deepest
+                        return later(0)
                     }
                 }
 

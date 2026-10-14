@@ -242,6 +242,7 @@ class NoteOpener(private val service: AccessibilityService) {
     private var setupUntil = 0L
     private var setupBacks = 0
     private var setupTabTapped = false
+    private var setupCreateTapped = false
 
     /**
      * Opens the Notes library and taps its own "new note" button, which brings up
@@ -251,6 +252,7 @@ class NoteOpener(private val service: AccessibilityService) {
         cancel()
         setupBacks = 0
         setupTabTapped = false
+        setupCreateTapped = false
         setupUntil = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
         // Always through BOOX's home screen (its Notes widget has the +). Back from an open note
         // can land on another launcher (build 59 report), so don't rely on it; BOOX saves the note itself.
@@ -289,7 +291,21 @@ class NoteOpener(private val service: AccessibilityService) {
             }
         }
         val button = newNoteButton(root)
-        if (button == null) return run { handler.postDelayed({ setupTick(notesPackage) }, POLL_MS) }
+        if (button == null) {
+            // The Notes library opened directly (BOOX tab router): its "Create" box takes a real
+            // single tap and opens a menu of note types.
+            val create = if (setupCreateTapped) null else libraryCreateBox(root)
+            if (create != null) {
+                setupCreateTapped = true
+                val r = Rect().also(create::getBoundsInScreen)
+                DebugLog.i("note", "new-note setup: tapping the library's Create box ${r.toShortString()}")
+                touch(r)
+                val until = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
+                handler.postDelayed({ createMenuTick(notesPackage, until) }, POLL_MS)
+                return
+            }
+            return run { handler.postDelayed({ setupTick(notesPackage) }, POLL_MS) }
+        }
         DebugLog.i("note", "new-note setup: tapping ${button.viewIdResourceName ?: NotesScreen.textOf(button)}")
         click(button, null)
         // BOOX's + opens its create-note screen (name, page layout, templates, Create / Cancel; build 59
@@ -297,6 +313,38 @@ class NoteOpener(private val service: AccessibilityService) {
         val until = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
         handler.postDelayed({ createScreenTick(notesPackage, until) }, POLL_MS)
     }
+
+    /** The Notes library's "Create" box (Note Air 6C, firmware 4.3): not clickable, so it gets a real tap. */
+    private fun libraryCreateBox(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (root.packageName?.toString() != BooxNotes.BOOX_HOME_PACKAGE || !NotesScreen.isLauncherNotesLibrary(root)) return null
+        return findFirst(root) { n -> n.isVisibleToUser && NotesScreen.textOf(n).trim().let { it.equals("Create", ignoreCase = true) || it == "新建" } }
+    }
+
+    /** After tapping Create: BOOX's menu of note types; picks "Handwritten Notes". */
+    private fun createMenuTick(notesPackage: String, until: Long) {
+        val row = allRoots().firstNotNullOfOrNull { r ->
+            runCatching { r.findAccessibilityNodeInfosByViewId("${BooxNotes.BOOX_HOME_PACKAGE}:id/title") }.getOrNull().orEmpty()
+                .firstOrNull { it.isVisibleToUser && NotesScreen.textOf(it).let { t -> t.contains("handwrit", ignoreCase = true) || t.contains("手写") } }
+        }
+        if (row != null) {
+            DebugLog.i("note", "new-note setup: choosing \"${NotesScreen.textOf(row)}\"")
+            click(row, null)
+            val next = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
+            handler.postDelayed({ createScreenTick(notesPackage, next) }, POLL_MS)
+            return
+        }
+        if (SystemClock.uptimeMillis() > until) {
+            DebugLog.w("note", "new-note setup: no Handwritten Notes choice after tapping Create. Screen:\n" +
+                (notesRoot(BooxNotes.packages(notesPackage))?.let { DebugReport.describeTree(it) } ?: "Notes window not found"))
+            (service as? QuickAccessService)?.noteOpenFinished(false)
+            return toast("Couldn't find BOOX's new-note menu. Send a debug report from Settings")
+        }
+        handler.postDelayed({ createMenuTick(notesPackage, until) }, POLL_MS)
+    }
+
+    /** Every app window's root, popups included. */
+    private fun allRoots(): List<AccessibilityNodeInfo> =
+        runCatching { service.windows.mapNotNull { it.root } }.getOrNull().orEmpty().ifEmpty { listOfNotNull(service.rootInActiveWindow) }
 
     private fun createScreenTick(notesPackage: String, until: Long) {
         val root = notesRoot(BooxNotes.packages(notesPackage))

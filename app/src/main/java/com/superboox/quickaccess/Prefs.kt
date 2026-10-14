@@ -269,6 +269,7 @@ class Prefs(context: Context) {
         const val K_NOTES_PKG = "notes_package"
         const val K_RECENT_URI = "recent_uri"
         const val K_RECENT_COUNT = "recent_count"
+        const val K_RECENT_HIDDEN = "recent_hidden"
         const val K_PINS = "pins"
         const val K_DOCK = "dock"
         const val K_REMEMBER_PAGES = "remember_pages"

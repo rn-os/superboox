@@ -45,6 +45,9 @@ class NoteOpener(private val service: AccessibilityService) {
         /** Hold Last Opened Note: [steps] is a folder path (maybe empty); stop there, open no note. */
         var folderOnly = false
 
+        /** Real taps on BOOX home's Notes widget title bar so far. */
+        var titleBarTaps = 0
+
         /** Set when we opened the BOOX launcher and still need to tap its "Notes" tab. */
         var needsNotesTab = false
 
@@ -199,8 +202,9 @@ class NoteOpener(private val service: AccessibilityService) {
         }
         when {
             tab != null -> {
-                DebugLog.i("doc", "BOOX home: tapping its Library tab")
-                click(tab, null)
+                val r = Rect().also(tab::getBoundsInScreen)
+                DebugLog.i("doc", "BOOX home: tapping Library ${r.toShortString()}")
+                touch(r)
                 handler.postDelayed({ (service as? QuickAccessService)?.noteOpenFinished(true) }, AFTER_TAP_MS)
             }
             SystemClock.uptimeMillis() > until -> {
@@ -213,9 +217,14 @@ class NoteOpener(private val service: AccessibilityService) {
     }
 
     /** The title bar of a widget on BOOX home's desktop page whose title is one of [titles] (lowercase). */
-    private fun widgetTitleBar(root: AccessibilityNodeInfo, vararg titles: String): AccessibilityNodeInfo? =
-        runCatching { root.findAccessibilityNodeInfosByViewId("${BooxNotes.BOOX_HOME_PACKAGE}:id/title_bar") }.getOrNull().orEmpty()
-            .firstOrNull { bar -> bar.isVisibleToUser && findFirst(bar) { n -> NotesScreen.textOf(n).trim().lowercase() in titles } != null }
+    private fun widgetTitleBar(root: AccessibilityNodeInfo, vararg titles: String): AccessibilityNodeInfo? {
+        fun matches(bar: AccessibilityNodeInfo) =
+            bar.isVisibleToUser && findFirst(bar) { n -> NotesScreen.textOf(n).trim().lowercase() in titles } != null
+        // By id first; widget views can be missed by that lookup, so walk the tree too.
+        return runCatching { root.findAccessibilityNodeInfosByViewId("${BooxNotes.BOOX_HOME_PACKAGE}:id/title_bar") }.getOrNull().orEmpty()
+            .firstOrNull(::matches)
+            ?: findFirst(root) { n -> n.viewIdResourceName?.endsWith(":id/title_bar") == true && matches(n) }
+    }
 
     // ---- BOOX's new-note screen (hold New Note) --------------------------------------------
 
@@ -526,7 +535,21 @@ class NoteOpener(private val service: AccessibilityService) {
         }
         // BOOX home as a desktop page (Note Air 6C, firmware 4.3): the Notes widget's title bar
         // opens the full library. Its label under the widget says "Notes" too, but opens nothing.
-        val labelled = widgetTitleBar(root, "notes", "note") ?: findFirst(root) { n ->
+        // A widget may ignore accessibility clicks, so it gets a real tap (twice at most).
+        widgetTitleBar(root, "notes", "note")?.let { bar ->
+            if (j.titleBarTaps >= 2) return false
+            j.titleBarTaps++
+            val r = Rect().also(bar::getBoundsInScreen)
+            DebugLog.i("note", "BOOX home: tapping the Notes widget's title bar ${r.toShortString()} (${j.titleBarTaps})")
+            touch(r)
+            j.resetFolder()
+            j.awaitChangeFrom = signature
+            j.awaitUntil = now + AFTER_BACK_MS
+            j.notBefore = now
+            later(POLL_MS)
+            return true
+        }
+        val labelled = findFirst(root) { n ->
             val t = NotesScreen.textOf(n).lowercase()
             (t == "notes" || t == "note") && n.isVisibleToUser
         }
@@ -591,7 +614,8 @@ class NoteOpener(private val service: AccessibilityService) {
         val root = notesRoot(j.packages)
         DebugLog.w(
             "note",
-            "gave up on \"${j.steps.getOrNull(j.index)}\" (step ${j.index + 1}/${j.steps.size}): $why. " +
+            (if (j.folderOnly) "gave up on folder \"${j.steps.joinToString(" / ")}\": $why. "
+            else "gave up on \"${j.steps.getOrNull(j.index)}\" (step ${j.index + 1}/${j.steps.size}): $why. ") +
                 if (root == null) "Notes window not found." else "Screen:\n" + DebugReport.describeTree(root),
         )
         (service as? QuickAccessService)?.noteOpenFinished(false)

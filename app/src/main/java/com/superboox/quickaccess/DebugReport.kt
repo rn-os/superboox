@@ -15,7 +15,8 @@ object DebugReport {
     fun build(context: Context): String = buildString {
         val pm = context.packageManager
         val prefs = Prefs(context)
-        val dm = context.resources.displayMetrics
+        // The app's, not Settings' own (which is scaled by UiScale).
+        val dm = context.applicationContext.resources.displayMetrics
 
         line("SuperBoox debug report — ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.US).format(Date())}")
         section("App")
@@ -34,6 +35,7 @@ object DebugReport {
         line("fingerprint: ${Build.FINGERPRINT}")
         line(Devices.describe())
         line("screen: ${dm.widthPixels}x${dm.heightPixels}px, density ${dm.density} (${dm.densityDpi}dpi)")
+        line("settings scale: ${runCatching { UiScale.describe(context) }.getOrElse { "unknown" }}")
 
         section("BOOX apps (launchable)")
         val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)

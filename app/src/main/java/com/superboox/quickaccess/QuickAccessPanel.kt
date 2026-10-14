@@ -776,7 +776,7 @@ class QuickAccessPanel(
         val note = Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.NOTE && !isCurrentNote(it) }
         val library = { service.openNotesFolder(note?.title) }
         // Nothing opened yet: the row opens the Notes library instead of sitting greyed out.
-        if (note == null) return lastRow(R.drawable.ic_note, "Open Notes", null, onHold = library, onClick = library)
+        if (note == null) return lastRow(R.drawable.ic_note, "Open Notes", "Nothing opened yet · hold for notes library", onHold = library, onClick = library)
         return lastRow(R.drawable.ic_note, "Last Opened Note", note.title, onHold = library) { service.openBooxNote(note.title) }
     }
 
@@ -786,7 +786,7 @@ class QuickAccessPanel(
         val sub = doc?.let { if (it.title == app) app else "${it.title} · $app" }
         val library = { service.openDocumentHome(doc?.pkg) }
         // Nothing opened yet: the row opens BOOX's Library.
-        if (doc == null) return lastRow(R.drawable.ic_book, "Open Documents", null, onHold = library, onClick = library)
+        if (doc == null) return lastRow(R.drawable.ic_book, "Open Documents", "Nothing opened yet · hold for document library", onHold = library, onClick = library)
         return lastRow(R.drawable.ic_book, "Last Opened Document", sub, onHold = library) { openRecentDocument(doc) }
     }
 

@@ -57,7 +57,7 @@ object UiScale {
         return min(dm.widthPixels, dm.heightPixels) / dpi
     }
 
-    /** "1860×2480 px · 300 dpi · Settings at 125% · system font 85%" for Your device and the debug report. */
+    /** "1860×2480 px · 300 dpi · Settings at 125% · system font 85%" for Troubleshooting and the debug report. */
     fun describe(context: Context): String {
         val dm = DisplayMetrics()
         @Suppress("DEPRECATION")

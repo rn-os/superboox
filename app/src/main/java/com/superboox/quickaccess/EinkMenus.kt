@@ -15,6 +15,11 @@ import android.os.Build
  *  - EinkWise: BOOX's E-Ink Center ([ACTION_EINK_CENTER]), device-wide, no extras.
  * SystemUI's receiver is exported with no permission or sender check, so any app may send them.
  * Changes there apply live to the running app (SystemUI never stops it).
+ *
+ * Optimize › Others › "Stay active in the background" is BOOX's own keep-alive switch for an app
+ * (its "full PM access"): without it BOOX may stop SuperBoox in the background even when Android's
+ * battery optimisation is off. [stayActive] reads it the way SystemUI does, through BOOX's
+ * EACAppThemeManager in the framework.
  */
 object EinkMenus {
     const val ACTION_OPTIMIZE = "com.onyx.SHOW_EAC_SETTINGS_VIEW_REQUEST"
@@ -44,6 +49,27 @@ object EinkMenus {
         val component = component(context, pkg) ?: return false.also { DebugLog.w("eink", "optimize: no launcher activity for $pkg") }
         return send(context, Intent(ACTION_OPTIMIZE).putExtra(EXTRA_COMPONENT, component), "optimize $component")
     }
+
+    /**
+     * Whether Optimize › Others › "Stay active in the background" is on for [pkg], or null when it
+     * can't be read (not a BOOX, or a firmware without it). SystemUI reads the same value:
+     * EACAppThemeManager.getTheme(pkg, activeType).appConfig.extraConfig.isFullPMAccess.
+     */
+    fun stayActive(pkg: String): Boolean? {
+        if (!available) return null
+        return runCatching {
+            if (Build.VERSION.SDK_INT >= 28) org.lsposed.hiddenapibypass.HiddenApiBypass.addHiddenApiExemptions("Landroid/onyx/")
+            val manager = Class.forName("android.onyx.optimization.EACAppThemeManager")
+            val type = manager.getMethod("getActiveThemeType", String::class.java).invoke(null, pkg) as Int
+            val theme = manager.getMethod("getTheme", String::class.java, Int::class.javaPrimitiveType).invoke(null, pkg, type) ?: return null
+            val config = theme.javaClass.getMethod("getAppConfig").invoke(theme) ?: return null
+            val extra = config.javaClass.getMethod("getExtraConfig").invoke(config) ?: return null
+            extra.javaClass.getMethod("isFullPMAccess").invoke(extra) as Boolean
+        }.onFailure { if (!stayActiveFailed) DebugLog.w("eink", "couldn't read stay active for $pkg", it); stayActiveFailed = true }.getOrNull()
+    }
+
+    /** Logged once: the tour reads it every second or so. */
+    private var stayActiveFailed = false
 
     fun openEinkWise(context: Context): Boolean = send(context, Intent(ACTION_EINK_CENTER), "einkwise")
 

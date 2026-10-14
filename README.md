@@ -20,18 +20,17 @@ No computer or adb needed. No internet permission.
 
 1. **Install.** Install [Obtainium](https://github.com/ImranR98/Obtainium) on the BOOX. In Obtainium, tap **Add App**, paste `https://github.com/rn-os/superboox`, then tap **Add** and **Install**. Obtainium will let you know when there's a new build.
    You can also download the latest `superboox-build-N.apk` from [Releases](https://github.com/rn-os/superboox/releases) and open it on the device.
-2. **Open SuperBoox.** A short tour (8 steps, with Next, Previous and Skip) walks you through:
+2. **Open SuperBoox.** A short tour (9 steps, with Next, Previous and Skip) walks you through:
    - **Turning on the service.** Android settings → Accessibility → SuperBoox Quick Access → On. This is the only required step.
+   - **Keeping it running.** On BOOX, the tour opens BOOX's Optimize panel for SuperBoox: tap **Others** and turn on **Stay active in the background**, or BOOX may stop SuperBoox in the background. It also asks Android to leave SuperBoox's battery use alone.
    - **Trying it.** Your swipe strip is drawn in black, so you can see where to swipe.
    - **A guided look at the real panel** and the clipboard.
    - **Permissions,** each with a button and a line about why. All are optional:
-     - Battery: so BOOX doesn't stop SuperBoox while the tablet sleeps
      - Modify system settings: for one-tap Auto-rotate
      - All files access: to show copied handwriting
-3. **BOOX only:** go to *Settings → Apps → App Management → SuperBoox* and allow it to run in the background (turn off freezing).
-4. **Swipe** up or down along the right edge of the screen.
+3. **Swipe** up or down along the right edge of the screen.
 
-You can replay the tour any time from **Settings → Help → Show the tour again**.
+You can replay the tour any time from **Settings → Help → Show the tour again**, and get back to the keep-running switches from **Settings → Help → Keep SuperBoox running**.
 
 ## What's in the panel
 

@@ -23,6 +23,7 @@ object DebugReport {
         line("version: ${info?.versionName} (${info?.longVersionCode})")
         line("service running: ${QuickAccessService.instance != null}")
         line("service enabled in settings: ${serviceEnabled(context)}")
+        line("after a restart: ${if (Prefs(context).restoreAfterRestart) "on" else "off"} (can switch the service: ${BootRestore.canSwitch(context)}, notifications: ${BootRestore.canNotify(context)})")
         line("panel showing: ${QuickAccessService.instance?.isPanelShowing}")
         line("foreground app (last seen): ${QuickAccessService.instance?.foregroundPackage}")
 

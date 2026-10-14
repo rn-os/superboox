@@ -919,7 +919,7 @@ class SettingsActivity : Activity() {
                 rows += paragraph(
                     (if (crashed != null) "SuperBoox stopped after an error (${android.text.format.DateUtils.getRelativeTimeSpanString(crashed)}). " else "SuperBoox isn't running. ") +
                         "Android keeps it stopped until it's switched off and on again. " +
-                        if (AdvancedAccess.allowed()) "Restart does that for you." else "Restart opens its switch: turn it off, then on.",
+                        if (AdvancedAccess.allowed() || BootRestore.canSwitch(this)) "Restart does that for you." else "Restart opens its switch: turn it off, then on.",
                 ).apply { setPadding(dp(16), dp(4), dp(16), dp(6)) }
                 rows += buttonRow("Restart service" to { restartStoppedService() })
                 if (crashed != null) rows += paragraph("A debug report (Help → Troubleshooting) shows what went wrong; please send it.")
@@ -933,16 +933,59 @@ class SettingsActivity : Activity() {
                 rows += buttonRow("Accessibility settings" to { openServiceSwitch() })
             }
         }
+        if (on) rows += afterRestartRows()
         list.addView(card(rows))
     }
 
     /**
-     * Switches the stopped service off and on: by itself with Advanced access (Android's own setting,
+     * After a restart ([BootRestore]): the switch, and what SuperBoox can do about a service that
+     * didn't come back: switch it off and on itself (WRITE_SECURE_SETTINGS), or else notify.
+     */
+    private fun afterRestartRows(): List<View> {
+        val rows = mutableListOf(check("Turn the edge strip back on after a restart", prefs.restoreAfterRestart) {
+            prefs.restoreAfterRestart = it
+            DebugLog.i("boot", "restore after a restart ${if (it) "on" else "off"}")
+            render()
+        })
+        if (!prefs.restoreAfterRestart) return rows
+        val canSwitch = BootRestore.canSwitch(this)
+        val canNotify = BootRestore.canNotify(this)
+        rows += paragraph(when {
+            canSwitch -> "If BOOX doesn't start SuperBoox after a restart, SuperBoox switches it off and on by itself."
+            canNotify -> "If BOOX doesn't start SuperBoox after a restart, a notification tells you. " +
+                "To have SuperBoox turn it back on by itself, allow it once" +
+                if (AdvancedAccess.allowed()) " below." else " through Advanced access (Help → Advanced access), or over ADB."
+            else -> "If BOOX doesn't start SuperBoox after a restart, SuperBoox can tell you with a notification, " +
+                "or turn it back on by itself once allowed through Advanced access."
+        }).apply { setPadding(dp(16), dp(2), dp(16), dp(6)) }
+        val buttons = mutableListOf<Pair<String, () -> Unit>>()
+        if (!canSwitch && AdvancedAccess.allowed()) buttons += "Allow" to {
+            BootRestore.grantWithAdvancedAccess(this) { ok ->
+                DebugLog.i("boot", "secure settings permission ${if (ok) "granted" else "not granted"} through Advanced access")
+                toast(if (ok) "SuperBoox can turn itself back on now" else "Couldn't allow it through Shizuku")
+                render()
+            }
+        }
+        if (!canSwitch && !canNotify) buttons += "Allow notifications" to { requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFY) }
+        if (buttons.isNotEmpty()) rows += buttonRow(*buttons.toTypedArray())
+        return rows
+    }
+
+    /**
+     * Switches the stopped service off and on: by itself with the secure settings permission or Advanced access (Android's own setting,
      * as its switch writes it), otherwise by opening SuperBoox's switch in Android's settings.
      */
     private fun restartStoppedService() {
         val cn = ComponentName(this, QuickAccessService::class.java)
         val current = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+        if (BootRestore.canSwitch(this)) {
+            DebugLog.i("service", "restarting by switching it off and on")
+            return BootRestore.switchOffAndOn(this) { ok ->
+                if (!ok) return@switchOffAndOn openServiceSwitch()
+                toast("SuperBoox restarted")
+                scroll.postDelayed({ render() }, 1500)
+            }
+        }
         if (!AdvancedAccess.allowed()) return openServiceSwitch()
         val ours = setOf(cn.flattenToString().lowercase(), cn.flattenToShortString().lowercase())
         val without = current.split(':').filter { it.isNotBlank() && it.lowercase() !in ours }.joinToString(":")
@@ -1908,6 +1951,7 @@ class SettingsActivity : Activity() {
         const val REQ_RECENT = 3
         const val REQ_BACKUP = 4
         const val REQ_RESTORE = 5
+        const val REQ_NOTIFY = 6
         val io = Executors.newSingleThreadExecutor()
     }
 }

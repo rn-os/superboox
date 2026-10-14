@@ -774,10 +774,12 @@ class QuickAccessPanel(
 
     private fun lastNoteRow(): View {
         val note = Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.NOTE && !isCurrentNote(it) }
+            ?: notesFallback()
         val library = { service.openNotesFolder(note?.title) }
         // Nothing opened yet: the row opens the Notes library instead of sitting greyed out.
         if (note == null) return lastRow(R.drawable.ic_note, "Open Notes", "Nothing opened yet · hold for notes library", onHold = library, onClick = library)
-        return lastRow(R.drawable.ic_note, "Last Opened Note", note.title, onHold = library) { service.openBooxNote(note.title) }
+        val name = BooxNotes.splitPath(note.title).lastOrNull() ?: note.title
+        return lastRow(R.drawable.ic_note, "Last Opened Note", name, onHold = library) { service.openBooxNote(note.title) }
     }
 
     private fun lastDocumentRow(): View {
@@ -799,6 +801,15 @@ class QuickAccessPanel(
         if (foregroundPackage == ReaderLibrary.NEOREADER) return null
         val doc = service.readerLast ?: return null
         return RecentItem(RecentItem.Kind.DOCUMENT, doc.title, ReaderLibrary.NEOREADER, 0L, doc.path)
+    }
+
+    /** No note in SuperBoox's recents: BOOX Notes' most recently edited one, unless it's the note open now. */
+    private fun notesFallback(): RecentItem? {
+        val path = service.notesLast ?: return null
+        val item = RecentItem(RecentItem.Kind.NOTE, path, prefs.notesPackage, 0L)
+        val name = BooxNotes.splitPath(path).lastOrNull() ?: return null
+        if (currentNote != null && NotesScreen.matches(name, currentNote)) return null
+        return item
     }
 
     /** Tap reopens the note or document; hold opens where it lives. */

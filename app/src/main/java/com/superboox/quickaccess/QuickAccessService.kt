@@ -268,7 +268,14 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     @Volatile var readerLast: ReaderLibrary.Doc? = null
         private set
 
-    private fun refreshReaderLast() = io.execute { readerLast = ReaderLibrary.lastOpened(this) }
+    /** Same for notes: BOOX Notes' most recently edited note, as a path, for Last Opened Note. */
+    @Volatile var notesLast: String? = null
+        private set
+
+    private fun refreshReaderLast() = io.execute {
+        readerLast = ReaderLibrary.lastOpened(this)
+        notesLast = NotesDb.lastEdited(this)
+    }
 
     /** Called by [NoteOpener] when it has opened a note. */
     fun noteOpened(title: String) {

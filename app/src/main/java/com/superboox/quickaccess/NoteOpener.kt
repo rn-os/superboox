@@ -264,8 +264,9 @@ class NoteOpener(private val service: AccessibilityService) {
                 }
             DebugLog.i("note", "new-note setup: opened Notes via $how")
             setupTabTapped = how != "BOOX launcher"
+            // The tab router shows the library within a few hundred ms; the launcher takes longer.
+            handler.postDelayed({ setupTick(notesPackage) }, if (how == "BOOX tab router") POLL_MS else AFTER_BACK_MS)
         }
-        handler.postDelayed({ setupTick(notesPackage) }, AFTER_BACK_MS)
     }
 
     private fun setupTick(notesPackage: String) {
@@ -314,10 +315,17 @@ class NoteOpener(private val service: AccessibilityService) {
         handler.postDelayed({ createScreenTick(notesPackage, until) }, POLL_MS)
     }
 
-    /** The Notes library's "Create" box (Note Air 6C, firmware 4.3): not clickable, so it gets a real tap. */
+    /**
+     * The Notes library's "Create" box (Note Air 6C, firmware 4.3), at the top level or inside a
+     * folder: a "Create" label in the dashed com.onyx:id/content box. Not clickable, so it gets a real tap.
+     */
     private fun libraryCreateBox(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if (root.packageName?.toString() != BooxNotes.BOOX_HOME_PACKAGE || !NotesScreen.isLauncherNotesLibrary(root)) return null
-        return findFirst(root) { n -> n.isVisibleToUser && NotesScreen.textOf(n).trim().let { it.equals("Create", ignoreCase = true) || it == "新建" } }
+        if (root.packageName?.toString() != BooxNotes.BOOX_HOME_PACKAGE) return null
+        val contentId = "${BooxNotes.BOOX_HOME_PACKAGE}:id/content"
+        return findFirst(root) { n ->
+            n.isVisibleToUser && NotesScreen.textOf(n).trim().let { it.equals("Create", ignoreCase = true) || it == "新建" } &&
+                generateSequence(n.parent) { it.parent }.take(3).any { it.viewIdResourceName == contentId }
+        }
     }
 
     /** After tapping Create: BOOX's menu of note types; picks "Handwritten Notes". */

@@ -1034,6 +1034,9 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         packageManager.queryIntentActivities(home, 0).map { it.activityInfo.packageName }.toSet() + BooxNotes.BOOX_HOME_PACKAGE
     }
 
+    private fun defaultHome(): String? =
+        packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)?.activityInfo?.packageName
+
     private fun rememberApp(pkg: String) {
         if (pkg in homePackages || pkg.contains("quickstep") || pkg.contains("launcher") || pkg in NOT_APPS) return
         recentApps.remove(pkg)
@@ -1060,6 +1063,8 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 ?: BooxNotes.launchCandidates(this, prefs.notesPackage).firstOrNull()?.let { Launcher.start(this, it.second) }
             pkg == ReaderLibrary.NEOREADER -> Recents.list(prefs).firstOrNull { it.pkg == pkg && it.path.isNotEmpty() }
                 ?.let { ReaderLibrary.open(this, it.path) } ?: Launcher.launchApp(this, pkg)
+            // The user's home screen: Home itself (starting its activity from here didn't bring it back on the 6C).
+            pkg in homePackages && pkg != BooxNotes.BOOX_HOME_PACKAGE && pkg == defaultHome() -> performGlobalAction(GLOBAL_ACTION_HOME)
             pkg in homePackages -> Launcher.start(this, Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setPackage(pkg))
             else -> Launcher.launchApp(this, pkg)
         }

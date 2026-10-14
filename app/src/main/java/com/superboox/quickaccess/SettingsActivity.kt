@@ -280,6 +280,7 @@ class SettingsActivity : Activity() {
                 tourStep = 0
                 render()
             },
+            actionRow(R.drawable.ic_optimize, "Keep SuperBoox running", keepRunningSummary()) { tourGo(TOUR_KEEP) },
             menuRow(R.drawable.ic_check, Page.DEVICE, Devices.summary()),
             menuRow(R.drawable.ic_bug, Page.TROUBLESHOOTING, "Copy or share a debug report"),
             menuRow(R.drawable.ic_shield, Page.ADVANCED_ACCESS, when {
@@ -718,18 +719,42 @@ class SettingsActivity : Activity() {
         render()
     }
 
-    /** A permission row: what it's for, ✓ when granted, else a button to Android's switch. */
-    private fun permissionRow(title: String, detail: String, granted: Boolean, open: () -> Unit): View = vbox().apply {
+    /**
+     * A permission row: what it's for, ✓ when granted, else a button to its switch.
+     * [granted] null: the state can't be read, so no badge and the button always shows.
+     */
+    private fun permissionRow(title: String, detail: String, granted: Boolean?, button: String = "Turn on", open: () -> Unit): View = vbox().apply {
         setPadding(dp(16), dp(12), dp(16), dp(12))
         addView(hbox().apply {
             addView(text(title, 17f, medium = true), lp(0, WRAP, 1f))
-            addView(text(if (granted) "✓ On" else "Off", 14f, bold = true).apply {
+            if (granted != null) addView(text(if (granted) "✓ On" else "Off", 14f, bold = true).apply {
                 setPadding(dp(8), dp(2), dp(8), dp(2))
                 background = outline(2, 12)
             })
         })
         addView(text(detail, 13.5f, color = Ink.MUTED).apply { setPadding(0, dp(4), 0, dp(6)) })
-        if (!granted) addView(inkButton("Turn on") { open() }, lp(MATCH, WRAP))
+        if (granted != true) addView(inkButton(button) { open() }, lp(MATCH, WRAP))
+    }
+
+    /** Android's battery exemption: REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, or the app's info page where that can't open. */
+    private fun requestIgnoreBattery() {
+        if (!Launcher.tryStart(this, Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))))
+            Launcher.tryStart(this, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+    }
+
+    /** BOOX's "Stay active in the background" row: opens BOOX's Optimize panel for SuperBoox itself. */
+    private fun stayActiveRow(on: Boolean?): View = permissionRow(
+        "Stay active in the background",
+        "BOOX's own switch, in its Optimize panel for SuperBoox. Tap Others (the last tab), turn on Stay active in the background, then close the panel.",
+        on, if (on == null) "Open BOOX's Optimize panel" else "Turn on",
+    ) { if (!EinkMenus.openOptimize(this, packageName)) toast("Couldn't open BOOX's Optimize panel") }
+
+    /** Help row summary: which of the keep-running switches are on. */
+    private fun keepRunningSummary(): String {
+        val battery = if (ignoringBattery()) "Battery optimisation off" else "Battery optimisation on"
+        if (!EinkMenus.available) return battery
+        val stay = when (EinkMenus.stayActive(packageName)) { true -> "Stay active on"; false -> "Stay active off"; null -> "Stay active: check it" }
+        return "$stay · $battery"
     }
 
     private fun ignoringBattery(): Boolean =
@@ -766,14 +791,27 @@ class SettingsActivity : Activity() {
                 )))
                 list.addView(note("SuperBoox only reads what's on screen to find your notes and switches. Nothing leaves the tablet."))
             }
-            2 -> {
+            TOUR_KEEP -> {
+                title("Keep SuperBoox running")
+                val boox = EinkMenus.available
+                val stay = if (boox) EinkMenus.stayActive(packageName) else null
+                val battery = ignoringBattery()
+                para(if (boox) "BOOX stops apps running in the background to save battery, and SuperBoox is always in the background. When it's stopped, the edge strip stops working until you open SuperBoox again. Two switches keep it running."
+                    else "Android may stop apps running in the background to save battery, and SuperBoox is always in the background. When it's stopped, the edge strip stops working until you open SuperBoox again.")
+                list.addView(card(listOfNotNull(
+                    if (boox) stayActiveRow(stay) else null,
+                    permissionRow("Battery optimisation off", "Android's switch: allow SuperBoox to run in the background.", battery) { requestIgnoreBattery() },
+                )))
+                list.addView(note("Back here any time: Settings → Help → Keep SuperBoox running."))
+                // Notice the switches without the user having to leave this page (BOOX's panel opens over it).
+                if ((boox && stay == false) || !battery) tourPoll.postDelayed({
+                    if (tourStep == TOUR_KEEP && ((boox && EinkMenus.stayActive(packageName) != stay) || ignoringBattery() != battery)) render()
+                }, 1500)
+            }
+            TOUR_PERMISSIONS -> {
                 title("Permissions")
                 para("These are optional; each one unlocks something. Turn on what you'd like, now or later in Android settings.")
                 list.addView(card(listOf(
-                    permissionRow("Keep running in the background", "So BOOX doesn't freeze SuperBoox and the edge strip stops working.", ignoringBattery()) {
-                        if (!Launcher.tryStart(this, Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))))
-                            Launcher.tryStart(this, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
-                    },
                     permissionRow("Modify system settings", "Lets the Auto-rotate Quick Control switch rotation directly.", Settings.System.canWrite(this)) {
                         Launcher.tryStart(this, Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName")))
                     },
@@ -922,6 +960,9 @@ class SettingsActivity : Activity() {
                         if (AdvancedAccess.allowed()) "Restart does that for you." else "Restart opens its switch: turn it off, then on.",
                 ).apply { setPadding(dp(16), dp(4), dp(16), dp(6)) }
                 rows += buttonRow("Restart service" to { restartStoppedService() })
+                if (EinkMenus.available && EinkMenus.stayActive(packageName) != true) rows += paragraph(
+                    "To keep BOOX from stopping it, turn on Stay active in the background (Help → Keep SuperBoox running).",
+                ).apply { setPadding(dp(16), 0, dp(16), dp(10)) }
                 if (crashed != null) rows += paragraph("A debug report (Help → Troubleshooting) shows what went wrong; please send it.")
                     .apply { setPadding(dp(16), 0, dp(16), dp(10)) }
             }
@@ -1898,11 +1939,13 @@ class SettingsActivity : Activity() {
         const val EXTRA_EDIT_PRESET = "edit_preset"
         private const val K_PREVIEW = "preview"
         private const val K_TOUR = "tour"
-        private const val TOUR_STEPS = 8
-        private const val TOUR_TRY = 3
-        private const val TOUR_PANEL = 4
-        private const val TOUR_CLIPBOARD = 5
-        private const val TOUR_ADVANCED = 6
+        private const val TOUR_STEPS = 9
+        private const val TOUR_KEEP = 2
+        private const val TOUR_PERMISSIONS = 3
+        private const val TOUR_TRY = 4
+        private const val TOUR_PANEL = 5
+        private const val TOUR_CLIPBOARD = 6
+        private const val TOUR_ADVANCED = 7
         const val REQ_FILE = 1
         const val REQ_FOLDER = 2
         const val REQ_RECENT = 3

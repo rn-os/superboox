@@ -411,7 +411,8 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 ## Releases (from 1.0.0)
 
 - **Stable releases.** Run the "Build APK" workflow manually with `release=X.Y.Z`, or push a `vX.Y.Z` tag (this session can't push tags; it got a 403). Either way the workflow builds versionName X.Y.Z, tags `vX.Y.Z` and publishes it as Latest, with notes from `docs/releases/vX.Y.Z.md`.
-- **Pre-releases.** Every other push builds `NEXT_VERSION-dev.<run>` (NEXT_VERSION is set in the workflow, currently 1.1.0) and publishes it as a GitHub pre-release. Obtainium only offers those with "Include prereleases" on.
+- **Pre-releases.** Every push to the default branch (or a manual run on it without `release`) builds `NEXT_VERSION-dev.<run>` (NEXT_VERSION is set in the workflow, currently 1.1.0) and publishes it as a GitHub pre-release. Obtainium only offers those with "Include prereleases" on.
+- **Branch and PR builds** build `NEXT_VERSION-branch.<run>`, signed the same way, and only upload it as a workflow artifact: nothing is published, so Obtainium never offers it. The run's summary links the artifact; from the Mac, `gh run download <run id> -R rn-os/superboox` then `adb install -r` it. Pushes to a same-repo PR branch build once (on the push); only fork PRs get their own `pull_request` run.
 - **versionCode** is still the run number, so builds always install as upgrades.
 - **v1.0.0** was published from commit 24a5c02, the build 72 code. Its release check: signed with the repo key, versionName 1.0.0.
 

@@ -22,11 +22,13 @@ permissions:
   contents: write
 
 env:
-  # The version being worked towards: branch builds are pre-releases of it.
+  # The version being worked towards: default-branch builds are pre-releases of it.
   NEXT_VERSION: "1.1.0"
 
 jobs:
   build:
+    # A branch push already builds the commit; only PRs from forks need their own run.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,32 +37,54 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
-      # Stable: a manual run with release=1.2.3, or a v1.2.3 tag -> version 1.2.3 (tag v1.2.3 created). Everything else: NEXT_VERSION-dev.<run>, a pre-release.
+      # Stable: a manual run with release=1.2.3, or a v1.2.3 tag -> version 1.2.3 (tag v1.2.3 created).
+      # Default branch (push or manual run): NEXT_VERSION-dev.<run>, published as a pre-release.
+      # Any other branch or PR: NEXT_VERSION-branch.<run>, a workflow artifact only, so it never
+      # shows up in Obtainium as the newest build.
       - name: Version
         id: version
+        env:
+          DEFAULT_REF: refs/heads/${{ github.event.repository.default_branch }}
         run: |
           if [[ -n "${{ github.event.inputs.release }}" ]]; then
             echo "name=${{ github.event.inputs.release }}" >> "$GITHUB_OUTPUT"
-            echo "stable=true" >> "$GITHUB_OUTPUT"
+            echo "kind=stable" >> "$GITHUB_OUTPUT"
           elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             echo "name=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-            echo "stable=true" >> "$GITHUB_OUTPUT"
-          else
+            echo "kind=stable" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_EVENT_NAME}" != pull_request && "${GITHUB_REF}" == "${DEFAULT_REF}" ]]; then
             echo "name=${NEXT_VERSION}-dev.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-            echo "stable=false" >> "$GITHUB_OUTPUT"
+            echo "kind=dev" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${NEXT_VERSION}-branch.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "kind=branch" >> "$GITHUB_OUTPUT"
           fi
       - name: Build debug APK
         run: SB_VERSION="${{ steps.version.outputs.name }}" ./gradlew --no-daemon assembleDebug
       - name: Name APK
         run: cp app/build/outputs/apk/debug/app-debug.apk "superboox-${{ steps.version.outputs.name }}.apk"
       - uses: actions/upload-artifact@v4
+        id: artifact
         with:
           name: superboox-${{ steps.version.outputs.name }}
           path: superboox-*.apk
+      # Branch and PR builds: where to get the APK for testing (signed with the same key, so it
+      # installs over any other build). From a Mac: gh run download <run id> -R rn-os/superboox
+      - name: Summary
+        if: steps.version.outputs.kind == 'branch'
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          {
+            echo "### Test build ${{ steps.version.outputs.name }} (not published)"
+            echo "From \`${BRANCH}\` at ${{ github.sha }}."
+            echo "Download: ${{ steps.artifact.outputs.artifact-url }} (a .zip holding the .apk)"
+            echo "Or: \`gh run download ${{ github.run_id }} -R ${{ github.repository }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
       # Stable releases: a direct .apk link for the BOOX browser and the update Obtainium offers
       # by default. The tag equals the APK's versionName so Obtainium's version check matches.
       - name: Publish stable release
-        if: steps.version.outputs.stable == 'true'
+        if: steps.version.outputs.kind == 'stable'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.name }}
@@ -70,9 +94,9 @@ jobs:
           make_latest: true
           files: superboox-*.apk
           body_path: docs/releases/v${{ steps.version.outputs.name }}.md
-      # Every other push: a pre-release. Obtainium only offers these with "Include prereleases" on.
+      # Default-branch builds: a pre-release. Obtainium only offers these with "Include prereleases" on.
       - name: Publish pre-release
-        if: steps.version.outputs.stable == 'false' && github.event_name != 'pull_request'
+        if: steps.version.outputs.kind == 'dev'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.name }}

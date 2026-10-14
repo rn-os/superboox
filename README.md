@@ -22,7 +22,7 @@ No computer or adb needed. No internet permission.
    You can also download the latest `superboox-build-N.apk` from [Releases](https://github.com/rn-os/superboox/releases) and open it on the device.
 2. **Open SuperBoox.** A short tour (9 steps, with Next, Previous and Skip) walks you through:
    - **Turning on the service.** Android settings → Accessibility → SuperBoox Quick Access → On. This is the only required step.
-   - **Keeping it running.** On BOOX, the tour opens BOOX's Optimize panel for SuperBoox: tap **Others** and turn on **Stay active in the background**, or BOOX may stop SuperBoox in the background. It also asks Android to leave SuperBoox's battery use alone.
+   - **Keeping it running.** On BOOX, the tour opens BOOX's Optimize panel for SuperBoox: tap **Others** and turn on **Stay active in the background**, or BOOX may stop SuperBoox in the background. It also asks Android to leave SuperBoox's battery use alone. And it has the switch that turns the edge strip back on after a restart (see below).
    - **Trying it.** Your swipe strip is drawn in black, so you can see where to swipe.
    - **A guided look at the real panel** and the clipboard.
    - **Permissions,** each with a button and a line about why. All are optional:

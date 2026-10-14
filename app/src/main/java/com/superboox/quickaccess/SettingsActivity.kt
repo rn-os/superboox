@@ -803,6 +803,8 @@ class SettingsActivity : Activity() {
                     if (boox) stayActiveRow(stay) else null,
                     permissionRow("Battery optimisation off", "Android's switch: allow SuperBoox to run in the background.", battery) { requestIgnoreBattery() },
                 )))
+                // BOOX also stops every app right after the tablet starts; this brings the strip back.
+                list.addView(card(afterRestartRows()))
                 list.addView(note("Back here any time: Settings → Help → Keep SuperBoox running."))
                 // Notice the switches without the user having to leave this page: BOOX's panel is an
                 // overlay, so nothing resumes when it closes. Checks until something changes.

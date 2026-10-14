@@ -647,14 +647,42 @@ object ClipHistory {
             val uri = runCatching { galleryUri(app, clip) }
                 .onFailure { DebugLog.w("clipboard", "mark up: no gallery copy: ${it.javaClass.simpleName} ${it.message}") }.getOrNull()
             main.post {
-                val ok = uri != null && Launcher.tryStart(app, Intent(Intent.ACTION_EDIT).setDataAndType(uri, "image/*")
-                    // A new task each time: an editor still open from last time would show its old picture.
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-                        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                val edit = uri?.let {
+                    Intent(Intent.ACTION_EDIT).setDataAndType(it, "image/*")
+                        // A new task each time: an editor still open from last time would show its old picture.
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                }
+                val ok = edit != null && Launcher.tryStart(app, edit)
                 DebugLog.i("clipboard", if (ok) "opened a picture to mark up" else "no picture editor opened")
+                if (ok && edit != null) reopenIfClosedAtOnce(app, edit)
                 done(ok)
             }
         }
+    }
+
+    /**
+     * BOOX's Gallery editor sometimes closes itself about a second after a cold start (its drawing view isn't
+     * ready when the picture is; Note Air 6C, firmware 4.3); a second start works. So: if the editor came to
+     * the front and left again within a few seconds, it's opened once more. Main thread.
+     */
+    private fun reopenIfClosedAtOnce(context: Context, edit: Intent) {
+        val editor = runCatching { context.packageManager.resolveActivity(edit, 0)?.activityInfo?.packageName }.getOrNull() ?: return
+        val started = SystemClock.uptimeMillis()
+        var seen = false
+        val check = object : Runnable {
+            override fun run() {
+                val front = QuickAccessService.instance?.foregroundPackage ?: return
+                if (front == editor) seen = true
+                else if (seen) {
+                    DebugLog.i("clipboard", "the editor closed right after opening; opening it again")
+                    Launcher.tryStart(context, edit)
+                    return
+                }
+                if (SystemClock.uptimeMillis() - started < 4_000L) main.postDelayed(this, 250L)
+            }
+        }
+        main.postDelayed(check, 250L)
     }
 
     /** The clip's picture as a gallery (MediaStore) item. Off the main thread. */

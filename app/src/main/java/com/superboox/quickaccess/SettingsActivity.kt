@@ -762,6 +762,7 @@ class SettingsActivity : Activity() {
 
     private fun renderTour() {
         val step = tourStep ?: return
+        tourPoll.removeCallbacksAndMessages(null)  // each render starts its own check
         val svc = QuickAccessService.instance
         list.addView(hbox().apply {
             setPadding(dp(20), dp(18), dp(16), dp(6))
@@ -803,10 +804,18 @@ class SettingsActivity : Activity() {
                     permissionRow("Battery optimisation off", "Android's switch: allow SuperBoox to run in the background.", battery) { requestIgnoreBattery() },
                 )))
                 list.addView(note("Back here any time: Settings → Help → Keep SuperBoox running."))
-                // Notice the switches without the user having to leave this page (BOOX's panel opens over it).
-                if ((boox && stay == false) || !battery) tourPoll.postDelayed({
-                    if (tourStep == TOUR_KEEP && ((boox && EinkMenus.stayActive(packageName) != stay) || ignoringBattery() != battery)) render()
-                }, 1500)
+                // Notice the switches without the user having to leave this page: BOOX's panel is an
+                // overlay, so nothing resumes when it closes. Checks until something changes.
+                if ((boox && stay == false) || !battery) {
+                    val check = object : Runnable {
+                        override fun run() {
+                            if (tourStep != TOUR_KEEP) return
+                            if ((boox && EinkMenus.stayActive(packageName) != stay) || ignoringBattery() != battery) render()
+                            else tourPoll.postDelayed(this, 1500)
+                        }
+                    }
+                    tourPoll.postDelayed(check, 1500)
+                }
             }
             TOUR_PERMISSIONS -> {
                 title("Permissions")

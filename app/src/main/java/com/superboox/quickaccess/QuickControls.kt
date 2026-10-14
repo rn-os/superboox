@@ -60,6 +60,7 @@ object QuickControls {
     }
 
     const val FRONT_LIGHT = "frontlight"
+    const val WRITING = "writing"
     private const val SWITCHES = "Switches"
     private const val BOOX = "BOOX"
     private const val ACTIONS = "Actions"
@@ -74,6 +75,8 @@ object QuickControls {
         Control("rotate", "Auto‑rotate", R.drawable.ic_qc_rotate, Kind.TOGGLE, listOf("auto rotate", "autorotate"), group = SWITCHES, holdTaps = true),
         Control("mute", "Mute", R.drawable.ic_qc_mute, Kind.TOGGLE, listOf("mute"), group = SWITCHES),
         Control("location", "Location", R.drawable.ic_qc_location, Kind.TOGGLE, listOf("location"), group = SWITCHES),
+        // Not a tile: SuperBoox's own mode, which switches the tiles above (see WritingMode).
+        Control(WRITING, "Writing", R.drawable.ic_qc_writing, Kind.TOGGLE, group = SWITCHES),
         Control("einkwise", "EinkWise", R.drawable.ic_settings, Kind.TOGGLE, listOf("einkwise", "eink wise"), group = BOOX),
         // Not a tile: BOOX's Front Light presets under the tiles (see pressPreset).
         Control(FRONT_LIGHT, "Front Light", R.drawable.ic_qc_light, Kind.TOGGLE, group = BOOX),

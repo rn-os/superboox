@@ -519,6 +519,11 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             }
             return
         }
+        // Writing mode: SuperBoox's own switch (hold opens its settings, from the panel).
+        if (control.id == QuickControls.WRITING) {
+            if (!hold) writingMode(!isWritingMode)
+            return
+        }
         // Front Light: hold shows the presets in the panel; tap goes off, or back to the last preset.
         if (control.id == QuickControls.FRONT_LIGHT) {
             if (hold) return
@@ -676,6 +681,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         val now = SystemClock.uptimeMillis()
         optimistic.entries.removeAll { it.value.second < now }
         optimistic.forEach { (id, v) -> out[id] = v.first }
+        out[QuickControls.WRITING] = isWritingMode
         return out
     }
 

@@ -330,8 +330,30 @@ class QuickAccessPanel(
                 addView(pagerButton(R.drawable.ic_chevron_right, "More controls", page < pages.size - 1) { go(page + 1) })
             }, lp(MATCH, WRAP))
         }
+        if (service.isWritingMode) box.addView(writingBar(), lp(MATCH, WRAP).apply { setMargins(s(6), s(4), s(6), s(8)) })
         if (lightMenu && controls.any { it.id == QuickControls.FRONT_LIGHT }) box.addView(frontLightMenu(), lp(MATCH, WRAP))
         box
+    }
+
+    /** Shown while Writing mode is on: what it switched off, and the way back. Solid black, so it reads on any screen. */
+    private fun writingBar(): View = with(ctx) {
+        hbox().apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = outline(2, 10, Ink.INK)
+            setPadding(s(12), s(8), s(8), s(8))
+            addView(icon(getDrawable(R.drawable.ic_qc_writing), iconPx(22)).apply { imageTintList = ColorStateList.valueOf(Ink.PAPER) })
+            addView(vbox().apply {
+                setPadding(s(10), 0, s(8), 0)
+                addView(text("Writing mode is on", sp(15f), bold = true, color = Ink.PAPER))
+                addView(text(WritingMode.summary(prefs), sp(12.5f), color = Ink.PAPER))
+            }, lp(0, WRAP, 1f))
+            addView(text("Turn off", sp(14f), bold = true).apply {
+                background = outline(2, 8)
+                setPadding(s(10), s(6), s(10), s(6))
+                contentDescription = "Turn Writing mode off"
+                setOnClickListener { service.writingMode(false) }
+            })
+        }
     }
 
     /** Page of the Front Light box: 0 is BOOX's presets, then yours. */
@@ -728,6 +750,8 @@ class QuickAccessPanel(
                         // Make sure it shows what BOOX actually has (it may have been changed there).
                         service.checkFrontLight()
                     }
+                } else if (control.id == QuickControls.WRITING) {
+                    openSettingsPage("CONTROLS")
                 } else {
                     service.quickControl(control, hold = true)
                 }

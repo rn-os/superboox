@@ -239,6 +239,13 @@ object QuickControls {
         return Press(found = true, pressed = pressed, before = tile.on)
     }
 
+    /** [control]'s tile as the open Control Center shows it right now (null: not there, or no state). */
+    fun tileState(service: AccessibilityService, prefs: Prefs, control: Control): Boolean? {
+        val tiles = runCatching { readTiles(service) }.getOrDefault(emptyList())
+        saveStates(prefs, statesOf(tiles))
+        return tiles.firstOrNull { control.matches(it.normalized) }?.on
+    }
+
     class Press(val found: Boolean, val pressed: Boolean, val before: Boolean?)
 
     /**

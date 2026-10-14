@@ -787,7 +787,7 @@ class QuickAccessPanel(
             // Recent Files moves here when the top bar has the Clipboard button.
             if (prefs.clipShowButton) addView(vbox().apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(s(6), 0, s(6), 0)
+                setPadding(s(8), s(4), s(8), s(3))
                 contentDescription = "Recent Files"
                 minimumWidth = s(48)
                 addView(icon(getDrawable(R.drawable.ic_clock), iconPx(24)))
@@ -797,16 +797,17 @@ class QuickAccessPanel(
                     maxLines = 1
                     setHorizontallyScrolling(false)
                 }, lp(WRAP, WRAP))
-                pressable()
+                pressable(outline(2, 8))
                 setOnClickListener { show(Mode.RECENT) }
             }, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.START or Gravity.CENTER_VERTICAL))
             addView(vbox().apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(s(6), 0, s(6), 0)
+                setPadding(s(8), s(4), s(8), s(3))
+                minimumWidth = s(48)
                 contentDescription = "Add to Quick Access"
                 addView(icon(getDrawable(R.drawable.ic_link_add), iconPx(24)))
                 addView(text("Add", sp(11f)).apply { gravity = Gravity.CENTER; maxLines = 1 }, lp(WRAP, WRAP))
-                pressable()
+                pressable(outline(2, 8))
                 setOnClickListener { addFromContext() }
             }, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.END or Gravity.CENTER_VERTICAL))
         })
@@ -1362,8 +1363,9 @@ class QuickAccessPanel(
             setPadding(s(8), s(12), s(16), s(12))
             addView(hbox().apply {
                 addView(icon(getDrawable(R.drawable.ic_chevron_left), iconPx(26)))
-                addView(text("Back", sp(14f)))
-                pressable()
+                addView(text("Back", sp(14f), bold = true))
+                setPadding(s(2), s(2), s(12), s(2))
+                pressable(outline(2, 16))
                 setOnClickListener { show(Mode.MAIN) }
             }, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.START or Gravity.CENTER_VERTICAL))
             addView(text("Recent Files", sp(17f), bold = true), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
@@ -1459,10 +1461,10 @@ class QuickAccessPanel(
                 }, lp(0, WRAP, 1f))
                 addView(FrameLayout(ctx).apply {
                     contentDescription = "Remove ${r.title} from Recent Files"
-                    addView(ctx.icon(ctx.getDrawable(R.drawable.ic_close), iconPx(20)), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
-                    pressable()
+                    addView(ctx.icon(ctx.getDrawable(R.drawable.ic_close), iconPx(16)), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+                    pressable(ctx.outline(2, 8))
                     setOnClickListener { onRemove(r) }
-                }, lp(s(42), s(42)))
+                }, lp(s(30), s(30)).apply { marginStart = s(6); marginEnd = s(10) })
                 pressable()
                 setOnClickListener { r.open() }
             })

@@ -1054,7 +1054,9 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     private val homePackages: Set<String> by lazy {
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-        packageManager.queryIntentActivities(home, 0).map { it.activityInfo.packageName }.toSet() + BooxNotes.BOOX_HOME_PACKAGE
+        // Settings' FallbackHome (priority -1000) is only a placeholder home, not a launcher.
+        packageManager.queryIntentActivities(home, 0).filter { it.priority > -1000 }.map { it.activityInfo.packageName }.toSet() +
+            BooxNotes.BOOX_HOME_PACKAGE
     }
 
     private fun defaultHome(): String? =
@@ -1098,7 +1100,10 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 ?.let { ReaderLibrary.open(this, it.path) } ?: Launcher.launchApp(this, pkg)
             // The user's home screen: Home itself (starting its activity from here didn't bring it back on the 6C).
             pkg in homePackages && pkg != BooxNotes.BOOX_HOME_PACKAGE && pkg == defaultHome() -> performGlobalAction(GLOBAL_ACTION_HOME)
-            pkg in homePackages -> Launcher.start(this, Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setPackage(pkg))
+            pkg in homePackages -> Launcher.start(
+                this,
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
             // An app that can't be started again: the user's home screen instead.
             else -> if (!Launcher.launchApp(this, pkg)) performGlobalAction(GLOBAL_ACTION_HOME)
         }

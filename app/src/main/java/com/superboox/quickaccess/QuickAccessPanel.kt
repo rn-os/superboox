@@ -224,7 +224,7 @@ class QuickAccessPanel(
             else -> quickAccessList()
         }
         flip.addView(scrolling(middle), lp(MATCH, 0, 1f))
-        if (mode == Mode.EDIT) flip.enabled = false
+        if (mode == Mode.EDIT) flip.swipeOn = false
         content.addView(flip, lp(MATCH, 0, 1f))
         content.addView(rule(3))
         thisAppStrip()?.let {
@@ -1969,7 +1969,7 @@ private class SwipeRow(
     private val only: Int = 0,
     private val onSwipe: (Int) -> Unit,
 ) : android.widget.LinearLayout(context) {
-    var enabled = true
+    var swipeOn = true
     private var downX = 0f
     private var downY = 0f
 
@@ -1985,7 +1985,7 @@ private class SwipeRow(
             }
             android.view.MotionEvent.ACTION_MOVE -> {
                 val dx = e.x - downX
-                if (!enabled || (only != 0 && (if (dx < 0) 1 else -1) != only)) return false
+                if (!swipeOn || (only != 0 && (if (dx < 0) 1 else -1) != only)) return false
                 if (kotlin.math.abs(dx) > threshold / 2 && kotlin.math.abs(dx) > kotlin.math.abs(e.y - downY)) return true
             }
         }

@@ -231,16 +231,24 @@ class QuickAccessPanel(
             content.addView(quickControlsRow(), lp(MATCH, WRAP))
             content.addView(rule(2))
         }
-        content.addView(lastNoteRow())
-        content.addView(insetRule())
-        content.addView(lastDocumentRow())
-        content.addView(rule(3))
+        // A swipe right anywhere in the Last Opened rows and the list below flips between
+        // Quick Access and Recent Files (not while editing, where rows are dragged). The controls
+        // above and the apps below keep their own sideways paging.
+        val flip = SwipeRow(ctx, s(40), vertical = true, only = -1) { _ ->
+            show(if (mode == Mode.RECENT) Mode.MAIN else Mode.RECENT)
+        }
+        flip.addView(lastNoteRow())
+        flip.addView(insetRule())
+        flip.addView(lastDocumentRow())
+        flip.addView(rule(3))
         val middle = when (mode) {
             Mode.RECENT -> recentList()
             Mode.EDIT -> editList()
             else -> quickAccessList()
         }
-        content.addView(scrolling(middle), lp(MATCH, 0, 1f))
+        flip.addView(scrolling(middle), lp(MATCH, 0, 1f))
+        if (mode == Mode.EDIT) flip.swipeOn = false
+        content.addView(flip, lp(MATCH, 0, 1f))
         content.addView(rule(3))
         thisAppStrip()?.let {
             content.addView(it, lp(MATCH, WRAP))
@@ -1293,10 +1301,11 @@ class QuickAccessPanel(
         // Pages, like the rest of the panel; scrolls only if an opened clip makes the page too tall.
         val swipe = SwipeRow(ctx, s(40), vertical = true) { dir ->
             val to = clipPage + dir
-            if (to in 0 until pages) { clipPage = to; clipOpen = null; fillClips() }
+            if (to < 0) show(Mode.MAIN)
+            else if (to in 0 until pages) { clipPage = to; clipOpen = null; fillClips() }
         }
-        swipe.addView(list, lp(MATCH, WRAP))
-        body.addView(scrolling(swipe), lp(MATCH, 0, 1f))
+        swipe.addView(scrolling(list), lp(MATCH, 0, 1f))
+        body.addView(swipe, lp(MATCH, 0, 1f))
         if (pages > 1) {
             body.addView(ctx.hbox().apply {
                 gravity = Gravity.CENTER
@@ -2025,8 +2034,11 @@ private class SwipeRow(
     context: android.content.Context,
     private val threshold: Int,
     vertical: Boolean = false,
+    /** 1 or -1: react only to a swipe left (1) or right (-1); 0 reacts to both. */
+    private val only: Int = 0,
     private val onSwipe: (Int) -> Unit,
 ) : android.widget.LinearLayout(context) {
+    var swipeOn = true
     private var downX = 0f
     private var downY = 0f
 
@@ -2042,6 +2054,7 @@ private class SwipeRow(
             }
             android.view.MotionEvent.ACTION_MOVE -> {
                 val dx = e.x - downX
+                if (!swipeOn || (only != 0 && (if (dx < 0) 1 else -1) != only)) return false
                 if (kotlin.math.abs(dx) > threshold / 2 && kotlin.math.abs(dx) > kotlin.math.abs(e.y - downY)) return true
             }
         }
@@ -2051,7 +2064,8 @@ private class SwipeRow(
     override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
         if (e.actionMasked == android.view.MotionEvent.ACTION_UP) {
             val dx = e.x - downX
-            if (kotlin.math.abs(dx) > threshold) onSwipe(if (dx < 0) 1 else -1)
+            val dir = if (dx < 0) 1 else -1
+            if (kotlin.math.abs(dx) > threshold && (only == 0 || dir == only)) onSwipe(dir)
         }
         return true
     }

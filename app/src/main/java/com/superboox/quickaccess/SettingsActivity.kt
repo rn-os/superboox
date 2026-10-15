@@ -163,7 +163,7 @@ class SettingsActivity : Activity() {
     private enum class Page(val title: String) {
         HOME("SuperBoox"), GESTURE("Gesture"), LOOK("Look & size"), ITEMS("Quick Access items"),
         CONTROLS("Quick Controls"), APPS("Apps at the bottom"), RECENT("Recent files"), CLIPBOARD("Clipboard"),
-        TROUBLESHOOTING("Troubleshooting"), BACKUP("Backup & restore"), ADVANCED_ACCESS("Advanced access"), ADVANCED("Advanced"),
+        TROUBLESHOOTING("Troubleshooting"), BACKUP("Backup & restore"), ADVANCED_ACCESS("Advanced access"),
     }
 
     private var page = Page.HOME
@@ -211,7 +211,6 @@ class SettingsActivity : Activity() {
                 Page.TROUBLESHOOTING -> troubleshootingSection()
                 Page.BACKUP -> backupSection()
                 Page.ADVANCED_ACCESS -> advancedAccessSection()
-                Page.ADVANCED -> advancedSection()
                 Page.HOME -> Unit
             }
         }
@@ -279,7 +278,7 @@ class SettingsActivity : Activity() {
             menuRow(R.drawable.ic_clock, Page.RECENT,
                 if (folder == null) "Off" else "Folder: ${Launcher.displayName(this, Uri.parse(folder))}"),
             menuRow(R.drawable.ic_toggle, Page.CONTROLS,
-                if (prefs.showSystemActions) "On · ${controls.size} controls" else "Off"),
+                if (controls.isEmpty()) "Off" else "On · ${controls.size} controls"),
             menuRow(R.drawable.ic_star, Page.ITEMS, prefs.pins.size.let { if (it == 1) "1 item" else "$it items" }),
             menuRow(R.drawable.ic_apps, Page.APPS,
                 (if (apps == 1) "1 app" else "$apps apps") + if (prefs.previousAppInDock) " · Previous app included" else ""),
@@ -304,7 +303,6 @@ class SettingsActivity : Activity() {
                 else -> "Off · unlocks independent Front Light presets"
             }),
             menuRow(R.drawable.ic_save, Page.BACKUP, lastBackup()?.let { "Last backup: $it" } ?: "Save your settings to a file"),
-            menuRow(R.drawable.ic_settings, Page.ADVANCED, "BOOX Notes package"),
         )))
         list.addView(View(this), lp(MATCH, dp(24)))
     }
@@ -1195,9 +1193,6 @@ class SettingsActivity : Activity() {
     private fun quickControlsSection() {
         val controls = QuickControls.selected(prefs)
         list.addView(View(this), lp(MATCH, dp(12)))
-        list.addView(card(listOf(
-            check("Show Quick Controls in the panel", prefs.showSystemActions) { prefs.showSystemActions = it },
-        )))
         if (controls.any { it.id == QuickControls.FRONT_LIGHT }) myLightPresets()
         if (controls.any { it.id == QuickControls.WRITING } || WritingMode.isOn(prefs)) writingModeCards()
         list.addView(heading("Controls · ${QuickAccessPanel.QC_PER_PAGE} per page"))
@@ -1208,7 +1203,7 @@ class SettingsActivity : Activity() {
                 onRemove = { QuickControls.save(prefs, controls.filterNot { it.id == c.id }) })
             if (c.id in shownGuides) rows += controlGuide(c)
         }
-        if (controls.isEmpty()) rows += cardText("No controls yet.")
+        if (controls.isEmpty()) rows += cardText("No controls yet. Add one to show the row in the panel.")
         rows += buttonRow(
             "+ Add control" to { addControls() },
             "Reset to default" to { QuickControls.reset(prefs); render() },
@@ -1369,22 +1364,22 @@ class SettingsActivity : Activity() {
         val ticked = LinkedHashSet<String>()
         val body = vbox().apply { setPadding(dp(8), dp(4), dp(8), dp(4)) }
         for (group in QuickControls.GROUPS) {
+            val available = QuickControls.ALL.filter { it.group == group && it.id !in have }
+            if (available.isEmpty()) continue
             body.addView(text(group.uppercase(), 13f, bold = true).apply {
                 letterSpacing = 0.06f
                 setPadding(dp(12), dp(14), dp(12), dp(4))
             })
-            QuickControls.ALL.filter { it.group == group }.forEach { c ->
-                val added = c.id in have
+            available.forEach { c ->
                 body.addView(CheckBox(this).apply {
                     buttonTintList = android.content.res.ColorStateList.valueOf(Ink.INK)
-                    text = if (added) "${c.label}  (added)" else c.label
+                    text = c.label
                     textSize = 16f
-                    isEnabled = !added
-                    isChecked = added
                     setOnCheckedChangeListener { _, on -> if (on) ticked += c.id else ticked -= c.id }
                 })
             }
         }
+        if (body.childCount == 0) body.addView(text("Every control is already in your panel.", 16f).apply { setPadding(dp(12), dp(14), dp(12), dp(14)) })
         AlertDialog.Builder(this)
             .setTitle("Add control")
             .setView(ScrollView(this).apply { addView(body) })
@@ -1495,8 +1490,8 @@ class SettingsActivity : Activity() {
             if (shots) check("Also put it on the clipboard, ready to paste", prefs.clipShotToClipboard) { prefs.clipShotToClipboard = it } else null,
             if (shots) check("Open each one to mark up", prefs.clipShotMarkUp) { prefs.clipShotMarkUp = it } else null,
             keepRow("Codes", "Short codes on their own, like a 6-digit sign-in code. Off by default; they're usually only needed once.", everyCopy, prefs.clipKeepCodes) { prefs.clipKeepCodes = it },
-            keepRow("Passwords and private copies", "Never kept: copies from password managers and anything an app marks as private.", null, true, locked = true) {},
         )))
+        list.addView(note("Passwords and anything an app marks as private are never kept."))
         list.addView(heading("Handwriting previews"))
         val files = ClipHistory.hasFileAccess()
         list.addView(card(listOf(
@@ -1658,17 +1653,6 @@ class SettingsActivity : Activity() {
             .show()
     }
 
-    private fun advancedSection() {
-        list.addView(View(this), lp(MATCH, dp(12)))
-        val pkg = prefs.notesPackage
-        val installed = BooxNotes.isInstalled(this, pkg)
-        list.addView(card(listOf(
-            choiceRow("BOOX Notes package", if (installed) pkg else "$pkg (not found)") {
-                prompt("BOOX Notes package", pkg, "Package name") { prefs.notesPackage = it.ifBlank { BooxNotes.DEFAULT_PACKAGE } }
-            },
-        )))
-    }
-
     /** What SuperBoox knows about this tablet: each device-dependent feature and whether it's been seen working here. */
     /**
      * The one place to go when something's wrong: the switches that keep SuperBoox running,
@@ -1698,10 +1682,14 @@ class SettingsActivity : Activity() {
             ),
         )))
         list.addView(heading("Your device"))
+        val pkg = prefs.notesPackage
         list.addView(card(listOf(cardText(
             "${Devices.summary()}\n${Devices.verdict()}\n\nSuperBoox reads BOOX's own screens and files, which differ between " +
                 "models and firmware. \"Not yet tested\" means nobody has confirmed it on a tablet like yours, not that it's broken.",
-        ))))
+        ), choiceRow("BOOX Notes package", if (BooxNotes.isInstalled(this, pkg)) pkg else "$pkg (not found)") {
+            prompt("BOOX Notes package", pkg, "Package name") { prefs.notesPackage = it.ifBlank { BooxNotes.DEFAULT_PACKAGE } }
+        })))
+        list.addView(note("Only change the package if your BOOX Notes app has a different name."))
         list.addView(heading("Checked features"))
         list.addView(card(Devices.Feature.values().map { f ->
             hbox().apply {

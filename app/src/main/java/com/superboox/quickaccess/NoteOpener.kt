@@ -636,6 +636,10 @@ class NoteOpener(private val service: AccessibilityService) {
                     if (j.index >= j.steps.size) return succeed(j)
                     return later(0)
                 }
+                // Saved paths start at the top level: in some other folder, go up rather than page through it.
+                if (header != null && j.index == 0 && state.cards.none { NotesScreen.matches(it.label, target) }) {
+                    return back(j, now, signature, "in \"${NotesScreen.textOf(header)}\", not \"$target\"", root)
+                }
                 val card = state.cards.firstOrNull { NotesScreen.matches(it.label, target) }
                 // Never the folder's own header: tapping it goes up a level.
                 val node = card?.node ?: findLabel(root, target)?.takeUnless { header != null && it == header }

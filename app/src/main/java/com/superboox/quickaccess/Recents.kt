@@ -63,10 +63,16 @@ object Recents {
         if (item.kind == RecentItem.Kind.NOTE && isToolName(item.title)) return DebugLog.i("recent", "skipped tool \"${item.title}\"")
         val current = list(prefs)
         val sameAsNewest = current.firstOrNull()?.key == item.key
-        val updated = (listOf(item) + current.filterNot { it.key == item.key }).take(MAX)
+        // A note is one entry whether or not its folder is known yet ("Note" vs "Folder / Note").
+        fun sameNote(other: RecentItem) = item.kind == RecentItem.Kind.NOTE && other.kind == RecentItem.Kind.NOTE &&
+            other.pkg == item.pkg && noteName(other.title).equals(noteName(item.title), ignoreCase = true)
+        val updated = (listOf(item) + current.filterNot { it.key == item.key || sameNote(it) }).take(MAX)
         save(prefs, updated)
         if (!sameAsNewest) DebugLog.i("recent", "${item.kind} \"${item.title}\" (${item.pkg})")
     }
+
+    /** A note's own name, without its folders. */
+    fun noteName(title: String): String = BooxNotes.splitPath(title).lastOrNull() ?: title
 
     private fun save(prefs: Prefs, items: List<RecentItem>) {
         val arr = JSONArray()

@@ -101,6 +101,29 @@ class QuickAccessPanel(
             }
             return super.dispatchKeyEvent(event)
         }
+
+        // A tap anywhere else in the panel closes the Front Light box, and still does what it normally does.
+        // The close waits until the finger is up: redrawing on the down would lose the tap.
+        private var tapAway = false
+        override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+            if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) tapAway = lightMenu && !touchesLight(ev)
+            val handled = super.dispatchTouchEvent(ev)
+            if (tapAway && (ev.actionMasked == android.view.MotionEvent.ACTION_UP || ev.actionMasked == android.view.MotionEvent.ACTION_CANCEL)) {
+                tapAway = false
+                post { if (lightMenu) closeLightMenu() }
+            }
+            return handled
+        }
+    }
+
+    /** The Front Light box and its tile, as last drawn: taps on them leave the box open. */
+    private var lightBoxView: View? = null
+    private var lightTileView: View? = null
+
+    private fun touchesLight(ev: android.view.MotionEvent): Boolean = listOfNotNull(lightBoxView, lightTileView).any { v ->
+        val at = IntArray(2)
+        v.getLocationOnScreen(at)
+        ev.rawX >= at[0] && ev.rawX <= at[0] + v.width && ev.rawY >= at[1] && ev.rawY <= at[1] + v.height
     }
 
     private val sheet = ctx.hbox()
@@ -302,6 +325,23 @@ class QuickAccessPanel(
     /** Front Light's presets are showing under the Quick Controls (it was held). */
     private var lightMenu = false
 
+    /**
+     * The Front Light tile was tapped and will go to [next]. The box opens by itself on Custom, where
+     * you'd adjust, and stays open while you keep tapping; stepping off Custom hides its sliders.
+     */
+    fun onLightStep(next: String) {
+        commitNow()
+        editLevels = null
+        if (next == "Custom") {
+            lightMenu = true
+            lightPage = 0
+            lightEdit = "custom"
+        } else if (lightMenu) {
+            lightEdit = null
+            lightPage = 0
+        }
+    }
+
     /** Redraws in place (Quick Controls after a tap). */
     fun refresh() = show(mode)
 
@@ -471,6 +511,7 @@ class QuickAccessPanel(
                 addView(pagerButton(R.drawable.ic_chevron_right, "More presets", lightPage < pages - 1) { go(lightPage + 1) })
             }, lp(MATCH, WRAP))
         }.let { menu ->
+            lightBoxView = menu
             FrameLayout(ctx).apply {
                 setPadding(s(6), s(6), s(6), s(8))
                 addView(menu, FrameLayout.LayoutParams(MATCH, WRAP))
@@ -746,6 +787,7 @@ class QuickAccessPanel(
         val lit = on && control.kind == QuickControls.Kind.TOGGLE && !control.momentary
         val description = "${control.label}${if (control.kind == QuickControls.Kind.TOGGLE) if (on) ", on" else ", off" else ""}"
         roundTile(control.label, control.icon, lit, description).apply {
+            if (control.id == QuickControls.FRONT_LIGHT) lightTile(this)
             setOnClickListener {
                 // One-shot controls (Full Refresh) give a quick spin of the icon instead of filling.
                 if (control.momentary) (getChildAt(0) as? ViewGroup)?.getChildAt(0)?.animate()?.rotationBy(360f)?.setDuration(500)?.start()
@@ -756,6 +798,8 @@ class QuickAccessPanel(
                     if (lightMenu) closeLightMenu() else {
                         lightMenu = true
                         lightPage = activeLightPage()
+                        // Already on Custom: open with its sliders showing, as when a tap lands on it.
+                        if (service.frontLightPreset() == "Custom" && QuickControls.activeMine(prefs) == null) { lightEdit = "custom"; editLevels = null }
                         show(mode)
                         // Make sure it shows what BOOX actually has (it may have been changed there).
                         service.checkFrontLight()
@@ -768,6 +812,30 @@ class QuickAccessPanel(
                 true
             }
         }
+    }
+
+    /** Front Light's tile names the state (with Custom's level) and shows where it is in the Off, Soft, Bright, Custom steps. */
+    private fun lightTile(tile: ViewGroup) = with(ctx) {
+        lightTileView = tile
+        val current = service.frontLightPreset()
+        val mine = QuickControls.activeMine(prefs)?.takeIf { current == "Custom" }
+            ?.let { id -> QuickControls.myPresets(prefs).firstOrNull { it.id == id } }
+        val level = if (current == "Custom") (mine?.levels ?: service.customLevels())?.let { " ${it.brightness * 100 / QuickControls.LEVEL_MAX}%" } else null
+        (tile.getChildAt(1) as? android.widget.TextView)?.text = (mine?.name ?: current ?: "Front Light") + (level ?: "")
+        val at = QuickControls.CYCLE.indexOf(current)
+        tile.addView(hbox().apply {
+            gravity = Gravity.CENTER
+            QuickControls.CYCLE.forEachIndexed { i, _ ->
+                addView(View(ctx).apply {
+                    background = android.graphics.drawable.GradientDrawable().apply {
+                        shape = android.graphics.drawable.GradientDrawable.OVAL
+                        setColor(if (i == at) Ink.INK else Ink.PAPER)
+                        setStroke(dp(1.5f), Ink.INK)
+                    }
+                }, lp(s(8), s(8)).apply { if (i < 3) marginEnd = s(4) })
+            }
+        }, lp(WRAP, WRAP))
+        tile.contentDescription = "Front Light ${current ?: ""}, tap for next"
     }
 
     // ---- Last Opened Note / Document ------------------------------------------------------

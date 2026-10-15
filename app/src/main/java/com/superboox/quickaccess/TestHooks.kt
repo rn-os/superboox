@@ -198,7 +198,7 @@ object TestHooks {
         return JSONObject()
             .put("version", BuildConfig.VERSION_NAME)
             .put("clips", clips.size)
-            .put("testClips", clips.count { it.source == ClipHistory.TEST_SOURCE })
+            .put("testClips", clips.count { it.source == ClipHistory.TEST_SOURCE || it.text.startsWith("SBTEST") })
             .put("recents", Recents.list(prefs).size)
             .put("testRecents", Recents.list(prefs).count { it.title.startsWith(RECENT_PREFIX) })
             .put("dock", JSONArray(prefs.dock.map { it.value }))

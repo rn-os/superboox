@@ -47,7 +47,7 @@ check_pin_and_delete() {
   _open_clipboard || return
   tap textprefix "SBTESTpinme" hold
   tap label "Pin"
-  tap textprefix "SBTESTpinme" hold
+  # The actions stay open under the clip after Pin (Pin turns into Unpin).
   expect "now offers Unpin" label "Unpin"
   tap label "Delete"
   expect_absent "deleted clip gone" textprefix "SBTESTpinme"
@@ -56,4 +56,5 @@ check_pin_and_delete() {
 check_copy_hook_puts_clip_on_clipboard() {
   hook add_text text "SBTESTcopyme" || return
   hook copy_clip n 0 && note_ok "copy_clip: $HOOK_OUT" || note_fail "copy_clip failed"
+  sleep 1; hook remove_test_clips >/dev/null
 }

@@ -126,10 +126,13 @@ object ClipHistory {
         return clip
     }
 
-    /** [TestHooks] only: removes the clips (and files) made by [insertTestClip] or recorded with [TEST_SOURCE]. */
+    /**
+     * [TestHooks] only: removes every test clip: made by [insertTestClip] (source [TEST_SOURCE]), or any clip whose text or
+     * name starts with "SBTEST", such as the copy SuperBoox itself keeps after a test clip is put on the clipboard.
+     */
     fun removeTestClips(context: Context): Int {
         val all = list(context)
-        val mine = all.filter { it.source == TEST_SOURCE }
+        val mine = all.filter { it.source == TEST_SOURCE || it.text.startsWith("SBTEST") || it.name?.startsWith("SBTEST") == true }
         mine.forEach { discardFiles(context, it) }
         save(context, all - mine.toSet())
         return mine.size

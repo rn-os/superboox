@@ -214,6 +214,11 @@ class Prefs(context: Context) {
         get() = sp.getInt(K_NOTES_TAB, -1)
         set(v) = sp.edit().putInt(K_NOTES_TAB, v).apply()
 
+    /** The Writing button in the panel while BOOX Notes is in front (chosen from the first-use card). */
+    var writingPill: Boolean
+        get() = sp.getBoolean(K_WRITING_PILL, false)
+        set(v) = sp.edit().putBoolean(K_WRITING_PILL, v).apply()
+
     var notesPackage: String
         get() = sp.getString(K_NOTES_PKG, null)?.takeIf { it.isNotBlank() } ?: BooxNotes.DEFAULT_PACKAGE
         set(v) = sp.edit().putString(K_NOTES_PKG, v.trim()).apply()
@@ -322,6 +327,8 @@ class Prefs(context: Context) {
         const val K_WM_OFF = "writing_mode_turns_off"
         const val K_WM_DND = "writing_mode_dnd"
         const val K_WM_NO_LIGHT = "writing_mode_no_light"
+        const val K_WRITING_PILL = "writing_pill"
+        const val K_CUES_SEEN = "first_use_cues_seen"
         const val K_CLIP_SHOW = "clip_show"
         const val K_CLIP_COVERS_APPS = "clip_covers_apps"
         const val K_CLIP_LIMIT = "clip_limit"

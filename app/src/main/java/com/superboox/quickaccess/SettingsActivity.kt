@@ -296,6 +296,10 @@ class SettingsActivity : Activity() {
                 tourStep = 0
                 render()
             },
+            actionRow(R.drawable.ic_star, "Show tips again", "First-use cards, such as the Writing mode one in BOOX Notes") {
+                Cues.resetAll(prefs)
+                Toast.makeText(this, "Tips will show again", Toast.LENGTH_SHORT).show()
+            },
             menuRow(R.drawable.ic_bug, Page.TROUBLESHOOTING, keepRunningSummary()),
             menuRow(R.drawable.ic_shield, Page.ADVANCED_ACCESS, when {
                 AdvancedAccess.independentPresets(prefs) -> "Independent Front Light presets on"
@@ -1199,6 +1203,9 @@ class SettingsActivity : Activity() {
             check("Show Quick Controls in the panel", prefs.showSystemActions) { prefs.showSystemActions = it },
         )))
         if (controls.any { it.id == QuickControls.FRONT_LIGHT }) myLightPresets()
+        list.addView(heading("Writing button"))
+        list.addView(card(listOf(check("Show it in the panel while BOOX Notes is open", prefs.writingPill) { prefs.writingPill = it })))
+        list.addView(note("One tap turns Writing mode on, on any Notes screen. Hold the button to hide it."))
         if (controls.any { it.id == QuickControls.WRITING } || WritingMode.isOn(prefs)) writingModeCards()
         list.addView(heading("Controls · ${QuickAccessPanel.QC_PER_PAGE} per page"))
         val rows = mutableListOf<View>()

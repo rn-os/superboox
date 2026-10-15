@@ -381,6 +381,7 @@ class QuickAccessPanel(
             }, lp(MATCH, WRAP))
         }
         if (service.isWritingMode) box.addView(writingBar(), lp(MATCH, WRAP).apply { setMargins(s(6), s(4), s(6), s(8)) })
+        else if (prefs.writingPill && service.isNotesInFront) box.addView(writingPill(), lp(MATCH, WRAP).apply { setMargins(s(6), s(6), s(6), s(8)) })
         if (lightMenu && controls.any { it.id == QuickControls.FRONT_LIGHT }) box.addView(frontLightMenu(), lp(MATCH, WRAP))
         box
     }
@@ -403,6 +404,32 @@ class QuickAccessPanel(
                 contentDescription = "Turn Writing mode off"
                 setOnClickListener { service.writingMode(false) }
             })
+        }
+    }
+
+    /**
+     * Shown while BOOX Notes is in front, once the Writing button was chosen on the first-use card:
+     * one tap turns Writing mode on, hold hides it (Settings brings it back).
+     */
+    private fun writingPill(): View = with(ctx) {
+        hbox().apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = outline(2, 22)
+            setPadding(s(14), s(6), s(6), s(6))
+            contentDescription = "Writing mode. Tap to turn on, hold to hide this button"
+            addView(text("Writing in Notes?", sp(14f), medium = true), lp(0, WRAP, 1f))
+            addView(text("Writing mode", sp(14f), bold = true, color = Ink.PAPER).apply {
+                gravity = Gravity.CENTER
+                background = outline(2, 16, fill = Ink.INK)
+                setPadding(s(12), s(7), s(12), s(7))
+            })
+            isClickable = true
+            setOnClickListener { service.writingMode(true) }
+            setOnLongClickListener {
+                prefs.writingPill = false
+                show(mode)
+                true
+            }
         }
     }
 

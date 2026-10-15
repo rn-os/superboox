@@ -49,6 +49,9 @@ object ClipHistory {
         /** For handwriting: the original clip's label and types, to put it back as BOOX made it. */
         val label: String? = null,
         val mimes: String? = null,
+        /** A name the user gave it (shown instead of the generic line), and whether it came back from Mark up. */
+        val name: String? = null,
+        val marked: Boolean = false,
     )
 
     private const val FILE = "clipboard"
@@ -104,6 +107,8 @@ object ClipHistory {
                     o.optBoolean("pin"),
                     o.optString("label").ifEmpty { null },
                     o.optString("mimes").ifEmpty { null },
+                    o.optString("name").ifEmpty { null },
+                    o.optBoolean("marked"),
                 )
             }
         }.getOrDefault(emptyList())
@@ -114,7 +119,8 @@ object ClipHistory {
         clips.forEach { c ->
             a.put(JSONObject().put("id", c.id).put("k", c.kind.name).put("t", c.text).put("img", c.image ?: "")
                 .put("src", c.source ?: "").put("time", c.time).put("pin", c.pinned)
-                .put("label", c.label ?: "").put("mimes", c.mimes ?: ""))
+                .put("label", c.label ?: "").put("mimes", c.mimes ?: "")
+                .put("name", c.name ?: "").put("marked", c.marked))
         }
         sp(context).edit().putString(K_ITEMS, a.toString()).apply()
     }
@@ -129,6 +135,21 @@ object ClipHistory {
     fun setPinned(context: Context, id: String, pinned: Boolean) {
         save(context, list(context).map { if (it.id == id) it.copy(pinned = pinned) else it })
     }
+
+    /** Names a clip ([name] blank clears it) and pins or unpins it, in one save. */
+    fun setNameAndPin(context: Context, id: String, name: String, pinned: Boolean) {
+        val clean = name.trim().take(NAME_MAX).ifEmpty { null }
+        save(context, list(context).map { if (it.id == id) it.copy(name = clean, pinned = pinned) else it })
+    }
+
+    const val NAME_MAX = 40
+
+    /** Notes it as marked up, and (for a picture made from a named clip) names it after that. */
+    private fun tagMarked(context: Context, image: String, name: String?) {
+        save(context, list(context).map { if (it.image == image) it.copy(marked = true, name = name ?: it.name) else it })
+    }
+
+    private fun toastMain(context: Context, text: String) = main.post { android.widget.Toast.makeText(context.applicationContext, text, android.widget.Toast.LENGTH_SHORT).show() }
 
     fun delete(context: Context, id: String) {
         val all = list(context)
@@ -462,7 +483,7 @@ object ClipHistory {
         return true
     }
 
-    // ---- Screenshots, and things shared to "Copy to clipboard" ---------------------------------
+    // ---- Screenshots, and things shared to "Add to Clipboard" ---------------------------------
 
     /** The label of an image clip that's a screenshot, so the panel shows it as one. */
     const val SCREENSHOT = "SCREENSHOT"
@@ -499,7 +520,7 @@ object ClipHistory {
     }
 
     /**
-     * Something shared to "Copy to clipboard" ([ShareToClipboardActivity]): kept in the history and put on
+     * Something shared to "Add to Clipboard" ([ShareToClipboardActivity]): kept in the history and put on
      * the clipboard. It was shared on purpose, so the What to keep ticks don't apply. Reads the pictures
      * here, so call it off the main thread while the sharing app's permission lasts. True if anything was kept.
      */
@@ -579,6 +600,10 @@ object ClipHistory {
     private fun clipForFile(context: Context, name: String): Clip? =
         list(context).firstOrNull { it.kind == Kind.IMAGE && (it.text == name || markUpName(it) == name) }
 
+    /** The handwriting clip a Mark up copy was made from. */
+    private fun handwritingForCopy(context: Context, name: String): Clip? =
+        list(context).firstOrNull { it.kind == Kind.HANDWRITING && markUpName(it) == name }
+
     private fun markUpName(clip: Clip): String? = clip.image?.let { "SuperBoox_${it.removeSuffix(".png")}.png" }
 
     /**
@@ -605,7 +630,11 @@ object ClipHistory {
                         val to = imageFile(context, clip)
                         if (to != null && runCatching { copyImage(context, Uri.fromFile(f), to) }.getOrDefault(false)) {
                             DebugLog.i("clipboard", "took in a picture marked up in place (${f.parentFile?.name}/…)")
-                            main.post { list(context).firstOrNull { it.id == clip.id }?.let { putBack(context, it) } }
+                            main.post {
+                                tagMarked(context, clip.image ?: "", null)
+                                list(context).firstOrNull { it.id == clip.id }?.let { putBack(context, it) }
+                                toastMain(context, "Marked-up picture added to Clipboard")
+                            }
                         }
                         shotTimes[f.path] = f.lastModified()
                         continue
@@ -619,9 +648,15 @@ object ClipHistory {
                     shotTimes[f.path] = f.lastModified()
                     // A new file beside a mark-up copy is the editor's saved copy: a picture, not a screenshot.
                     val shot = f.parentFile != MARKUP_DIR
+                    // A mark-up of a handwriting clip comes back as a picture clip named after it.
+                    val from = if (shot) null else handwritingForCopy(context, f.name)
                     DebugLog.i("clipboard", "kept a ${if (shot) "screenshot" else "marked-up picture"} as it was saved (${f.parentFile?.name}/…)")
                     main.post {
                         add(context, prefs, Kind.IMAGE, f.name, png, source, if (shot) SCREENSHOT else null)
+                        if (!shot) {
+                            tagMarked(context, png, from?.let { h -> h.name?.let { "$it · marked up" } })
+                            toastMain(context, "Marked-up picture added to Clipboard")
+                        }
                         if (prefs.clipShotToClipboard || !shot) putNewestBack(context)
                         // Not for a picture the editor itself just saved, or each mark-up would open another.
                         if (shot && prefs.clipShotMarkUp && source?.contains("gallery") != true) list(context).firstOrNull { it.image == png }?.let { markUp(context, it) }
@@ -641,7 +676,8 @@ object ClipHistory {
      * editor opened.
      */
     fun markUp(context: Context, clip: Clip, done: (Boolean) -> Unit = {}) {
-        if (clip.kind != Kind.IMAGE) return done(false)
+        // Handwriting can be marked up from its strokes picture; it comes back as a picture clip.
+        if (clip.kind != Kind.IMAGE && !(clip.kind == Kind.HANDWRITING && clip.image?.endsWith(".png") == true)) return done(false)
         val app = context.applicationContext
         io.execute {
             val uri = runCatching { galleryUri(app, clip) }

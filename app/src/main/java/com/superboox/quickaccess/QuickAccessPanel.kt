@@ -55,6 +55,10 @@ class QuickAccessPanel(
     private val main = Handler(Looper.getMainLooper())
     private val scale = prefs.menuSize.scale
     private val expandedFolders = HashSet<String>()
+    /** Ids of the Notes folders open in the list (pinned ones and their subfolders). */
+    private val expandedNoteFolders = HashSet<String>()
+    /** The ▾ on a nested Last Opened Note is open: its folder's notes show under it. */
+    private var lastNoteExpanded = false
     private var mode = Mode.MAIN
     private var dockPage: Int
         get() = service.dockPage
@@ -93,6 +97,7 @@ class QuickAccessPanel(
             if (event.keyCode == KeyEvent.KEYCODE_BACK) {
                 if (event.action == KeyEvent.ACTION_UP) {
                     if (renaming != null) endRename(save = false)
+                    else if (namingClip != null) endNaming(save = false)
                     else if (mode == Mode.CLIPBOARD && clipConfirmClear) { clipConfirmClear = false; fillClips() }
                     else if (mode == Mode.CLIPBOARD && clipOpen != null) { clipOpen = null; fillClips() }
                     else if (mode != Mode.MAIN) show(Mode.MAIN) else service.hidePanel()
@@ -140,6 +145,10 @@ class QuickAccessPanel(
 
     /** The clip whose actions are showing (it was tapped or held). */
     private var clipOpen: String? = null
+    /** The clip whose Name box is open, its field (kept across redraws so typing isn't lost) and its Pin tick. */
+    private var namingClip: String? = null
+    private var nameField: android.widget.EditText? = null
+    private var namePin = false
     private var clipSearch: android.widget.EditText? = null
     private var clipBody: LinearLayout? = null
     private var clipCount: TextView? = null
@@ -231,16 +240,24 @@ class QuickAccessPanel(
             content.addView(quickControlsRow(), lp(MATCH, WRAP))
             content.addView(rule(2))
         }
-        content.addView(lastNoteRow())
-        content.addView(insetRule())
-        content.addView(lastDocumentRow())
-        content.addView(rule(3))
+        // A swipe right anywhere in the Last Opened rows and the list below flips between
+        // Quick Access and Recent Files (not while editing, where rows are dragged). The controls
+        // above and the apps below keep their own sideways paging.
+        val flip = SwipeRow(ctx, s(40), vertical = true, only = -1) { _ ->
+            show(if (mode == Mode.RECENT) Mode.MAIN else Mode.RECENT)
+        }
+        flip.addView(lastNoteRow())
+        flip.addView(insetRule())
+        flip.addView(lastDocumentRow())
+        flip.addView(rule(3))
         val middle = when (mode) {
             Mode.RECENT -> recentList()
             Mode.EDIT -> editList()
             else -> quickAccessList()
         }
-        content.addView(scrolling(middle), lp(MATCH, 0, 1f))
+        flip.addView(scrolling(middle), lp(MATCH, 0, 1f))
+        if (mode == Mode.EDIT) flip.swipeOn = false
+        content.addView(flip, lp(MATCH, 0, 1f))
         content.addView(rule(3))
         thisAppStrip()?.let {
             content.addView(it, lp(MATCH, WRAP))
@@ -381,6 +398,7 @@ class QuickAccessPanel(
             }, lp(MATCH, WRAP))
         }
         if (service.isWritingMode) box.addView(writingBar(), lp(MATCH, WRAP).apply { setMargins(s(6), s(4), s(6), s(8)) })
+        else if (prefs.writingPill && service.isNotesInFront) box.addView(writingPill(), lp(MATCH, WRAP).apply { setMargins(s(6), s(6), s(6), s(8)) })
         if (lightMenu && controls.any { it.id == QuickControls.FRONT_LIGHT }) box.addView(frontLightMenu(), lp(MATCH, WRAP))
         box
     }
@@ -403,6 +421,32 @@ class QuickAccessPanel(
                 contentDescription = "Turn Writing mode off"
                 setOnClickListener { service.writingMode(false) }
             })
+        }
+    }
+
+    /**
+     * Shown while BOOX Notes is in front, once the Writing button was chosen on the first-use card:
+     * one tap turns Writing mode on, hold opens its settings.
+     */
+    private fun writingPill(): View = with(ctx) {
+        hbox().apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = outline(2, 22)
+            setPadding(s(14), s(6), s(6), s(6))
+            contentDescription = "Writing mode. Tap to turn on, hold for its settings"
+            addView(text("Writing in Notes?", sp(14f), medium = true), lp(0, WRAP, 1f))
+            addView(text("Writing mode", sp(14f), bold = true, color = Ink.PAPER).apply {
+                gravity = Gravity.CENTER
+                background = outline(2, 16, fill = Ink.INK)
+                setPadding(s(12), s(7), s(12), s(7))
+            })
+            isClickable = true
+            setOnClickListener { service.writingMode(true) }
+            // Hold: the Writing button's settings, where it can be switched off.
+            setOnLongClickListener {
+                openSettingsPage("CONTROLS")
+                true
+            }
         }
     }
 
@@ -849,8 +893,27 @@ class QuickAccessPanel(
             val sub = if (currentNote != null) "Library · hold for notes library" else "Nothing opened yet · hold for notes library"
             return lastRow(R.drawable.ic_note, "Open Notes", sub, onHold = library, onClick = library)
         }
-        val name = BooxNotes.splitPath(note.title).lastOrNull() ?: note.title
-        return lastRow(R.drawable.ic_note, "Last Opened Note", name, onHold = library) { service.openBooxNote(note.title) }
+        val steps = BooxNotes.splitPath(note.title)
+        val name = steps.lastOrNull() ?: note.title
+        val folder = steps.dropLast(1).lastOrNull()
+        // Nested: show where it lives, and a ▾ that lists the other notes in that folder right here.
+        val sub = if (folder == null) name else steps.joinToString(" › ")
+        val row = lastRow(R.drawable.ic_note, "Last Opened Note", sub, onHold = library, expandFolder = folder) { service.openBooxNote(note.title) }
+        if (folder == null || !lastNoteExpanded) return row
+        return ctx.vbox().apply {
+            addView(row)
+            val holder = ctx.vbox()
+            addView(holder)
+            holder.addView(hint("Loading…", 44))
+            io.execute {
+                val id = NotesDb.findFolderId(service, folder)
+                main.post {
+                    if (!root.isAttachedToWindow) return@post
+                    holder.removeAllViews()
+                    if (id == null) holder.addView(hint("Folder not found in Notes.", 44)) else loadNoteFolder(holder, id, 1)
+                }
+            }
+        }
     }
 
     private fun lastDocumentRow(): View {
@@ -888,7 +951,7 @@ class QuickAccessPanel(
     }
 
     /** Tap reopens the note or document; hold opens where it lives. */
-    private fun lastRow(iconRes: Int, label: String, subtitle: String?, onHold: () -> Unit, onClick: () -> Unit): View = with(ctx) {
+    private fun lastRow(iconRes: Int, label: String, subtitle: String?, onHold: () -> Unit, expandFolder: String? = null, onClick: () -> Unit): View = with(ctx) {
         hbox().apply {
             setPadding(s(16), s(12), s(16), s(12))
             addView(icon(getDrawable(iconRes), iconPx(30)).apply { imageTintList = ColorStateList.valueOf(Ink.INK) })
@@ -897,6 +960,16 @@ class QuickAccessPanel(
                 addView(text(label, sp(17f), color = Ink.INK, medium = true))
                 if (subtitle != null) addView(oneLine(text(subtitle, sp(13f), color = Ink.MUTED)))
             }, lp(0, WRAP, 1f))
+            if (expandFolder != null) addView(FrameLayout(ctx).apply {
+                contentDescription = if (lastNoteExpanded) "Hide the notes in this folder" else "Show the notes in this folder"
+                pressable(outline(2, 6))
+                addView(icon(getDrawable(if (lastNoteExpanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more), iconPx(22)),
+                    FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+                setOnClickListener {
+                    lastNoteExpanded = !lastNoteExpanded
+                    show(mode)
+                }
+            }, lp(s(40), s(34)).apply { marginStart = s(8) })
             pressable()
             setOnClickListener { onClick() }
             setOnLongClickListener { onHold(); true }
@@ -951,6 +1024,11 @@ class QuickAccessPanel(
                 box.addView(holder)
                 loadFolder(holder, Uri.parse(pin.value))
             }
+            if (pin.type == PinType.NOTE_FOLDER && pin.noteId in expandedNoteFolders) {
+                val holder = vbox()
+                box.addView(holder)
+                loadNoteFolder(holder, pin.noteId, 1)
+            }
         }
         box
     }
@@ -974,6 +1052,7 @@ class QuickAccessPanel(
             PinType.DOCUMENT -> R.drawable.ic_book
             PinType.FILE -> R.drawable.ic_file
             PinType.FOLDER -> R.drawable.ic_folder
+            PinType.NOTE_FOLDER -> R.drawable.ic_note_folder
             PinType.APP -> R.drawable.ic_apps
             PinType.INTENT -> R.drawable.ic_link
         }
@@ -981,6 +1060,7 @@ class QuickAccessPanel(
     }
 
     private fun itemRow(pin: Pin): View {
+        if (pin.type == PinType.NOTE_FOLDER) return noteFolderRow(pin)
         val label = if (pin.type == PinType.FOLDER && pin.id in expandedFolders) "${pin.label}  ▾" else pin.label
         return ctx.hbox().apply {
             setPadding(s(18), s(13), s(20), s(13))
@@ -1003,6 +1083,7 @@ class QuickAccessPanel(
                 if (!expandedFolders.add(pin.id)) expandedFolders.remove(pin.id)
                 show(Mode.MAIN)
             }
+            PinType.NOTE_FOLDER -> toggleNoteFolder(pin.noteId)
             PinType.FILE -> launchAndClose { Launcher.openFile(service, Uri.parse(pin.value)) }
             PinType.DOCUMENT -> launchAndClose { ReaderLibrary.open(service, pin.value) }
             PinType.APP -> launchAndClose { Launcher.launchApp(service, pin.value) }
@@ -1195,6 +1276,7 @@ class QuickAccessPanel(
         }
         val q = clipQuery.trim()
         return kindOk && (q.isEmpty() || c.text.contains(q, ignoreCase = true) ||
+            c.name?.contains(q, ignoreCase = true) == true ||
             (c.source != null && Launcher.appLabel(service, c.source).contains(q, ignoreCase = true)))
     }
 
@@ -1202,6 +1284,7 @@ class QuickAccessPanel(
     private fun fillClips() {
         val body = clipBody ?: return
         body.removeAllViews()
+        if (clipOpen != namingClip) { namingClip = null; nameField = null }
         // Handwriting kept before it could be drawn gets its picture: drawn in the background (finding
         // the strokes can take a while), then shown on the next redraw.
         val all = ClipHistory.list(service).map { ClipHistory.ensurePreview(service, it) }
@@ -1293,10 +1376,11 @@ class QuickAccessPanel(
         // Pages, like the rest of the panel; scrolls only if an opened clip makes the page too tall.
         val swipe = SwipeRow(ctx, s(40), vertical = true) { dir ->
             val to = clipPage + dir
-            if (to in 0 until pages) { clipPage = to; clipOpen = null; fillClips() }
+            if (to < 0) show(Mode.MAIN)
+            else if (to in 0 until pages) { clipPage = to; clipOpen = null; fillClips() }
         }
-        swipe.addView(list, lp(MATCH, WRAP))
-        body.addView(scrolling(swipe), lp(MATCH, 0, 1f))
+        swipe.addView(scrolling(list), lp(MATCH, 0, 1f))
+        body.addView(swipe, lp(MATCH, 0, 1f))
         if (pages > 1) {
             body.addView(ctx.hbox().apply {
                 gravity = Gravity.CENTER
@@ -1328,10 +1412,24 @@ class QuickAccessPanel(
                 setPadding(s(10), 0, s(6), 0)
                 if (c.kind == ClipHistory.Kind.IMAGE) {
                     addView(clipThumb(c, if (open) 160 else 64))
+                    if (c.name != null) addView(text(c.name, sp(16f), bold = true).apply { maxLines = if (open) 3 else 1; ellipsize = TextUtils.TruncateAt.END })
                 } else if (c.kind == ClipHistory.Kind.HANDWRITING) {
                     // A picture of the strokes when BOOX's copy had one; never the raw address.
                     if (c.image?.endsWith(".png") == true) addView(clipThumb(c, if (open) 160 else 64))
-                    addView(text("Handwriting from BOOX Notes", sp(if (c.image?.endsWith(".png") == true) 12.5f else 15f), medium = true))
+                    if (c.name != null) addView(text(c.name, sp(16f), bold = true).apply { maxLines = if (open) 3 else 1; ellipsize = TextUtils.TruncateAt.END })
+                    else {
+                        addView(text("Handwriting from BOOX Notes", sp(if (c.image?.endsWith(".png") == true) 12.5f else 15f), medium = true))
+                        // A real button, so the option shows without opening the clip.
+                        addView(hbox().apply {
+                            gravity = Gravity.CENTER_VERTICAL
+                            setPadding(s(8), s(2), s(8), s(2))
+                            addView(icon(getDrawable(R.drawable.ic_tag), iconPx(13)))
+                            addView(text("+ Name", sp(12.5f), bold = true).apply { setPadding(s(4), 0, 0, 0) })
+                            contentDescription = "Name this clip"
+                            pressable(outline(1, 12))
+                            setOnClickListener { startNaming(c) }
+                        }, lp(WRAP, WRAP).apply { topMargin = s(4) })
+                    }
                     if (open) addView(text("Pastes back into BOOX Notes while BOOX still has this copy (usually until the tablet restarts).", sp(12.5f), color = Ink.MUTED))
                 } else {
                     addView(text(c.text.trim(), sp(15f)).apply {
@@ -1345,12 +1443,16 @@ class QuickAccessPanel(
                         background = outline(1, 4)
                         setPadding(s(4), 0, s(4), 0)
                     }, lp(WRAP, WRAP).apply { marginEnd = s(6) })
+                    if (c.marked) addView(text("MARKED UP", sp(10.5f), bold = true).apply {
+                        background = outline(1, 4)
+                        setPadding(s(4), 0, s(4), 0)
+                    }, lp(WRAP, WRAP).apply { marginEnd = s(6) })
                     if (c.pinned) addView(icon(getDrawable(R.drawable.ic_pin), iconPx(13)), lp(s(14), s(14)).apply { marginEnd = s(3) })
                     val from = c.source?.let { Launcher.appLabel(service, it) }
                     val what = if (ClipHistory.isScreenshot(c)) "Screenshot" else null
                     addView(oneLine(text(listOfNotNull(if (c.pinned) "Pinned" else null, what, from, ago(c.time)).joinToString(" · "), sp(12f), color = Ink.MUTED)))
                 })
-                if (open) addView(clipActions(c), lp(MATCH, WRAP))
+                if (open) addView(if (namingClip == c.id) nameBox(c) else clipActions(c), lp(MATCH, WRAP))
                 pressable()
                 // Tap or hold: show or hide this clip's actions.
                 val toggle = { clipOpen = if (open) null else c.id; fillClips() }
@@ -1424,7 +1526,8 @@ class QuickAccessPanel(
             Triple(R.drawable.ic_paste, "Paste") { pasteClip(c) },
             if (c.kind == ClipHistory.Kind.LINK) Triple(R.drawable.ic_open, "Open") { openLink(c) } else null,
             if (c.kind == ClipHistory.Kind.HANDWRITING) null else Triple(R.drawable.ic_share, "Share…") { shareClip(c) },
-            if (c.kind == ClipHistory.Kind.IMAGE) Triple(R.drawable.ic_edit, "Mark up") {
+            if (c.kind == ClipHistory.Kind.HANDWRITING || c.kind == ClipHistory.Kind.IMAGE) Triple(R.drawable.ic_tag, "Name") { startNaming(c) } else null,
+            if (c.kind == ClipHistory.Kind.IMAGE || (c.kind == ClipHistory.Kind.HANDWRITING && c.image?.endsWith(".png") == true)) Triple(R.drawable.ic_edit, "Mark up") {
                 service.hidePanel()
                 ClipHistory.markUp(service, c) { ok -> if (!ok) toast("Couldn't open the picture to mark up") }
             } else null,
@@ -1441,7 +1544,7 @@ class QuickAccessPanel(
         vbox().apply {
             setPadding(0, s(8), 0, 0)
             // Rows of buttons that fill the width: 4 as 2 + 2, otherwise 3 to a row.
-            actions.chunked(if (actions.size == 4) 2 else 3).forEach { row ->
+            actions.chunked(when (actions.size) { 4 -> 2; 7 -> 4; else -> 3 }).forEach { row ->
                 addView(hbox().apply {
                     row.forEachIndexed { i, (res, label, action) ->
                         val dark = i == 0 && label == "Copy"
@@ -1457,6 +1560,87 @@ class QuickAccessPanel(
                         }, lp(0, WRAP, 1f).apply { if (i < row.size - 1) marginEnd = s(6) })
                     }
                 }, lp(MATCH, WRAP).apply { bottomMargin = s(6) })
+            }
+        }
+    }
+
+    private fun startNaming(c: ClipHistory.Clip) {
+        clipOpen = c.id
+        namingClip = c.id
+        namePin = c.pinned
+        nameField = null
+        fillClips()
+    }
+
+    /** Closes the Name box, keeping the name and Pin tick when [save]. */
+    private fun endNaming(save: Boolean) {
+        val id = namingClip ?: return
+        val field = nameField
+        field?.let {
+            (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                .hideSoftInputFromWindow(it.windowToken, 0)
+        }
+        val name = field?.text?.toString().orEmpty()
+        namingClip = null
+        nameField = null
+        if (save) ClipHistory.setNameAndPin(service, id, name, namePin)
+        fillClips()
+    }
+
+    /** Name and Pin for one clip, in place under it. */
+    private fun nameBox(c: ClipHistory.Clip): View = with(ctx) {
+        val field = nameField ?: android.widget.EditText(ctx).apply {
+            setText(c.name.orEmpty())
+            setSelection(text.length)
+            textSize = 16f
+            setTextColor(Ink.INK)
+            isSingleLine = true
+            filters = arrayOf(android.text.InputFilter.LengthFilter(ClipHistory.NAME_MAX))
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+            background = outline(2, 6)
+            setPadding(s(10), s(8), s(10), s(8))
+            setOnEditorActionListener { _, _, _ -> endNaming(save = true); true }
+            nameField = this
+        }
+        (field.parent as? ViewGroup)?.removeView(field)
+        vbox().apply {
+            setPadding(0, s(8), 0, 0)
+            addView(text("Name this clip", sp(14f), bold = true).apply { setPadding(0, 0, 0, s(6)) })
+            addView(field, lp(MATCH, WRAP).apply { bottomMargin = s(8) })
+            if (c.kind == ClipHistory.Kind.HANDWRITING) {
+                val suggestion = "Handwriting " + android.text.format.DateFormat.format("HH:mm", c.time)
+                addView(text(suggestion, sp(12.5f), bold = true).apply {
+                    setPadding(s(8), s(2), s(8), s(2))
+                    pressable(outline(1, 12))
+                    setOnClickListener { field.setText(suggestion); field.setSelection(field.text.length) }
+                }, lp(WRAP, WRAP).apply { bottomMargin = s(8) })
+            }
+            addView(hbox().apply {
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(s(2), s(2), s(2), s(8))
+                addView(checkbox(namePin))
+                addView(vbox().apply {
+                    setPadding(s(10), 0, 0, 0)
+                    addView(text("Pin this clip", sp(14f), bold = true))
+                    addView(text("Keeps it when old clips are cleared", sp(12f), color = Ink.MUTED))
+                })
+                contentDescription = "Pin this clip"
+                pressable()
+                setOnClickListener { namePin = !namePin; fillClips() }
+            }, lp(MATCH, WRAP))
+            addView(hbox().apply {
+                addView(inkButton("Cancel", sp(14f)) { endNaming(save = false) }, lp(0, WRAP, 1f).apply { marginEnd = s(8) })
+                addView(inkButton("Save", sp(14f)) { endNaming(save = true) }.apply {
+                    setTextColor(Ink.PAPER)
+                    background = android.graphics.drawable.GradientDrawable().apply { setColor(Ink.INK); cornerRadius = dp(6).toFloat() }
+                }, lp(0, WRAP, 1f))
+            }, lp(MATCH, WRAP))
+            field.post {
+                field.requestFocus()
+                field.setSelection(field.text.length)
+                (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                    .showSoftInput(field, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
             }
         }
     }
@@ -1497,7 +1681,7 @@ class QuickAccessPanel(
             send.putExtra(Intent.EXTRA_TEXT, c.text)
         }
         val chooser = Intent.createChooser(send, "Share clip").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            // It's already in the Clipboard: SuperBoox's own "Copy to clipboard" would only add it again.
+            // It's already in the Clipboard: SuperBoox's own "Add to Clipboard" would only add it again.
             .putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(android.content.ComponentName(service, ShareToClipboardActivity::class.java)))
         if (Launcher.tryStart(service, chooser)) service.hidePanel()
     }
@@ -1640,6 +1824,115 @@ class QuickAccessPanel(
 
     private fun ago(time: Long): String =
         DateUtils.getRelativeTimeSpanString(time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
+
+    // ---- Notes folders: expand in place, jump into Notes ------------------------------------
+
+    private fun toggleNoteFolder(id: String) {
+        if (!expandedNoteFolders.add(id)) {
+            // Closing a folder closes the ones inside it too.
+            expandedNoteFolders.remove(id)
+        }
+        show(Mode.MAIN)
+    }
+
+    /** A pinned Notes folder: tap or the box expands it, "Open in Notes" jumps into it. Hold edits like any pin. */
+    private fun noteFolderRow(pin: Pin): View {
+        val open = pin.noteId in expandedNoteFolders
+        return ctx.hbox().apply {
+            setPadding(s(18), s(9), s(14), s(9))
+            addView(pinIcon(pin))
+            addView(oneLine(ctx.text(pin.label, sp(17f))).apply { setPadding(s(12), 0, s(8), 0) }, lp(0, WRAP, 1f))
+            addNoteFolderButtons(this, pin.noteId, open, expandable = true) {
+                NotesDb.folderPathWithSelf(service, pin.noteId).ifEmpty { BooxNotes.splitPath(pin.value) }
+            }
+            pressable()
+            setOnClickListener { toggleNoteFolder(pin.noteId) }
+            setOnLongClickListener {
+                show(Mode.EDIT)
+                true
+            }
+        }
+    }
+
+    /** "Open in Notes" and the ▾ / ▴ box, the same height and outline. [path] runs off the main thread. */
+    private fun addNoteFolderButtons(row: LinearLayout, id: String, open: Boolean, expandable: Boolean, path: () -> List<String>) {
+      with(ctx) {
+        val h = s(34)
+        row.addView(text("Open in Notes", sp(13f), bold = true).apply {
+            gravity = Gravity.CENTER
+            setPadding(s(12), 0, s(12), 0)
+            maxLines = 1
+            contentDescription = "Open this folder in Notes"
+            pressable(outline(2, 6))
+            setOnClickListener {
+                io.execute {
+                    val p = path()
+                    main.post { service.openNotesFolderPath(p) }
+                }
+            }
+        }, lp(WRAP, h))
+        if (expandable) row.addView(FrameLayout(ctx).apply {
+            contentDescription = if (open) "Collapse" else "Expand"
+            pressable(outline(2, 6))
+            addView(icon(getDrawable(if (open) R.drawable.ic_expand_less else R.drawable.ic_expand_more), iconPx(22)),
+                FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+            setOnClickListener { toggleNoteFolder(id) }
+        }, lp(s(40), h).apply { marginStart = s(8) })
+      }
+    }
+
+    /** What's inside an open Notes folder, [level] 1 or 2 deep. Only level 1 folders can open further. */
+    private fun loadNoteFolder(holder: LinearLayout, folderId: String, level: Int) {
+        holder.addView(hint("Loading…", 18 + 26 * level))
+        io.execute {
+            val children = NotesDb.folderChildren(service, folderId)
+            val path = NotesDb.folderPathWithSelf(service, folderId)
+            main.post {
+                if (!root.isAttachedToWindow) return@post
+                holder.removeAllViews()
+                when {
+                    children == null -> holder.addView(hint("Folder not found in Notes.", 18 + 26 * level))
+                    children.isEmpty() -> holder.addView(hint("Empty", 18 + 26 * level))
+                }
+                children?.forEach { c ->
+                    val childPath = path + c.title
+                    holder.addView(noteFolderChild(c, childPath, level))
+                    holder.addView(indentRule(18 + 26 * level))
+                    if (c.isFolder && level < 2 && c.id in expandedNoteFolders) {
+                        val sub = ctx.vbox()
+                        holder.addView(sub)
+                        loadNoteFolder(sub, c.id, level + 1)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun noteFolderChild(c: NotesDb.Entry, path: List<String>, level: Int): View = ctx.hbox().apply {
+        setPadding(s(18 + 26 * level), s(if (c.isFolder) 7 else 10), s(14), s(if (c.isFolder) 7 else 10))
+        addView(ctx.icon(ctx.getDrawable(if (c.isFolder) R.drawable.ic_note_folder else R.drawable.ic_note), iconPx(20)))
+        addView(oneLine(ctx.text(c.title, sp(15f))).apply { setPadding(s(12), 0, s(8), 0) }, lp(0, WRAP, 1f))
+        pressable()
+        if (c.isFolder) {
+            val open = c.id in expandedNoteFolders
+            val expandable = level < 2
+            addNoteFolderButtons(this, c.id, open, expandable) { path }
+            setOnClickListener { if (expandable) toggleNoteFolder(c.id) else service.openNotesFolderPath(path) }
+        } else {
+            setOnClickListener {
+                DebugLog.i("pin", "Notes folder row -> note \"${path.last()}\" in ${path.dropLast(1)}")
+                service.openBooxNote(Pin(PinType.BOOX_NOTE, c.title, path.joinToString(" ${BooxNotes.PATH_SEPARATOR} "), noteId = c.id))
+            }
+        }
+    }
+
+    private fun indentRule(startDp: Int): View = View(ctx).apply {
+        setBackgroundColor(Ink.INK)
+        layoutParams = LinearLayout.LayoutParams(MATCH, ctx.dp(1)).apply {
+            marginStart = s(startDp)
+            marginEnd = s(16)
+        }
+    }
 
     private fun loadFolder(holder: LinearLayout, tree: Uri) {
         holder.addView(hint("Loading…", 36))
@@ -1808,10 +2101,27 @@ class QuickAccessPanel(
     }
 
     private fun addPicked() {
+        // Folders pin as expandable Notes folders. Whether a card is one comes from the Notes
+        // database (the card text alone can miss it), so look every picked note up off the main thread.
+        val labels = picked.toList()
+        val names = labels.filter { it !in pickDocs }
+        io.execute {
+            val ids = names.associateWith { NotesDb.findFolderId(service, it) }
+            main.post { finishPicked(labels, ids) }
+        }
+    }
+
+    private fun finishPicked(labels: List<String>, folderIds: Map<String, String?>) {
         var added = 0
-        picked.forEach { label ->
+        labels.forEach { label ->
             val doc = pickDocs[label]
-            if (doc != null) {
+            val folderId = folderIds[label]
+            if (folderId != null) {
+                if (prefs.pins.none { it.type == PinType.NOTE_FOLDER && it.noteId == folderId }) {
+                    prefs.addPin(Pin(PinType.NOTE_FOLDER, label, label, noteId = folderId))
+                    added++
+                }
+            } else if (doc != null) {
                 if (prefs.pins.none { it.type == PinType.DOCUMENT && it.value == doc.path }) {
                     prefs.addPin(Pin(PinType.DOCUMENT, doc.title, doc.path))
                     added++
@@ -1821,7 +2131,7 @@ class QuickAccessPanel(
                 added++
             }
         }
-        DebugLog.i("pin", "added $added from the library: $picked")
+        DebugLog.i("pin", "added $added from the library: $labels")
         toast(if (added == 1) "Added 1 item" else "Added $added items")
         picked.clear()
         show(Mode.MAIN)
@@ -2056,8 +2366,11 @@ private class SwipeRow(
     context: android.content.Context,
     private val threshold: Int,
     vertical: Boolean = false,
+    /** 1 or -1: react only to a swipe left (1) or right (-1); 0 reacts to both. */
+    private val only: Int = 0,
     private val onSwipe: (Int) -> Unit,
 ) : android.widget.LinearLayout(context) {
+    var swipeOn = true
     private var downX = 0f
     private var downY = 0f
 
@@ -2073,6 +2386,7 @@ private class SwipeRow(
             }
             android.view.MotionEvent.ACTION_MOVE -> {
                 val dx = e.x - downX
+                if (!swipeOn || (only != 0 && (if (dx < 0) 1 else -1) != only)) return false
                 if (kotlin.math.abs(dx) > threshold / 2 && kotlin.math.abs(dx) > kotlin.math.abs(e.y - downY)) return true
             }
         }
@@ -2082,7 +2396,8 @@ private class SwipeRow(
     override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
         if (e.actionMasked == android.view.MotionEvent.ACTION_UP) {
             val dx = e.x - downX
-            if (kotlin.math.abs(dx) > threshold) onSwipe(if (dx < 0) 1 else -1)
+            val dir = if (dx < 0) 1 else -1
+            if (kotlin.math.abs(dx) > threshold && (only == 0 || dir == only)) onSwipe(dir)
         }
         return true
     }

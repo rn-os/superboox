@@ -213,16 +213,29 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(K_THIS_APP, true)
         set(v) = sp.edit().putBoolean(K_THIS_APP, v).apply()
 
-    /** Quick Controls row in the panel (it grew out of the Back/Home/Recents row, same setting). */
-    var showSystemActions: Boolean
-        // Supernote's panel has no Back/Home row, so it's opt-in.
-        get() = sp.getBoolean(K_SYSTEM_ACTIONS, false)
-        set(v) = sp.edit().putBoolean(K_SYSTEM_ACTIONS, v).apply()
+    /**
+     * Quick Controls row in the panel: shown whenever the list has any control (removing the last one
+     * hides it). It used to be a separate switch, off by default (Supernote's panel has no such row);
+     * a tablet that had it off keeps the row hidden by having its list emptied once.
+     */
+    val showSystemActions: Boolean
+        get() {
+            if (!sp.getBoolean(K_QC_MIGRATED, false)) {
+                if (!sp.getBoolean(K_SYSTEM_ACTIONS, false)) QuickControls.save(this, emptyList())
+                sp.edit().putBoolean(K_QC_MIGRATED, true).remove(K_SYSTEM_ACTIONS).apply()
+            }
+            return QuickControls.selected(this).isNotEmpty()
+        }
 
     /** Position of the Notes tab in the BOOX launcher's icon-only tab bar (older firmware), -1 = not learned yet. */
     var launcherNotesTab: Int
         get() = sp.getInt(K_NOTES_TAB, -1)
         set(v) = sp.edit().putInt(K_NOTES_TAB, v).apply()
+
+    /** The Writing button in the panel while BOOX Notes is in front (chosen from the first-use card). */
+    var writingPill: Boolean
+        get() = sp.getBoolean(K_WRITING_PILL, false)
+        set(v) = sp.edit().putBoolean(K_WRITING_PILL, v).apply()
 
     var notesPackage: String
         get() = sp.getString(K_NOTES_PKG, null)?.takeIf { it.isNotBlank() } ?: BooxNotes.DEFAULT_PACKAGE
@@ -295,6 +308,7 @@ class Prefs(context: Context) {
         const val K_HANDLE_ENABLED = "handle_enabled"
         const val K_PANEL_WIDTH = "panel_width_pct"
         const val K_SYSTEM_ACTIONS = "system_actions"
+        const val K_QC_MIGRATED = "quick_controls_switch_gone"
         const val K_APP_OWN_ICONS = "app_own_icons"
         const val K_DOCK_OWN_ICONS = "dock_own_icons"
         const val K_DOCK_LAYOUT = "dock_layout"
@@ -337,6 +351,8 @@ class Prefs(context: Context) {
         const val K_WM_OFF = "writing_mode_turns_off"
         const val K_WM_DND = "writing_mode_dnd"
         const val K_WM_NO_LIGHT = "writing_mode_no_light"
+        const val K_WRITING_PILL = "writing_pill"
+        const val K_CUES_SEEN = "first_use_cues_seen"
         const val K_CLIP_SHOW = "clip_show"
         const val K_CLIP_COVERS_APPS = "clip_covers_apps"
         const val K_CLIP_LIMIT = "clip_limit"

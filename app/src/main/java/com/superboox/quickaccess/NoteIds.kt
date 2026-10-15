@@ -12,9 +12,10 @@ import java.util.concurrent.Executors
 object NoteIds {
     private val io = Executors.newSingleThreadExecutor()
 
-    /** Saves the id of every pinned note that doesn't have one yet. */
+    /** Saves the id of every pinned note that doesn't have one yet, and turns pinned Notes folders into folder pins. */
     fun capture(context: Context, prefs: Prefs) {
         io.execute {
+            upgradeFolders(context, prefs)
             val found = prefs.pins
                 .filter { it.type == PinType.BOOX_NOTE && it.noteId.isEmpty() }
                 .mapNotNull { pin -> NotesDb.findNoteId(context, BooxNotes.splitPath(pin.value))?.let { pin.id to it } }
@@ -24,6 +25,21 @@ object NoteIds {
             prefs.pins = prefs.pins.map { p -> found[p.id]?.takeIf { p.noteId.isEmpty() }?.let { p.copy(noteId = it) } ?: p }
             DebugLog.i("pin", "saved note ids for ${found.size} pin(s)")
         }
+    }
+
+    /**
+     * A folder pinned as a plain note (by earlier builds, or when the library card didn't read as
+     * a folder) becomes a Notes folder pin, so it expands in the panel.
+     */
+    private fun upgradeFolders(context: Context, prefs: Prefs) {
+        val folderIds = prefs.pins.filter { it.type == PinType.BOOX_NOTE }.mapNotNull { pin ->
+            val id = if (pin.noteId.isNotEmpty() && NotesDb.isFolderId(context, pin.noteId)) pin.noteId
+            else if (pin.noteId.isEmpty()) NotesDb.findFolderId(context, BooxNotes.splitPath(pin.value)) else null
+            id?.let { pin.id to it }
+        }.toMap()
+        if (folderIds.isEmpty()) return
+        prefs.pins = prefs.pins.map { p -> folderIds[p.id]?.let { p.copy(type = PinType.NOTE_FOLDER, noteId = it) } ?: p }
+        DebugLog.i("pin", "turned ${folderIds.size} pinned folder(s) into Notes folder pins")
     }
 
     /**

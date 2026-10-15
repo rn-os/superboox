@@ -1,54 +1,38 @@
 #!/usr/bin/env python3
-"""Finds nodes in a uiautomator dump for tablet-test.sh. Never taps anything itself.
+"""Finds nodes in the panel dump (TestHooks `dump_ui` JSON) for tablet-test.sh. Never taps anything itself.
 
-  tablet-find.py <dump.xml> <mode> [selector ...] [--pkg P]
+  tablet-find.py <dump.json> <mode> [selector ...]
   modes:
-    list                         every node of the package: text | desc | bounds
-    find  text|desc|rid|textprefix|descprefix <value>
-                                 prints "cx cy left top right bottom" of the one match (exit 3 none, 4 several)
-    has   <same selector>        exit 0 if any match, else 3
-    packages                     the packages that have nodes in the dump
-    bottomright <desc prefix> <desc>...   exit 0 if the node with the desc prefix has the
-                                 right-most right edge and the lowest bottom edge of itself plus the nodes with the given descs
+    list                         every node: text | desc | bounds
+    find  <kind> <value>         prints "cx cy left top right bottom" of the one match (exit 3 none, 4 several)
+    has   <kind> <value>         exit 0 if any match, else 3
+    bottomright <desc prefix> <desc>...   exit 0 if the node with the desc prefix has the right-most right edge and
+                                 the lowest bottom edge of itself plus the nodes with the given descs
+  kinds: text, desc, textprefix, descprefix, label (text or desc), labelprefix.
+  Several matches: the clickable one if exactly one is, else ambiguous.
 """
-import re
+import json
 import sys
-import xml.etree.ElementTree as ET
 
-args = sys.argv[1:]
-pkg = "com.superboox.quickaccess"
-if "--pkg" in args:
-    i = args.index("--pkg")
-    pkg = args[i + 1]
-    del args[i:i + 2]
-path, mode, rest = args[0], args[1], args[2:]
-nodes = []
-for n in ET.parse(path).iter("node"):
-    m = re.match(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]", n.get("bounds", ""))
-    if not m:
-        continue
-    l, t, r, b = map(int, m.groups())
-    nodes.append({"pkg": n.get("package", ""), "text": n.get("text", ""), "desc": n.get("content-desc", ""),
-                  "rid": n.get("resource-id", ""), "b": (l, t, r, b), "clickable": n.get("clickable") == "true"})
+path, mode, rest = sys.argv[1], sys.argv[2], sys.argv[3:]
+nodes = json.load(open(path))
 
 
-def match(n, kind, value):
+def match(n, kind, v):
+    t, d = n["text"], n["desc"]
     return {
-        "text": n["text"] == value, "desc": n["desc"] == value, "rid": n["rid"] == value,
-        "textprefix": n["text"].startswith(value), "descprefix": n["desc"].startswith(value),
+        "text": t == v, "desc": d == v, "textprefix": t.startswith(v), "descprefix": d.startswith(v),
+        "label": v in (t, d), "labelprefix": t.startswith(v) or d.startswith(v),
     }[kind]
 
 
-def matches(kind, value):
-    return [n for n in nodes if n["pkg"] == pkg and match(n, kind, value) and n["b"][2] > n["b"][0] and n["b"][3] > n["b"][1]]
+def matches(kind, v):
+    return [n for n in nodes if match(n, kind, v)]
 
 
-if mode == "packages":
-    print("\n".join(sorted({n["pkg"] for n in nodes})))
-elif mode == "list":
+if mode == "list":
     for n in nodes:
-        if n["pkg"] == pkg and (n["text"] or n["desc"]):
-            print(f'{n["text"]} | {n["desc"]} | {n["b"]}')
+        print(f'{n["text"]} | {n["desc"]} | {n["b"]}')
 elif mode in ("find", "has"):
     found = matches(rest[0], rest[1])
     if mode == "has":
@@ -56,8 +40,11 @@ elif mode in ("find", "has"):
     if not found:
         sys.exit(3)
     if len(found) > 1:
-        print(f"{len(found)} matches for {rest[0]}={rest[1]}", file=sys.stderr)
-        sys.exit(4)
+        click = [n for n in found if n["clickable"]]
+        if len(click) != 1:
+            print(f"{len(found)} matches for {rest[0]}={rest[1]}", file=sys.stderr)
+            sys.exit(4)
+        found = click
     l, t, r, b = found[0]["b"]
     print((l + r) // 2, (t + b) // 2, l, t, r, b)
 elif mode == "bottomright":
@@ -66,10 +53,9 @@ elif mode == "bottomright":
     if len(me) != 1:
         print(f"{len(me)} nodes for {prefix}", file=sys.stderr)
         sys.exit(3)
-    others = [n for d in descs for n in matches("desc", d)]
-    allb = [me[0]["b"]] + [n["b"] for n in others]
+    allb = [me[0]["b"]] + [n["b"] for d in descs for n in matches("desc", d)]
     ok = me[0]["b"][2] >= max(b[2] for b in allb) and me[0]["b"][3] >= max(b[3] for b in allb)
-    print(f"previous={me[0]['b']} others={len(others)} {'bottom-right' if ok else 'NOT bottom-right'}")
+    print(f"previous={me[0]['b']} others={len(allb) - 1} {'bottom-right' if ok else 'NOT bottom-right'}")
     sys.exit(0 if ok else 1)
 else:
     sys.exit(2)

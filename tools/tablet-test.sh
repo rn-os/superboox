@@ -10,7 +10,7 @@
 #
 # Safety rules, enforced here so a check can't break them:
 #   - Only SuperBoox's own windows are ever tapped, always by finding a node (never by coordinates),
-#     after a screenshot and a uiautomator dump, and only if the app in front is not the BOOX Notes editor.
+#     after a screenshot and a dump of the panel's views, and only if the app in front is not the BOOX Notes editor.
 #   - Nothing is typed or tapped inside a note. Notes, files and the real clipboard history are never
 #     touched: tests make "SBTEST" clips/recents through the debug hooks and remove them afterwards.
 #   - SuperBoox is never force-stopped (that switches its accessibility service off).
@@ -66,12 +66,12 @@ abort() { ABORTED="$*"; log "ABORT: $*"; exit 3; }
 
 shot() { adb_ exec-out screencap -p > "$OUT/$CHECK-$1.png" 2>/dev/null; }
 
-# uiautomator dump to $OUT/<check>-<name>.xml; also the file path in $DUMP.
+# What the open panel shows, as JSON in $OUT/<check>-<name>.json (path in $DUMP), through the test hooks.
+# Never uiautomator: its dump unbinds SuperBoox's accessibility service for a few seconds.
 dump() {
-  DUMP="$OUT/$CHECK-${1:-ui}.xml"
-  adb_ shell uiautomator dump /sdcard/sbtest-dump.xml >/dev/null 2>&1
-  adb_ pull /sdcard/sbtest-dump.xml "$DUMP" >/dev/null 2>&1
-  adb_ shell rm -f /sdcard/sbtest-dump.xml
+  DUMP="$OUT/$CHECK-${1:-ui}.json"
+  hook dump_ui >/dev/null || { DUMP=""; return 1; }
+  adb_ exec-out run-as $PKG cat files/ui-dump.json > "$DUMP" 2>/dev/null
   [ -s "$DUMP" ] || { DUMP=""; return 1; }
 }
 
@@ -90,7 +90,7 @@ guard() {
 pyfind() { python3 -I "$ROOT/tools/tablet-find.py" "$DUMP" "$@"; }
 
 # expect <label> <selector kind> <value>: is there such a node in SuperBoox's windows now?
-# Takes a fresh dump. kind: text|desc|rid|textprefix|descprefix
+# Takes a fresh dump. kind: text|desc|label|textprefix|descprefix|labelprefix (label = text or description)
 expect() {
   local label="$1"; shift
   dump "expect" || { note_fail "$label: no UI dump"; return 1; }
@@ -145,18 +145,37 @@ note_fail() { CHECK_FAILED=1; CHECK_NOTES="$CHECK_NOTES
 manual() { CHECK_NOTES="$CHECK_NOTES
   manual (needs Ryan/pen) $1"; }
 
+LIGHT_KEYS="screen_ctm_brightness screen_ctm_temperature ctm_brightness_state_key ctm_temperature_state_key"
+
+# The accessibility service can be briefly unbound (after an install, or by the system); wait until the hooks answer.
+wait_for_hooks() {
+  local i
+  for i in $(seq 1 "${1:-30}"); do hook ping >/dev/null 2>&1 && return 0; sleep 1; done
+  return 1
+}
+
 # ---- run ------------------------------------------------------------------------------------
 
 restore_all() {
-  [ -n "${HOOKS_READY:-}" ] || return 0
+  [ -n "${CLEANED:-}" ] && return 0
+  CLEANED=1
   log "cleaning up"
-  hook close_panel >/dev/null
-  hook remove_test_clips >/dev/null
-  hook clear_test_recents >/dev/null
-  hook restore >/dev/null && log "settings restored" || log "WARNING: settings restore failed; the snapshot is in $OUT/snapshot-backup.json"
+  if [ -n "${HOOKS_READY:-}" ]; then
+    wait_for_hooks 30 || log "WARNING: hooks don't answer (service rebinding?)"
+    hook close_panel >/dev/null
+    hook remove_test_clips >/dev/null
+    hook clear_test_recents >/dev/null
+    hook restore >/dev/null && log "settings restored" || log "WARNING: settings restore failed; the snapshot is in $OUT/snapshot-backup.json"
+  fi
+  # System settings the checks may have moved: rotation and the front light.
   [ -n "${SAVED_ROTATION:-}" ] && adb_ shell settings put system user_rotation "$SAVED_ROTATION" >/dev/null 2>&1
   [ -n "${SAVED_AUTOROT:-}" ] && adb_ shell settings put system accelerometer_rotation "$SAVED_AUTOROT" >/dev/null 2>&1
-  adb_ shell run-as $PKG rm -f files/testhooks.on >/dev/null 2>&1
+  local k v
+  for k in $LIGHT_KEYS; do
+    v=$(echo "$SAVED_LIGHT" | tr ' ' '\n' | grep "^$k=" | cut -d= -f2)
+    [ -n "$v" ] && [ "$v" != null ] && adb_ shell settings put system "$k" "$v" >/dev/null 2>&1
+  done
+  adb_ shell run-as $PKG rm -f files/testhooks.on files/testhooks-snapshot.json files/ui-dump.json >/dev/null 2>&1
 }
 finish() {
   local code=$?
@@ -182,7 +201,7 @@ write_summary() {
   } > "$SUMMARY"
 }
 trap finish EXIT
-trap 'ABORTED="interrupted"; exit 130' INT TERM
+trap 'ABORTED="interrupted"; exit 130' INT TERM HUP
 
 adb_ get-state >/dev/null 2>&1 || { ABORTED="no device"; echo "No adb device found" >&2; exit 2; }
 DEVICE="$(adb_ shell getprop ro.product.model | tr -d '\r') (Android $(adb_ shell getprop ro.build.version.release | tr -d '\r'))"
@@ -198,7 +217,8 @@ guard
 SAVED_ROTATION=$(adb_ shell settings get system user_rotation | tr -d '\r')
 SAVED_AUTOROT=$(adb_ shell settings get system accelerometer_rotation | tr -d '\r')
 adb_ shell run-as $PKG touch files/testhooks.on >/dev/null 2>&1 || { ABORTED="run-as failed (not a debug build?)"; exit 2; }
-hook ping || { ABORTED="test hooks don't answer: install a branch/PR test build (published builds don't have them)"; exit 2; }
+SAVED_LIGHT=""; for k in $LIGHT_KEYS; do SAVED_LIGHT="$SAVED_LIGHT $k=$(adb_ shell settings get system $k | tr -d '\r')"; done
+wait_for_hooks 20 || { ABORTED="test hooks don't answer: install a branch/PR test build (published builds don't have them)"; exit 2; }
 hook snapshot || { ABORTED="snapshot failed"; exit 2; }
 HOOKS_READY=1
 adb_ exec-out run-as $PKG cat files/testhooks-snapshot.json > "$OUT/snapshot-backup.json" 2>/dev/null

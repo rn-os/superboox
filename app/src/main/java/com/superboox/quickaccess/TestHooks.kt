@@ -30,6 +30,7 @@ object TestHooks {
     const val ACTION = "com.superboox.quickaccess.TEST"
     private const val TAG = "SBTEST"
     private const val GATE = "testhooks.on"
+    private const val UI_DUMP = "ui-dump.json"
     private const val SNAPSHOT = "testhooks-snapshot.json"
     private const val RECENT_PREFIX = "SBTEST "
     private val PREF_FILES = listOf(Prefs.FILE, "clipboard", "recent_apps_state")
@@ -145,9 +146,32 @@ object TestHooks {
                 prefs.dockLayout = arg("layout")?.toIntOrNull() ?: Prefs.DOCK_AUTO
                 JSONObject().put("layout", prefs.dockLayout)
             }
+            // What the open panel shows, written to files/ui-dump.json (text, content description, screen bounds of every
+            // visible view), so the script never needs uiautomator (its dump unbinds the accessibility service).
+            "dump_ui" -> dumpUi(s)
             "state" -> state(s, prefs)
             else -> error("unknown command $cmd")
         }
+    }
+
+    private fun dumpUi(s: QuickAccessService): JSONObject {
+        val root = s.testPanelRoot() ?: error("panel not showing")
+        val nodes = JSONArray()
+        fun walk(v: android.view.View) {
+            if (v.visibility != android.view.View.VISIBLE || v.width <= 0 || v.height <= 0) return
+            val loc = IntArray(2)
+            v.getLocationOnScreen(loc)
+            val text = (v as? android.widget.TextView)?.text?.toString().orEmpty()
+            val desc = v.contentDescription?.toString().orEmpty()
+            if (text.isNotEmpty() || desc.isNotEmpty()) {
+                nodes.put(JSONObject().put("text", text).put("desc", desc).put("clickable", v.isClickable)
+                    .put("b", JSONArray(listOf(loc[0], loc[1], loc[0] + v.width, loc[1] + v.height))))
+            }
+            (v as? android.view.ViewGroup)?.let { g -> for (i in 0 until g.childCount) walk(g.getChildAt(i)) }
+        }
+        walk(root)
+        File(s.filesDir, UI_DUMP).writeText(nodes.toString())
+        return JSONObject().put("nodes", nodes.length())
     }
 
     private fun pickClip(s: Context, i: Intent): ClipHistory.Clip {

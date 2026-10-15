@@ -1149,6 +1149,9 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         runCatching { recentStore.edit().putString("apps", recentApps.joinToString("\n")).apply() }
     }
 
+    /** [TestHooks] only: the open panel's view tree, to describe what is on screen without uiautomator. */
+    fun testPanelRoot(): android.view.View? = panel?.root
+
     /** [TestHooks] only: pretends [pkg] was the last app used. */
     fun testRememberApp(pkg: String) = rememberApp(pkg)
 

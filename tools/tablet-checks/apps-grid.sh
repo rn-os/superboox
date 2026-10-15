@@ -10,7 +10,7 @@ _installed_apps() {
 
 _previous_is_bottom_right() {   # <label> after the panel is open
   dump "grid" || { note_fail "$1: no UI dump"; return 1; }
-  local out; out=$(pyfind bottomright "Previous app:" ${LABELS[@]+"${LABELS[@]}"}) \
+  local out; out=$(pyfind bottomright "Previous app:" ${LABELS[@]+"${LABELS[@]}"} 2>&1) \
     && note_ok "$1: $out" || { note_fail "$1: $out"; shot "fail-grid"; }
 }
 
@@ -29,8 +29,8 @@ _grid_case() {   # <napps> <layout 0 auto|1 one row|2 two rows> <name>
   _previous_is_bottom_right "$name page 1"
   # Every further page too.
   local page=1
-  while dump "more" && pyfind has desc "More apps" && [ $page -lt 12 ]; do
-    tap desc "More apps" || break
+  while dump "more" && pyfind has label "More apps" && [ $page -lt 12 ]; do
+    tap label "More apps" || break
     page=$((page + 1))
     sleep 1
     _previous_is_bottom_right "$name page $page"

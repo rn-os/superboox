@@ -5,7 +5,7 @@
 _open_clipboard() {
   hook open_panel || return 1
   sleep 1.5
-  tap descprefix "Clipboard" || return 1
+  tap label "Clipboard" || return 1
   sleep 1
 }
 
@@ -14,11 +14,11 @@ check_tap_row_does_not_open_actions_hold_does() {
   _open_clipboard || return
   expect "text clip row listed" textprefix "SBTESTtextclip" || return
   tap textprefix "SBTESTtextclip" hold
-  expect "hold opens actions (Delete)" desc "Delete"
-  expect "hold opens actions (Pin)" desc "Pin"
-  expect_absent "text clip has no Name action" desc "Name"
+  expect "hold opens actions (Delete)" label "Delete"
+  expect "hold opens actions (Pin)" label "Pin"
+  expect_absent "text clip has no Name action" label "Name"
   tap textprefix "SBTESTtextclip" hold
-  expect_absent "hold again closes actions" desc "Delete"
+  expect_absent "hold again closes actions" label "Delete"
 }
 
 check_image_clip_listed() {
@@ -32,11 +32,11 @@ check_image_clip_listed() {
 check_handwriting_clip_actions_and_naming() {
   hook add_handwriting text "SBTESThw" || return
   _open_clipboard || return
-  expect "handwriting row shows a '+ Name' chip" descprefix "Name this clip" || return
-  tap descprefix "Name this clip"
-  expect "Name box open" text "Name this clip" || return
+  expect "handwriting row shows a '+ Name' chip" labelprefix "Name this clip" || return
+  tap labelprefix "Name this clip"
+  expect "Name box open" label "Name this clip" || return
   type_text "SBTESTname"
-  tap text "Save"
+  tap label "Save"
   expect "name saved and shown" textprefix "SBTESTname"
   hook state && note_ok "state after naming: $HOOK_OUT"
   manual "tap-to-paste a handwriting clip into BOOX Notes with the pen"
@@ -46,10 +46,10 @@ check_pin_and_delete() {
   hook add_text text "SBTESTpinme" || return
   _open_clipboard || return
   tap textprefix "SBTESTpinme" hold
-  tap desc "Pin"
+  tap label "Pin"
   tap textprefix "SBTESTpinme" hold
-  expect "now offers Unpin" desc "Unpin"
-  tap desc "Delete"
+  expect "now offers Unpin" label "Unpin"
+  tap label "Delete"
   expect_absent "deleted clip gone" textprefix "SBTESTpinme"
 }
 

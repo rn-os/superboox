@@ -6,7 +6,7 @@ check_seeded_notes_listed() {
   sleep 1.5
   # The newest seeded note is "Last Opened Note" (unless that row is switched off in the snapshot's settings).
   expect "Last Opened Note shows the newest seeded note" textprefix "SBTEST Alpha"
-  tap descprefix "Recent Files" && { expect "Recent Files lists Beta" textprefix "SBTEST Beta"; expect "Recent Files lists Gamma" textprefix "SBTEST Gamma"; }
+  tap labelprefix "Recent Files" && { expect "Recent Files lists Beta" textprefix "SBTEST Beta"; expect "Recent Files lists Gamma" textprefix "SBTEST Gamma"; }
 }
 
 check_clear_leaves_no_test_rows() {

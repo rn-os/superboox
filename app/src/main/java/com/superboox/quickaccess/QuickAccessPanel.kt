@@ -2186,13 +2186,7 @@ class QuickAccessPanel(
         val pinned = prefs.dock.filter { it.value != Prefs.PREVIOUS_APP }
         val previous = if (prefs.previousAppInDock) service.previousApp else null
         val cols = dockColumns()
-        val tiles = pinned.size + if (previous != null) 1 else 0
-        val oneRow = when (prefs.dockLayout) {
-            Prefs.DOCK_ONE -> true
-            Prefs.DOCK_TWO -> false
-            else -> tiles <= minOf(3, cols)
-        }
-        val perPage = if (oneRow) cols else cols * 2
+        val grid = DockGrid.pages(pinned.size, previous != null, cols, prefs.dockLayout)
         // Swipe sideways to page, like Quick Controls.
         val box = SwipeRow(ctx, s(40), vertical = true) { dir ->
             val to = dockPage + dir
@@ -2205,12 +2199,9 @@ class QuickAccessPanel(
             box.addView(hint("Add apps in Settings."))
             return@with box
         }
-        // When apps need more than one page, "Previous app" takes the last slot of every page, so it stays visible, bottom right,
-        // and never spills onto a page of its own. Otherwise it is simply the last tile.
-        val reserve = previous != null && tiles > perPage
-        val pages = (if (reserve) pinned.chunked(perPage - 1) else pinned.chunked(perPage)).ifEmpty { listOf(emptyList()) }
+        val pages = grid
         dockPageCount = pages.size
-        DebugLog.i("dock", "apps=${pinned.size} previous=${previous ?: "none"} (setting ${prefs.previousAppInDock}) cols=$cols perPage=$perPage page=${dockPage + 1}/${pages.size}")
+        DebugLog.i("dock", "apps=${pinned.size} previous=${previous ?: "none"} (setting ${prefs.previousAppInDock}) cols=$cols perPage=${pages[0].size} page=${dockPage + 1}/${pages.size}")
         dockPage = dockPage.coerceIn(0, pages.size - 1)
         // "Previous app" is always the bottom-right cell of the visible page. Blank cells are invisible copies of a real tile, so
         // every cell has the same height; with several pages each page is filled to the same two rows, so the panel doesn't change size.
@@ -2221,10 +2212,12 @@ class QuickAccessPanel(
             contentDescription = null
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
-        val shown: List<View> = pages[dockPage].map { appCell(it) }.let { apps ->
-            val slots = if (pages.size > 1) perPage else ((apps.size + (if (previous != null) 1 else 0) + cols - 1) / cols) * cols
-            if (previous == null) apps + List((slots - apps.size).coerceAtLeast(0)) { blank() }
-            else apps + List((slots - apps.size - 1).coerceAtLeast(0)) { blank() } + previousCell(previous)
+        val shown: List<View> = pages[dockPage.coerceIn(0, pages.size - 1)].map { cell ->
+            when (cell) {
+                is DockGrid.Cell.App -> appCell(pinned[cell.index])
+                DockGrid.Cell.Blank -> blank()
+                DockGrid.Cell.Previous -> previousCell(previous ?: "")
+            }
         }
         shown.chunked(cols).forEachIndexed { r, rowCells ->
             if (r > 0) box.addView(rule(1))

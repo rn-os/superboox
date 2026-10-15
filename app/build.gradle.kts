@@ -18,6 +18,9 @@ android {
         // CI sets SB_VERSION: "1.0.0" for a stable release (a v1.0.0 tag), "1.1.0-dev.N" for
         // default-branch pre-releases (matching the release tag, for Obtainium's version check),
         // "1.1.0-branch.N" for unpublished branch/PR test builds.
+        // Adb test hooks (TestHooks.kt) are compiled in only when CI marks a build as an unpublished
+        // branch/PR test build (SB_TEST_HOOKS=1), so published releases never carry them.
+        buildConfigField("boolean", "TEST_HOOKS", (System.getenv("SB_TEST_HOOKS") == "1").toString())
         versionName = System.getenv("SB_VERSION") ?: "0.0.0-local.$build"
     }
 
@@ -39,6 +42,10 @@ android {
         }
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -50,6 +57,7 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     // Shizuku: optional on-device ADB (Settings → Advanced access).
     val shizuku = "13.1.5"
     implementation("dev.rikka.shizuku:api:$shizuku")

@@ -1233,7 +1233,8 @@ class QuickAccessPanel(
         // Pages, like the rest of the panel; scrolls only if an opened clip makes the page too tall.
         val swipe = SwipeRow(ctx, s(40), vertical = true) { dir ->
             val to = clipPage + dir
-            if (to in 0 until pages) { clipPage = to; clipOpen = null; fillClips() }
+            if (to < 0 && unpinned > 0) { clipConfirmClear = true; clipOpen = null; fillClips() }
+            else if (to in 0 until pages) { clipPage = to; clipOpen = null; fillClips() }
         }
         swipe.addView(scrolling(list), lp(MATCH, 0, 1f))
         body.addView(swipe, lp(MATCH, 0, 1f))

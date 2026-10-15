@@ -531,6 +531,14 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         cover.show { noteOpener.openFolder(prefs.notesPackage, folder, inNotes) }
     }
 
+    /** Opens the Notes library inside [folder] (outermost first). */
+    fun openNotesFolderPath(folder: List<String>) {
+        hidePanel()
+        val inNotes = BooxNotes.isNotesScreen(foregroundPackage, foregroundActivity, prefs.notesPackage)
+        DebugLog.i("note", "open folder \"${folder.joinToString(" / ")}\" from Quick Access (Notes in front: $inNotes)")
+        cover.show { noteOpener.openFolder(prefs.notesPackage, folder, inNotes) }
+    }
+
     /** Hold Last Opened Document: the app it lives in, on its start screen (NeoReader: BOOX's Library). */
     fun openDocumentHome(pkg: String?) {
         hidePanel()

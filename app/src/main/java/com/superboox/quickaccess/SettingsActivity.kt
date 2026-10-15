@@ -1943,6 +1943,7 @@ class SettingsActivity : Activity() {
         PinType.FILE -> "Document"
         PinType.DOCUMENT -> "Document · ${pin.value.substringAfterLast('/')}"
         PinType.FOLDER -> "Folder"
+        PinType.NOTE_FOLDER -> "Notes folder · ${pin.value}"
         PinType.APP -> if (pin.value == Prefs.PREVIOUS_APP) "Switches back to the app you were in before" else "App · ${pin.value.substringBefore('/')}"
         PinType.INTENT -> "Intent · ${pin.value}"
     }

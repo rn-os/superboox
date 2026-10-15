@@ -142,6 +142,38 @@ object NotesDb {
         return path.joinToString(" ${BooxNotes.PATH_SEPARATOR} ")
     }
 
+    /** One entry inside a Notes folder: a note or a subfolder (folders have no pages). */
+    class Entry(val id: String, val title: String, val isFolder: Boolean)
+
+    /**
+     * What sits in the folder with this [folderId], folders first then notes, each by name; null
+     * if the database isn't readable or the folder is gone. Call off the main thread. Which
+     * `status` means "alive" differs between firmware (0 elsewhere, 1 on the Note Air 6C), so
+     * the status of the most recently edited note counts as alive.
+     */
+    fun folderChildren(context: Context, folderId: String): List<Entry>? {
+        val rows = runCatching { query(context) }.getOrNull() ?: return null
+        if (rows.none { it.id == folderId }) return null
+        val alive = rows.filter { it.pages > 0 && it.updated > 0 }.maxByOrNull { it.updated }?.status
+        return rows.filter { it.parent == folderId && (alive == null || it.status == alive) }
+            .map { Entry(it.id, it.title, it.pages == 0) }
+            .sortedWith(compareBy<Entry>({ if (it.isFolder) 0 else 1 }, { it.title.lowercase() }))
+    }
+
+    /** The id of the folder named [name] (the one holding most entries if several), or null. Off the main thread. */
+    fun findFolderId(context: Context, name: String): String? {
+        val rows = runCatching { query(context) }.getOrNull() ?: return null
+        val folders = rows.filter { it.pages == 0 && NotesScreen.matches(it.title, name) }
+        return folders.maxByOrNull { f -> rows.count { it.parent == f.id } }?.id
+    }
+
+    /** The path to the folder from the top, outermost first, ending with its own name. Empty if gone. */
+    fun folderPathWithSelf(context: Context, folderId: String): List<String> {
+        val rows = runCatching { query(context) }.getOrNull() ?: return emptyList()
+        val self = rows.firstOrNull { it.id == folderId } ?: return emptyList()
+        return folderPath(context, folderId) + self.title
+    }
+
     /** Forget cached titles (a note was just created or renamed). */
     fun forgetTitles() {
         titleCache = null

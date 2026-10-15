@@ -1895,13 +1895,19 @@ class QuickAccessPanel(
         dockPageCount = pages.size
         DebugLog.i("dock", "apps=${pinned.size} previous=${previous ?: "none"} (setting ${prefs.previousAppInDock}) cols=$cols perPage=$perPage page=${dockPage + 1}/${pages.size}")
         dockPage = dockPage.coerceIn(0, pages.size - 1)
-        // "Previous app" is always the bottom-right cell of the visible page: blank cells pad the gap before it.
-        val shown: List<View?> = pages[dockPage].map { appCell(it) }.let { apps ->
-            if (previous == null) apps
-            else {
-                val total = ((apps.size + 1 + cols - 1) / cols) * cols
-                apps + List(total - apps.size - 1) { null } + previousCell(previous)
-            }
+        // "Previous app" is always the bottom-right cell of the visible page. Blank cells are invisible copies of a real tile, so
+        // every cell has the same height; with several pages each page is filled to the same two rows, so the panel doesn't change size.
+        fun blank(): View = (pinned.firstOrNull()?.let { appCell(it) } ?: previousCell(previous ?: "")).apply {
+            visibility = View.INVISIBLE
+            isClickable = false
+            isLongClickable = false
+            contentDescription = null
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        val shown: List<View> = pages[dockPage].map { appCell(it) }.let { apps ->
+            val slots = if (pages.size > 1) perPage else ((apps.size + (if (previous != null) 1 else 0) + cols - 1) / cols) * cols
+            if (previous == null) apps + List((slots - apps.size).coerceAtLeast(0)) { blank() }
+            else apps + List((slots - apps.size - 1).coerceAtLeast(0)) { blank() } + previousCell(previous)
         }
         shown.chunked(cols).forEachIndexed { r, rowCells ->
             if (r > 0) box.addView(rule(1))
@@ -1912,7 +1918,7 @@ class QuickAccessPanel(
                         topMargin = s(10)
                         bottomMargin = s(10)
                     })
-                    addView(rowCells.getOrNull(i) ?: View(ctx), lp(0, if (i < rowCells.size) WRAP else 1, 1f))
+                    addView(rowCells.getOrNull(i) ?: blank(), lp(0, WRAP, 1f))
                 }
             }, lp(MATCH, WRAP))
         }

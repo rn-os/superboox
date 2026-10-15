@@ -1459,10 +1459,9 @@ class QuickAccessPanel(
                 })
                 if (open) addView(if (namingClip == c.id) nameBox(c) else clipActions(c), lp(MATCH, WRAP))
                 pressable()
-                // Tap or hold: show or hide this clip's actions.
-                val toggle = { clipOpen = if (open) null else c.id; fillClips() }
-                setOnClickListener { toggle() }
-                setOnLongClickListener { toggle(); true }
+                // Tap pastes it; hold shows or hides its actions (Copy, Paste, Name, Mark up, Pin, Delete).
+                setOnClickListener { pasteClip(c) }
+                setOnLongClickListener { clipOpen = if (open) null else c.id; fillClips(); true }
             }, lp(0, WRAP, 1f))
             if (!open) addView(FrameLayout(ctx).apply {
                 contentDescription = "Copy"
@@ -1548,8 +1547,11 @@ class QuickAccessPanel(
         )
         vbox().apply {
             setPadding(0, s(8), 0, 0)
-            // Rows of buttons that fill the width: 4 as 2 + 2, otherwise 3 to a row.
-            actions.chunked(when (actions.size) { 4 -> 2; 7 -> 4; else -> 3 }).forEach { row ->
+            // Rows of buttons that fill the width, at most 3 to a row and as even as can be (4 as 2 + 2, 7 as 3 + 2 + 2),
+            // so no label is cut off.
+            val rows = (actions.size + 2) / 3
+            var from = 0
+            (0 until rows).map { r -> actions.subList(from, from + (actions.size - from + (rows - r) - 1) / (rows - r)).also { from += it.size } }.forEach { row ->
                 addView(hbox().apply {
                     row.forEachIndexed { i, (res, label, action) ->
                         val dark = i == 0 && label == "Copy"

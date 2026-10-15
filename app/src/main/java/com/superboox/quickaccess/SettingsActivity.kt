@@ -922,7 +922,7 @@ class SettingsActivity : Activity() {
             TOUR_CLIPBOARD -> {
                 title("Your clipboard")
                 if (svc != null) para("The panel beside this page is open on your clipboard.")
-                para("Tap Clipboard at the top of the panel to see what you've copied: text, links, pictures and handwriting from BOOX Notes. Tap or hold a clip to copy it again, paste it, share, pin or delete it.")
+                para("Tap Clipboard at the top of the panel to see what you've copied: text, links, pictures and handwriting from BOOX Notes. Tap a clip to paste it. Hold it for more: copy, name, mark up, share, pin or delete.")
                 list.addView(card(listOf(cardText("Choose what's kept in Settings → Clipboard. Copies are saved when the panel opens; catching every copy as it happens needs Advanced access (next step)."))))
             }
             TOUR_ADVANCED -> {

@@ -409,14 +409,14 @@ class QuickAccessPanel(
 
     /**
      * Shown while BOOX Notes is in front, once the Writing button was chosen on the first-use card:
-     * one tap turns Writing mode on, hold hides it (Settings brings it back).
+     * one tap turns Writing mode on, hold opens its settings.
      */
     private fun writingPill(): View = with(ctx) {
         hbox().apply {
             gravity = Gravity.CENTER_VERTICAL
             background = outline(2, 22)
             setPadding(s(14), s(6), s(6), s(6))
-            contentDescription = "Writing mode. Tap to turn on, hold to hide this button"
+            contentDescription = "Writing mode. Tap to turn on, hold for its settings"
             addView(text("Writing in Notes?", sp(14f), medium = true), lp(0, WRAP, 1f))
             addView(text("Writing mode", sp(14f), bold = true, color = Ink.PAPER).apply {
                 gravity = Gravity.CENTER
@@ -425,9 +425,9 @@ class QuickAccessPanel(
             })
             isClickable = true
             setOnClickListener { service.writingMode(true) }
+            // Hold: the Writing button's settings, where it can be switched off.
             setOnLongClickListener {
-                prefs.writingPill = false
-                show(mode)
+                openSettingsPage("CONTROLS")
                 true
             }
         }

@@ -359,6 +359,12 @@ object QuickControls {
     val PRESETS = listOf("Bright", "Soft", "Custom", "Off")
     const val PRESET_OFF = "Off"
 
+    /** What a tap on the Front Light tile steps through, in order. */
+    val CYCLE = listOf("Off", "Soft", "Bright", "Custom")
+
+    /** The preset a tap goes to from [current] (null: not known yet, so as if Off). */
+    fun nextLightStep(current: String?): String = CYCLE[(CYCLE.indexOf(current).coerceAtLeast(0) + 1) % CYCLE.size]
+
     /** The preset last seen or chosen (null: never seen). */
     fun savedPreset(prefs: Prefs): String? = prefs.sp.getString(Prefs.K_FL_PRESET, null)
 

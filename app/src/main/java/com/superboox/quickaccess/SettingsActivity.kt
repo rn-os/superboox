@@ -1407,7 +1407,7 @@ class SettingsActivity : Activity() {
                 pick("Rows", layouts.map { it.first }, layouts.indexOfFirst { it.second == prefs.dockLayout }) { prefs.dockLayout = layouts[it].second }
             },
         )))
-        list.addView(note("Automatic: one row for up to 3 apps (counting Previous app when it shows), two rows for more. Extra apps go on more pages with ‹ ›."))
+        list.addView(note("Automatic: one row when everything fits across (up to 3 apps, counting Previous app when it shows), two rows for more. Extra apps go on more pages with ‹ ›."))
         list.addView(heading("Apps"))
         // "Previous app" is always the last tile, so only the pinned apps are listed to move.
         val dock = prefs.dock.filter { it.value != Prefs.PREVIOUS_APP }

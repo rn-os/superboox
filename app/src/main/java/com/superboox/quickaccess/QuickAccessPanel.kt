@@ -59,7 +59,7 @@ class QuickAccessPanel(
     private var dockPage: Int
         get() = service.dockPage
         set(v) { service.dockPage = v }
-    private var dockCellCount = 0
+    private var dockPageCount = 1
 
     /** What BOOX Notes is showing, if it's the app behind the panel. */
     private val notesState: NotesScreen.State? = if (service.isNotesInFront) service.notesState() else null
@@ -1873,27 +1873,29 @@ class QuickAccessPanel(
         val oneRow = when (prefs.dockLayout) {
             Prefs.DOCK_ONE -> true
             Prefs.DOCK_TWO -> false
-            else -> tiles <= 3
+            else -> tiles <= minOf(3, cols)
         }
         val perPage = if (oneRow) cols else cols * 2
         // Swipe sideways to page, like Quick Controls.
         val box = SwipeRow(ctx, s(40), vertical = true) { dir ->
-            val pageCount = (dockCellCount + perPage - 1) / perPage
             val to = dockPage + dir
-            if (to in 0 until pageCount) {
+            if (to in 0 until dockPageCount) {
                 dockPage = to
                 show(mode)
             }
         }
-        val cells: List<View> = pinned.map { appCell(it) } + listOfNotNull(previous?.let { previousCell(it) })
-        if (cells.isEmpty()) {
+        if (pinned.isEmpty() && previous == null) {
             box.addView(hint("Add apps in Settings."))
             return@with box
         }
-        dockCellCount = cells.size
-        val pages = cells.chunked(perPage)
+        // When apps need more than one page, "Previous app" takes the last slot of every page, so it stays visible, bottom right,
+        // and never spills onto a page of its own. Otherwise it is simply the last tile.
+        val reserve = previous != null && tiles > perPage
+        val pages = (if (reserve) pinned.chunked(perPage - 1) else pinned.chunked(perPage)).ifEmpty { listOf(emptyList()) }
+        dockPageCount = pages.size
         dockPage = dockPage.coerceIn(0, pages.size - 1)
-        pages[dockPage].chunked(cols).forEachIndexed { r, rowCells ->
+        val shown: List<View> = pages[dockPage].map { appCell(it) } + listOfNotNull(previous?.let { previousCell(it) })
+        shown.chunked(cols).forEachIndexed { r, rowCells ->
             if (r > 0) box.addView(rule(1))
             box.addView(hbox().apply {
                 gravity = Gravity.NO_GRAVITY

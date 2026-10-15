@@ -93,7 +93,7 @@
             </intent-filter>
         </activity>
 
-        <!-- "Copy to clipboard" in the share sheet (BOOX's has no Copy): keeps a shared screenshot,
+        <!-- "Add to Clipboard" in the share sheet (BOOX's has no Copy): keeps a shared screenshot,
              picture or text in the Clipboard and puts it on the clipboard. No window of its own. -->
         <activity
             android:name=".ShareToClipboardActivity"

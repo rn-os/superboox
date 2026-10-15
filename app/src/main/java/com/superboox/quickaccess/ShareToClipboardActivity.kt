@@ -8,7 +8,7 @@ import android.os.Bundle
 import android.widget.Toast
 
 /**
- * "Copy to clipboard" in the share sheet. BOOX's share sheet has no Copy, so a screenshot (or a
+ * "Add to Clipboard" in the share sheet. BOOX's share sheet has no Copy, so a screenshot (or a
  * photo, or text) shared here is kept in the Clipboard and put on the clipboard. No window of its
  * own: it reads what was shared while the sharing app's permission lasts, then finishes.
  */

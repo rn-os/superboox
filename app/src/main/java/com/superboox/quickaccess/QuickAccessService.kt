@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.Gravity
+import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
@@ -133,6 +134,11 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 if (isActivity) foregroundActivity = cls else if (newApp) foregroundActivity = null
                 DebugLog.i("foreground", "$pkg ($cls)")
                 if (newApp) rememberApp(pkg)
+                // BOOX opens Notes through several screens, and the library lives in its launcher: look again a few times.
+                if (!Cues.seen(prefs, Cues.WRITING) && (pkg == prefs.notesPackage || pkg == BooxNotes.BOOX_HOME_PACKAGE)) {
+                    CUE_CHECKS_MS.forEach { delay -> handler.postDelayed({ if (isNotesInFront) maybeShowWritingCue() }, delay) }
+                }
+                if (!isNotesInFront && pkg != BooxNotes.BOOX_HOME_PACKAGE) hideCue()
             }
             if (newNoteArmed) watchNewNoteBack(pkg)
             trackRecent(pkg, event)
@@ -416,8 +422,49 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     /** The panel's width in pixels on this screen right now. */
     fun previewWidth(): Int = QuickAccessPanel.sheetWidth(this, prefs, screenWidth())
 
+    // ---- First-use cue -------------------------------------------------------------------------
+
+    private var cueView: View? = null
+
+    fun hideCue() {
+        cueView?.let { runCatching { wm.removeView(it) } }
+        cueView = null
+    }
+
+    /**
+     * The first time BOOX Notes is in front (any screen of it, folders and open notes included),
+     * once: a card offering the Writing button. Never before, so there's nothing to leave to try it.
+     */
+    private fun maybeShowWritingCue() {
+        if (!::prefs.isInitialized || panel != null || cueView != null) return
+        if (Cues.seen(prefs, Cues.WRITING)) return
+        // Already found it: the tile is added, or the mode is on.
+        if (WritingMode.isOn(prefs) || QuickControls.selected(prefs).any { it.id == QuickControls.WRITING }) {
+            Cues.markSeen(prefs, Cues.WRITING)
+            return
+        }
+        Cues.markSeen(prefs, Cues.WRITING)
+        val card = CueCard.build(this, prefs.menuSize.scale,
+            title = "Writing mode",
+            message = "Turn off Wi-Fi, Bluetooth and the Front Light while you write, and put them back after, in one tap.",
+            primary = "Add Writing button" to {
+                prefs.writingPill = true
+                hideCue()
+            },
+            secondary = "Not now" to { hideCue() },
+        )
+        val params = overlayParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, focusable = false).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = (resources.displayMetrics.density * 56).toInt()
+        }
+        runCatching { wm.addView(card, params) }
+            .onSuccess { cueView = card; DebugLog.i("cue", "writing mode card shown over $foregroundPackage") }
+            .onFailure { DebugLog.e("cue", "writing mode card failed", it) }
+    }
+
     fun showPanel(keepCover: Boolean = false, fresh: Boolean = true) {
         if (panel != null) return
+        hideCue()
         refreshReaderLast()
         hidePreview()
         if (!keepCover) cover.hide()
@@ -1230,6 +1277,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         private const val REVEAL_DELAY_MS = 400L
         /** How long after hold New Note leaving BOOX's screens still returns to where it started (writing the new note can take a while). */
         private const val NEW_NOTE_RETURN_MS = 3 * 60 * 60_000L
+        private val CUE_CHECKS_MS = listOf(1_500L, 3_500L, 6_000L)
         /** Lets the screen settle before checking that BOOX's home, not the create-note screen, is in front. */
         private const val NEW_NOTE_BACK_CHECK_MS = 300L
         /** How long a tapped tile shows its new state before the system's own reading wins. */

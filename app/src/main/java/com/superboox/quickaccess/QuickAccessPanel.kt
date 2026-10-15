@@ -1235,8 +1235,8 @@ class QuickAccessPanel(
             val to = clipPage + dir
             if (to in 0 until pages) { clipPage = to; clipOpen = null; fillClips() }
         }
-        swipe.addView(list, lp(MATCH, WRAP))
-        body.addView(scrolling(swipe), lp(MATCH, 0, 1f))
+        swipe.addView(scrolling(list), lp(MATCH, 0, 1f))
+        body.addView(swipe, lp(MATCH, 0, 1f))
         if (pages > 1) {
             body.addView(ctx.hbox().apply {
                 gravity = Gravity.CENTER

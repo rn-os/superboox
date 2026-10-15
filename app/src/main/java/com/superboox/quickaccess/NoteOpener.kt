@@ -264,7 +264,11 @@ class NoteOpener(private val service: AccessibilityService) {
         setupCreateTapped = false
         setupUps = 0
         setupUpFrom = null
-        setupCreateSeenAt = 0L
+        // Notes library already in front: Create is ready, no settling wait.
+        setupCreateSeenAt = if ((service as? QuickAccessService)?.let {
+                it.foregroundPackage == BooxNotes.BOOX_HOME_PACKAGE &&
+                    BooxNotes.isNotesScreen(it.foregroundPackage, it.foregroundActivity, notesPackage)
+            } == true) 1L else 0L
         setupUntil = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
         // Always through BOOX's home screen (its Notes widget has the +). Back from an open note
         // can land on another launcher (build 59 report), so don't rely on it; BOOX saves the note itself.
@@ -623,8 +627,18 @@ class NoteOpener(private val service: AccessibilityService) {
                     }
                 }
 
+                // BOOX reopens the library in the folder it was left in: already there is a step done.
+                val header = folderHeader(root)
+                if (header != null && NotesScreen.matches(NotesScreen.textOf(header), target)) {
+                    DebugLog.i("note", "already in \"$target\" step ${j.index + 1}/${j.steps.size}")
+                    j.index++
+                    j.resetFolder()
+                    if (j.index >= j.steps.size) return succeed(j)
+                    return later(0)
+                }
                 val card = state.cards.firstOrNull { NotesScreen.matches(it.label, target) }
-                val node = card?.node ?: findLabel(root, target)
+                // Never the folder's own header: tapping it goes up a level.
+                val node = card?.node ?: findLabel(root, target)?.takeUnless { header != null && it == header }
                 if (node != null) {
                     DebugLog.i("note", "found \"$target\" (${node.className}) step ${j.index + 1}/${j.steps.size}")
                     j.tapSignature = signature
@@ -767,10 +781,15 @@ class NoteOpener(private val service: AccessibilityService) {
      * Inside a folder of BOOX's Notes library (its name in com.onyx:id/text_title): where its
      * on-screen up arrow is, left of the name. Null at the top level or on other screens.
      */
-    private fun folderUpArrow(root: AccessibilityNodeInfo): Rect? {
+    /** The open folder's name in BOOX's Notes library header (com.onyx:id/text_title); null at the top level. */
+    private fun folderHeader(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         if (root.packageName?.toString() != BooxNotes.BOOX_HOME_PACKAGE) return null
-        val title = runCatching { root.findAccessibilityNodeInfosByViewId("${BooxNotes.BOOX_HOME_PACKAGE}:id/text_title") }.getOrNull()
-            ?.firstOrNull { it.isVisibleToUser && NotesScreen.textOf(it).isNotBlank() } ?: return null
+        return runCatching { root.findAccessibilityNodeInfosByViewId("${BooxNotes.BOOX_HOME_PACKAGE}:id/text_title") }.getOrNull()
+            ?.firstOrNull { it.isVisibleToUser && NotesScreen.textOf(it).isNotBlank() }
+    }
+
+    private fun folderUpArrow(root: AccessibilityNodeInfo): Rect? {
+        val title = folderHeader(root) ?: return null
         val t = Rect().also(title::getBoundsInScreen)
         // Note Air 6C, firmware 4.3: the header is one clickable com.onyx:id/icon_back holding arrow and name.
         runCatching { root.findAccessibilityNodeInfosByViewId("${BooxNotes.BOOX_HOME_PACKAGE}:id/icon_back") }.getOrNull()
@@ -928,7 +947,7 @@ class NoteOpener(private val service: AccessibilityService) {
         private const val DIRECT_WAIT_MS = 3_500L
         private const val SETUP_TIMEOUT_MS = 6_000L
         private const val MAX_SETUP_UPS = 4
-        private const val RECENT_RECHECK_MS = 800L
+        private const val RECENT_RECHECK_MS = 600L
         private const val CREATE_SETTLE_MS = 350L
         private const val CREATE_RETAP_MS = 1_500L
 

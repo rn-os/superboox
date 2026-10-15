@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.Gravity
+import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
@@ -95,6 +96,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 hidePanel()
                 return
             }
+            if (intent.action == Intent.ACTION_USER_PRESENT || intent.action == Intent.ACTION_SCREEN_ON) handler.post { syncWritingPill() }
             val id = QuickControls.activeMine(prefs) ?: return
             if (!AdvancedAccess.independentPresets(prefs)) return
             val preset = QuickControls.myPresets(prefs).firstOrNull { it.id == id } ?: return
@@ -119,6 +121,11 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
+        if (pkg == packageName && event.className?.toString()?.endsWith("SettingsActivity") == true) {
+            // SuperBoox's own settings (opened by holding the pill): the pill steps aside while they're up.
+            ownSettingsFront = true
+            syncWritingPill()
+        }
         if (pkg == packageName || pkg in IGNORED_PACKAGES || pkg.contains("inputmethod") || pkg in keyboardPackages) return
         // Dialogs/toasts from other apps also fire this event; only count real app windows.
         val windowType = runCatching { windows.firstOrNull { it.id == event.windowId }?.type }.getOrNull()
@@ -136,6 +143,8 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             }
             if (newNoteArmed) watchNewNoteBack(pkg)
             trackRecent(pkg, event)
+            ownSettingsFront = false
+            syncWritingPill()
         }
     }
 
@@ -166,6 +175,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     override fun onSharedPreferenceChanged(sp: SharedPreferences?, key: String?) {
         if (key == null || key in Prefs.HANDLE_KEYS) attachHandle()
         if (key == Prefs.K_PINS) NoteIds.capture(this, prefs)
+        if (key == null || key == Prefs.K_WP_ON || key == Prefs.K_WM_ON) handler.post { syncWritingPill() }
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -188,6 +198,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (::cover.isInitialized) cover.hide()
         hidePanel()
         hidePreview()
+        hideWritingPill()
         detachHandle()
     }
 
@@ -298,6 +309,157 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             val path = NotesDb.pathOf(this, title)
             if (path != title) handler.post { Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, path, prefs.notesPackage, now)) }
         }
+    }
+
+    // ---- Writing mode pill ---------------------------------------------------------------
+
+    private var pillView: WritingPillView? = null
+    private var pillParams: WindowManager.LayoutParams? = null
+    private var promptView: View? = null
+    private var promptCheck: Runnable? = null
+    private var pillHide: Runnable? = null
+
+    /** SuperBoox's own Settings screen is in front (opened by holding the pill). */
+    private var ownSettingsFront = false
+
+    /**
+     * Shows the pill while BOOX Notes is in front (any note or folder in it), if the user opted in; or,
+     * once, the offer to add it. Nowhere else, so nobody leaves what they're doing to try it.
+     */
+    /**
+     * Notes is what the user is looking at: the usual check, plus BOOX's launcher shell showing its Notes
+     * library under a generic activity name (TabletMainActivity on the Note Air 6C), told by the
+     * library's own views.
+     */
+    private fun notesInFrontForPill(): Boolean {
+        if (isNotesInFront) return true
+        if (foregroundPackage != BooxNotes.BOOX_HOME_PACKAGE) return false
+        return runCatching {
+            windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+                .any { w -> w.root?.let { r -> r.packageName?.toString() == BooxNotes.BOOX_HOME_PACKAGE && NotesScreen.isLauncherNotesLibrary(r) } == true }
+        }.getOrDefault(false)
+    }
+
+    private fun syncWritingPill() {
+        if (!::prefs.isInitialized) return
+        val inNotes = !ownSettingsFront && notesInFrontForPill()
+        // BOOX hops between a few activities while Notes opens (the launcher shell, the Notes tab, the
+        // editor): leaving only counts once it has lasted a moment.
+        pillHide?.let { handler.removeCallbacks(it) }
+        pillHide = null
+        when {
+            ownSettingsFront -> { hideWritingPill(); return }
+            !inNotes -> {
+                val hide = Runnable { pillHide = null; if (!notesInFrontForPill()) hideWritingPill() }
+                pillHide = hide
+                handler.postDelayed(hide, 1_500)
+                return
+            }
+            prefs.writingPill -> { hideWritingPromptView(); showWritingPill() }
+            // Still in the first-run tour: the offer would land on top of it.
+            !prefs.tourDone || FirstUse.seen(prefs, FirstUse.WRITING_PILL) -> hideWritingPill()
+            else -> { removePill(); scheduleWritingPrompt() }
+        }
+    }
+
+    private fun showWritingPill() {
+        pillView?.let { it.render(isWritingMode); return }
+        val view = WritingPillView(
+            this,
+            onTap = { writingMode(!isWritingMode); pillView?.render(isWritingMode) },
+            onHold = {
+                DebugLog.i("writing", "pill held: opening settings")
+                startActivity(Intent(this, SettingsActivity::class.java)
+                    .putExtra(SettingsActivity.EXTRA_PAGE, "CONTROLS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            },
+            onMoved = { x, y -> movePill(x, y) },
+            onDropped = { x, y -> dropPill(x, y) },
+        )
+        view.render(isWritingMode)
+        val params = overlayParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, focusable = false)
+        anchorPill(params)
+        runCatching { wm.addView(view, params) }
+            .onSuccess { pillView = view; pillParams = params; DebugLog.i("writing", "pill shown over $foregroundPackage") }
+            .onFailure { DebugLog.e("writing", "pill failed", it) }
+    }
+
+    private fun anchorPill(p: WindowManager.LayoutParams) {
+        val screen = screenSize()
+        p.gravity = Gravity.TOP or (if (prefs.writingPillLeft) Gravity.LEFT else Gravity.RIGHT)
+        p.x = dp(6)
+        p.y = (screen.second * prefs.writingPillTopPct / 100f).toInt()
+    }
+
+    private fun movePill(rawX: Float, rawY: Float) {
+        val v = pillView ?: return
+        val p = pillParams ?: return
+        p.gravity = Gravity.TOP or Gravity.LEFT
+        p.x = (rawX - v.width / 2f).toInt().coerceAtLeast(0)
+        p.y = (rawY - v.height / 2f).toInt().coerceAtLeast(0)
+        runCatching { wm.updateViewLayout(v, p) }
+    }
+
+    /** Let go: snap to the nearer side edge and remember where. */
+    private fun dropPill(rawX: Float, rawY: Float) {
+        val v = pillView ?: return
+        val p = pillParams ?: return
+        val screen = screenSize()
+        prefs.writingPillLeft = rawX < screen.first / 2f
+        prefs.writingPillTopPct = ((rawY - v.height / 2f) / screen.second * 100f).toInt()
+        anchorPill(p)
+        runCatching { wm.updateViewLayout(v, p) }
+    }
+
+    private fun removePill() {
+        pillView?.let { runCatching { wm.removeView(it) } }
+        pillView = null
+        pillParams = null
+    }
+
+    private fun hideWritingPill() {
+        removePill()
+        hideWritingPromptView()
+    }
+
+    private fun hideWritingPromptView() {
+        promptCheck?.let { handler.removeCallbacks(it) }
+        promptCheck = null
+        promptView?.let { runCatching { wm.removeView(it) } }
+        promptView = null
+    }
+
+    private fun scheduleWritingPrompt() {
+        if (promptView != null || promptCheck != null) return
+        // Let Notes finish opening first, and show only if it is still the app in front.
+        val check = Runnable {
+            promptCheck = null
+            if (promptView != null || !notesInFrontForPill() || ownSettingsFront || prefs.writingPill) return@Runnable
+            if (FirstUse.seen(prefs, FirstUse.WRITING_PILL)) return@Runnable
+            showWritingPrompt()
+        }
+        promptCheck = check
+        handler.postDelayed(check, 1_200)
+    }
+
+    private fun showWritingPrompt() {
+        // Answered, it never comes back (Settings keeps the switch). Left unanswered (BOOX switched
+        // screens under it), it comes back, but not more than three times.
+        if (FirstUse.bump(prefs, FirstUse.WRITING_PILL) >= 3) FirstUse.markSeen(prefs, FirstUse.WRITING_PILL)
+        val screen = screenSize()
+        val view = WritingPillPrompt.build(this, prefs,
+            onYes = {
+                FirstUse.markSeen(prefs, FirstUse.WRITING_PILL)
+                prefs.writingPill = true; DebugLog.i("writing", "pill accepted"); hideWritingPromptView(); syncWritingPill()
+            },
+            onNo = {
+                FirstUse.markSeen(prefs, FirstUse.WRITING_PILL)
+                DebugLog.i("writing", "pill declined"); hideWritingPromptView()
+            })
+        val params = overlayParams((screen.first * 0.86f).toInt().coerceAtMost(dp(420)), WindowManager.LayoutParams.WRAP_CONTENT, focusable = false)
+            .apply { gravity = Gravity.CENTER }
+        runCatching { wm.addView(view, params) }
+            .onSuccess { promptView = view; DebugLog.i("writing", "first-time prompt shown over $foregroundPackage") }
+            .onFailure { DebugLog.e("writing", "prompt failed", it) }
     }
 
     // ---- Edge handle ---------------------------------------------------------------------

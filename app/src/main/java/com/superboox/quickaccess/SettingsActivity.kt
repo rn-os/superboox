@@ -1199,6 +1199,7 @@ class SettingsActivity : Activity() {
             check("Show Quick Controls in the panel", prefs.showSystemActions) { prefs.showSystemActions = it },
         )))
         if (controls.any { it.id == QuickControls.FRONT_LIGHT }) myLightPresets()
+        writingPillCard()
         if (controls.any { it.id == QuickControls.WRITING } || WritingMode.isOn(prefs)) writingModeCards()
         list.addView(heading("Controls · ${QuickAccessPanel.QC_PER_PAGE} per page"))
         val rows = mutableListOf<View>()
@@ -1215,6 +1216,20 @@ class SettingsActivity : Activity() {
         )
         list.addView(card(rows))
         list.addView(note("Tap a control to switch it; hold it to open its settings (Front Light: hold for its presets). Swipe sideways or use ‹ › for more. Wi‑Fi, Bluetooth, Front Light and the BOOX tiles work through the BOOX Control Center."))
+    }
+
+    /** The pill over BOOX Notes. Always here, so it can be turned off (or back on) without the pill. */
+    private fun writingPillCard() {
+        list.addView(heading("Writing mode pill"))
+        list.addView(card(listOf(
+            check("Show the Writing mode pill in BOOX Notes", prefs.writingPill) {
+                prefs.writingPill = it
+                // Turning it off also means the one-time offer never comes back.
+                if (!it) FirstUse.markSeen(prefs, FirstUse.WRITING_PILL)
+            },
+            buttonRow("Show first-time tips again" to { FirstUse.resetAll(prefs); toast("Tips will show again the next time they apply") }),
+        )))
+        list.addView(note("A small switch that floats over BOOX Notes, in any note or folder, and nowhere else. Tap it to switch Writing mode, hold it to come here, drag it to either edge."))
     }
 
     /** What Writing mode switches. Shown once the Writing control is added. */

@@ -95,6 +95,23 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(K_TOUR_DONE, false)
         set(v) = sp.edit().putBoolean(K_TOUR_DONE, v).apply()
 
+    /**
+     * The Writing mode pill: a small switch that floats over BOOX Notes. Off until the user opts in
+     * (the first-time prompt in Notes, or Settings); turning it off also silences that prompt.
+     */
+    var writingPill: Boolean
+        get() = sp.getBoolean(K_WP_ON, false)
+        set(v) = sp.edit().putBoolean(K_WP_ON, v).apply()
+
+    /** Where the user left the pill: which side of the screen, and how far down (percent). */
+    var writingPillLeft: Boolean
+        get() = sp.getBoolean(K_WP_LEFT, false)
+        set(v) = sp.edit().putBoolean(K_WP_LEFT, v).apply()
+
+    var writingPillTopPct: Int
+        get() = sp.getInt(K_WP_TOP, 72)
+        set(v) = sp.edit().putInt(K_WP_TOP, v.coerceIn(0, 90)).apply()
+
     var clipKeepText: Boolean
         get() = sp.getBoolean(K_CLIP_TEXT, true)
         set(v) = sp.edit().putBoolean(K_CLIP_TEXT, v).apply()
@@ -330,6 +347,10 @@ class Prefs(context: Context) {
         const val K_CLIP_IGNORED = "clip_ignored"
         const val K_CLIP_MODE = "clip_mode"
         const val K_TOUR_DONE = "tour_done"
+        const val K_WP_ON = "writing_pill_on"
+        const val K_WP_LEFT = "writing_pill_left"
+        const val K_WP_TOP = "writing_pill_top"
+        const val K_CUES_SEEN = "first_use_cues_seen"
         const val K_RESTORE_AFTER_RESTART = "restore_after_restart"
         /** When SuperBoox last stopped on an error (written as it stops), for Settings' status. */
         const val K_LAST_CRASH = "last_crash"

@@ -288,7 +288,7 @@ class SettingsActivity : Activity() {
                     prefs.clipCatchMode == Prefs.CLIP_EVERY -> "every copy as you make it"
                     prefs.clipKeepHandwriting -> "handwriting as you copy, text when the panel opens"
                     else -> "text when the panel opens"
-                }),
+                } + if (prefs.clipKeepScreenshots && ClipHistory.hasFileAccess()) " · screenshots as you take them" else ""),
         )))
         list.addView(heading("Help"))
         list.addView(card(listOf(

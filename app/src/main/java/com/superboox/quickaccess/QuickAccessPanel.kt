@@ -57,6 +57,8 @@ class QuickAccessPanel(
     private val expandedFolders = HashSet<String>()
     /** Ids of the Notes folders open in the list (pinned ones and their subfolders). */
     private val expandedNoteFolders = HashSet<String>()
+    /** The ▾ on a nested Last Opened Note is open: its folder's notes show under it. */
+    private var lastNoteExpanded = false
     private var mode = Mode.MAIN
     private var dockPage: Int
         get() = service.dockPage
@@ -851,8 +853,27 @@ class QuickAccessPanel(
             val sub = if (currentNote != null) "Library · hold for notes library" else "Nothing opened yet · hold for notes library"
             return lastRow(R.drawable.ic_note, "Open Notes", sub, onHold = library, onClick = library)
         }
-        val name = BooxNotes.splitPath(note.title).lastOrNull() ?: note.title
-        return lastRow(R.drawable.ic_note, "Last Opened Note", name, onHold = library) { service.openBooxNote(note.title) }
+        val steps = BooxNotes.splitPath(note.title)
+        val name = steps.lastOrNull() ?: note.title
+        val folder = steps.dropLast(1).lastOrNull()
+        // Nested: show where it lives, and a ▾ that lists the other notes in that folder right here.
+        val sub = if (folder == null) name else steps.joinToString(" › ")
+        val row = lastRow(R.drawable.ic_note, "Last Opened Note", sub, onHold = library, expandFolder = folder) { service.openBooxNote(note.title) }
+        if (folder == null || !lastNoteExpanded) return row
+        return ctx.vbox().apply {
+            addView(row)
+            val holder = ctx.vbox()
+            addView(holder)
+            holder.addView(hint("Loading…", 44))
+            io.execute {
+                val id = NotesDb.findFolderId(service, folder)
+                main.post {
+                    if (!root.isAttachedToWindow) return@post
+                    holder.removeAllViews()
+                    if (id == null) holder.addView(hint("Folder not found in Notes.", 44)) else loadNoteFolder(holder, id, 1)
+                }
+            }
+        }
     }
 
     private fun lastDocumentRow(): View {
@@ -890,7 +911,7 @@ class QuickAccessPanel(
     }
 
     /** Tap reopens the note or document; hold opens where it lives. */
-    private fun lastRow(iconRes: Int, label: String, subtitle: String?, onHold: () -> Unit, onClick: () -> Unit): View = with(ctx) {
+    private fun lastRow(iconRes: Int, label: String, subtitle: String?, onHold: () -> Unit, expandFolder: String? = null, onClick: () -> Unit): View = with(ctx) {
         hbox().apply {
             setPadding(s(16), s(12), s(16), s(12))
             addView(icon(getDrawable(iconRes), iconPx(30)).apply { imageTintList = ColorStateList.valueOf(Ink.INK) })
@@ -899,6 +920,16 @@ class QuickAccessPanel(
                 addView(text(label, sp(17f), color = Ink.INK, medium = true))
                 if (subtitle != null) addView(oneLine(text(subtitle, sp(13f), color = Ink.MUTED)))
             }, lp(0, WRAP, 1f))
+            if (expandFolder != null) addView(FrameLayout(ctx).apply {
+                contentDescription = if (lastNoteExpanded) "Hide the notes in this folder" else "Show the notes in this folder"
+                pressable(outline(2, 6))
+                addView(icon(getDrawable(if (lastNoteExpanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more), iconPx(22)),
+                    FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+                setOnClickListener {
+                    lastNoteExpanded = !lastNoteExpanded
+                    show(mode)
+                }
+            }, lp(s(40), s(34)).apply { marginStart = s(8) })
             pressable()
             setOnClickListener { onClick() }
             setOnLongClickListener { onHold(); true }

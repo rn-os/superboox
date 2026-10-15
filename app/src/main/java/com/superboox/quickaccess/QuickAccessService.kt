@@ -556,11 +556,12 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             if (!hold) writingMode(!isWritingMode)
             return
         }
-        // Front Light: hold shows the presets in the panel; tap goes off, or back to the last preset.
+        // Front Light: hold shows the presets in the panel; tap steps Off, Soft, Bright, Custom.
         if (control.id == QuickControls.FRONT_LIGHT) {
             if (hold) return
-            val on = quickControlStates()[control.id] ?: true
-            frontLight(if (on) QuickControls.PRESET_OFF else QuickControls.lastOnPreset(prefs))
+            val next = QuickControls.nextLightStep(frontLightPreset())
+            panel?.onLightStep(next)
+            frontLight(next)
             return
         }
         if (control.kind == QuickControls.Kind.TOGGLE && !hold && !control.momentary) {

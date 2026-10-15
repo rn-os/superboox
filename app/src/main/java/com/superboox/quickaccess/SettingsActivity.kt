@@ -1226,7 +1226,7 @@ class SettingsActivity : Activity() {
         gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
         setPadding(dp(12), dp(10), dp(12), dp(14))
         val (tap, hold) = when {
-            c.id == QuickControls.FRONT_LIGHT -> "light turns off / back on" to "opens the presets under the controls"
+            c.id == QuickControls.FRONT_LIGHT -> "steps Off, Soft, Bright, Custom" to "opens the presets under the controls"
             c.id == QuickControls.WRITING -> "radios and light off / back as they were" to "opens its settings here"
             c.id == "rotate" -> "rotation on / off" to "opens BOOX's rotation menu"
             c.momentary -> "a full e‑ink refresh" to "opens its settings"
@@ -1301,7 +1301,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun describe(c: QuickControls.Control): String = when {
-        c.id == QuickControls.FRONT_LIGHT -> "Tap: on/off · hold: Bright, Soft, Custom, Off"
+        c.id == QuickControls.FRONT_LIGHT -> "Tap: next of Off, Soft, Bright, Custom · hold: the presets"
         c.id == QuickControls.WRITING -> "Tap: radios and Front Light off, tap again to put them back · hold: these settings"
         c.id == "rotate" -> "Tap: on/off · hold: rotation menu"
         c.momentary -> "Tap: ${c.label.lowercase()} · hold: its settings"

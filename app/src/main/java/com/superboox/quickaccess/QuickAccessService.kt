@@ -173,6 +173,8 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     override fun onSharedPreferenceChanged(sp: SharedPreferences?, key: String?) {
         if (key == null || key in Prefs.HANDLE_KEYS) attachHandle()
         if (key == Prefs.K_PINS) NoteIds.capture(this, prefs)
+        // A note or document was just recorded (or its folder added): keep an open panel's Last Opened rows current.
+        if (key == Prefs.K_RECENTS) panel?.refreshLastOpened()
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -280,8 +282,12 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         private set
 
     private fun refreshReaderLast() = io.execute {
+        val oldDoc = readerLast?.path
+        val oldNote = notesLast
         readerLast = ReaderLibrary.lastOpened(this)
         notesLast = NotesDb.lastEdited(this)
+        // The panel was built before these were read: redraw its Last Opened rows if they changed.
+        if (readerLast?.path != oldDoc || notesLast != oldNote) handler.post { panel?.refreshLastOpened() }
     }
 
     /** Called by [NoteOpener] when it has opened a note. */

@@ -362,6 +362,11 @@ class QuickAccessPanel(
     /** Redraws in place (Quick Controls after a tap). */
     fun refresh() = show(mode)
 
+    /** Last Opened rows changed under an open panel; redraw unless the user is editing or picking. */
+    fun refreshLastOpened() {
+        if (mode == Mode.MAIN || mode == Mode.RECENT) show(mode)
+    }
+
     /** The Front Light preset changed outside the panel: redraw, on the page holding the one now active. */
     fun refreshLight() {
         if (lightMenu && lightEdit == null) lightPage = activeLightPage()

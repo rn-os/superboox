@@ -284,7 +284,11 @@ class SettingsActivity : Activity() {
             menuRow(R.drawable.ic_apps, Page.APPS,
                 (if (apps == 1) "1 app" else "$apps apps") + if (prefs.previousAppInDock) " · Previous app included" else ""),
             menuRow(R.drawable.ic_clipboard, Page.CLIPBOARD, if (!prefs.clipShowButton) "Off" else
-                "On · ${ClipHistory.list(this).size} clips · " + if (prefs.clipCatchMode == Prefs.CLIP_EVERY) "every copy" else "saved when the panel opens"),
+                "On · ${ClipHistory.list(this).size} clips · " + when {
+                    prefs.clipCatchMode == Prefs.CLIP_EVERY -> "every copy as you make it"
+                    prefs.clipKeepHandwriting -> "handwriting as you copy, text when the panel opens"
+                    else -> "text when the panel opens"
+                }),
         )))
         list.addView(heading("Help"))
         list.addView(card(listOf(
@@ -751,11 +755,11 @@ class SettingsActivity : Activity() {
      * A permission row: what it's for, ✓ when granted, else a button to its switch.
      * [granted] null: the state can't be read, so no badge and the button always shows.
      */
-    private fun permissionRow(title: String, detail: String, granted: Boolean?, button: String = "Turn on", open: () -> Unit): View = vbox().apply {
+    private fun permissionRow(title: String, detail: String, granted: Boolean?, button: String = "Turn on", done: String = "✓ On", notDone: String = "Off", open: () -> Unit): View = vbox().apply {
         setPadding(dp(16), dp(12), dp(16), dp(12))
         addView(hbox().apply {
             addView(text(title, 17f, medium = true), lp(0, WRAP, 1f))
-            if (granted != null) addView(text(if (granted) "✓ On" else "Off", 14f, bold = true).apply {
+            if (granted != null) addView(text(if (granted) done else notDone, 14f, bold = true).apply {
                 setPadding(dp(8), dp(2), dp(8), dp(2))
                 background = outline(2, 12)
             })
@@ -781,6 +785,8 @@ class SettingsActivity : Activity() {
     private fun keepRunningSummary(): String = when {
         EinkMenus.available && EinkMenus.stayActive(packageName) == false -> "Stay active is off"
         !ignoringBattery() -> "Battery optimization is on"
+        // After a restart SuperBoox can only send a notification until it's allowed to switch itself back on.
+        prefs.restoreAfterRestart && !BootRestore.canSwitch(this) -> "After a restart: notification only"
         else -> null
     }?.let { "$it · debug report" } ?: "Kept running · debug report"
 
@@ -797,7 +803,7 @@ class SettingsActivity : Activity() {
             else "Android may stop apps running in the background to save battery, and SuperBoox is always in the background. When it's stopped, the edge strip stops working until you open SuperBoox again.")
         list.addView(card(listOfNotNull(
             if (boox) stayActiveRow(stay) else null,
-            permissionRow("Battery optimization off", "Android's switch: allow SuperBoox to run in the background.", battery) { requestIgnoreBattery() },
+            permissionRow("Battery optimization off", "Android's switch: allow SuperBoox to run in the background.", battery, done = "✓ Done", notDone = "Not yet") { requestIgnoreBattery() },
         )))
         list.addView(View(this), lp(MATCH, dp(10)))
         // BOOX also stops every app right after the tablet starts; this brings the strip back.

@@ -55,6 +55,10 @@ class QuickAccessPanel(
     private val main = Handler(Looper.getMainLooper())
     private val scale = prefs.menuSize.scale
     private val expandedFolders = HashSet<String>()
+    /** Ids of the Notes folders open in the list (pinned ones and their subfolders). */
+    private val expandedNoteFolders = HashSet<String>()
+    /** The ▾ on a nested Last Opened Note is open: its folder's notes show under it. */
+    private var lastNoteExpanded = false
     private var mode = Mode.MAIN
     private var dockPage: Int
         get() = service.dockPage
@@ -889,8 +893,27 @@ class QuickAccessPanel(
             val sub = if (currentNote != null) "Library · hold for notes library" else "Nothing opened yet · hold for notes library"
             return lastRow(R.drawable.ic_note, "Open Notes", sub, onHold = library, onClick = library)
         }
-        val name = BooxNotes.splitPath(note.title).lastOrNull() ?: note.title
-        return lastRow(R.drawable.ic_note, "Last Opened Note", name, onHold = library) { service.openBooxNote(note.title) }
+        val steps = BooxNotes.splitPath(note.title)
+        val name = steps.lastOrNull() ?: note.title
+        val folder = steps.dropLast(1).lastOrNull()
+        // Nested: show where it lives, and a ▾ that lists the other notes in that folder right here.
+        val sub = if (folder == null) name else steps.joinToString(" › ")
+        val row = lastRow(R.drawable.ic_note, "Last Opened Note", sub, onHold = library, expandFolder = folder) { service.openBooxNote(note.title) }
+        if (folder == null || !lastNoteExpanded) return row
+        return ctx.vbox().apply {
+            addView(row)
+            val holder = ctx.vbox()
+            addView(holder)
+            holder.addView(hint("Loading…", 44))
+            io.execute {
+                val id = NotesDb.findFolderId(service, folder)
+                main.post {
+                    if (!root.isAttachedToWindow) return@post
+                    holder.removeAllViews()
+                    if (id == null) holder.addView(hint("Folder not found in Notes.", 44)) else loadNoteFolder(holder, id, 1)
+                }
+            }
+        }
     }
 
     private fun lastDocumentRow(): View {
@@ -928,7 +951,7 @@ class QuickAccessPanel(
     }
 
     /** Tap reopens the note or document; hold opens where it lives. */
-    private fun lastRow(iconRes: Int, label: String, subtitle: String?, onHold: () -> Unit, onClick: () -> Unit): View = with(ctx) {
+    private fun lastRow(iconRes: Int, label: String, subtitle: String?, onHold: () -> Unit, expandFolder: String? = null, onClick: () -> Unit): View = with(ctx) {
         hbox().apply {
             setPadding(s(16), s(12), s(16), s(12))
             addView(icon(getDrawable(iconRes), iconPx(30)).apply { imageTintList = ColorStateList.valueOf(Ink.INK) })
@@ -937,6 +960,16 @@ class QuickAccessPanel(
                 addView(text(label, sp(17f), color = Ink.INK, medium = true))
                 if (subtitle != null) addView(oneLine(text(subtitle, sp(13f), color = Ink.MUTED)))
             }, lp(0, WRAP, 1f))
+            if (expandFolder != null) addView(FrameLayout(ctx).apply {
+                contentDescription = if (lastNoteExpanded) "Hide the notes in this folder" else "Show the notes in this folder"
+                pressable(outline(2, 6))
+                addView(icon(getDrawable(if (lastNoteExpanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more), iconPx(22)),
+                    FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+                setOnClickListener {
+                    lastNoteExpanded = !lastNoteExpanded
+                    show(mode)
+                }
+            }, lp(s(40), s(34)).apply { marginStart = s(8) })
             pressable()
             setOnClickListener { onClick() }
             setOnLongClickListener { onHold(); true }
@@ -991,6 +1024,11 @@ class QuickAccessPanel(
                 box.addView(holder)
                 loadFolder(holder, Uri.parse(pin.value))
             }
+            if (pin.type == PinType.NOTE_FOLDER && pin.noteId in expandedNoteFolders) {
+                val holder = vbox()
+                box.addView(holder)
+                loadNoteFolder(holder, pin.noteId, 1)
+            }
         }
         box
     }
@@ -1014,6 +1052,7 @@ class QuickAccessPanel(
             PinType.DOCUMENT -> R.drawable.ic_book
             PinType.FILE -> R.drawable.ic_file
             PinType.FOLDER -> R.drawable.ic_folder
+            PinType.NOTE_FOLDER -> R.drawable.ic_note_folder
             PinType.APP -> R.drawable.ic_apps
             PinType.INTENT -> R.drawable.ic_link
         }
@@ -1021,6 +1060,7 @@ class QuickAccessPanel(
     }
 
     private fun itemRow(pin: Pin): View {
+        if (pin.type == PinType.NOTE_FOLDER) return noteFolderRow(pin)
         val label = if (pin.type == PinType.FOLDER && pin.id in expandedFolders) "${pin.label}  ▾" else pin.label
         return ctx.hbox().apply {
             setPadding(s(18), s(13), s(20), s(13))
@@ -1043,6 +1083,7 @@ class QuickAccessPanel(
                 if (!expandedFolders.add(pin.id)) expandedFolders.remove(pin.id)
                 show(Mode.MAIN)
             }
+            PinType.NOTE_FOLDER -> toggleNoteFolder(pin.noteId)
             PinType.FILE -> launchAndClose { Launcher.openFile(service, Uri.parse(pin.value)) }
             PinType.DOCUMENT -> launchAndClose { ReaderLibrary.open(service, pin.value) }
             PinType.APP -> launchAndClose { Launcher.launchApp(service, pin.value) }
@@ -1784,6 +1825,115 @@ class QuickAccessPanel(
     private fun ago(time: Long): String =
         DateUtils.getRelativeTimeSpanString(time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
 
+    // ---- Notes folders: expand in place, jump into Notes ------------------------------------
+
+    private fun toggleNoteFolder(id: String) {
+        if (!expandedNoteFolders.add(id)) {
+            // Closing a folder closes the ones inside it too.
+            expandedNoteFolders.remove(id)
+        }
+        show(Mode.MAIN)
+    }
+
+    /** A pinned Notes folder: tap or the box expands it, "Open in Notes" jumps into it. Hold edits like any pin. */
+    private fun noteFolderRow(pin: Pin): View {
+        val open = pin.noteId in expandedNoteFolders
+        return ctx.hbox().apply {
+            setPadding(s(18), s(9), s(14), s(9))
+            addView(pinIcon(pin))
+            addView(oneLine(ctx.text(pin.label, sp(17f))).apply { setPadding(s(12), 0, s(8), 0) }, lp(0, WRAP, 1f))
+            addNoteFolderButtons(this, pin.noteId, open, expandable = true) {
+                NotesDb.folderPathWithSelf(service, pin.noteId).ifEmpty { BooxNotes.splitPath(pin.value) }
+            }
+            pressable()
+            setOnClickListener { toggleNoteFolder(pin.noteId) }
+            setOnLongClickListener {
+                show(Mode.EDIT)
+                true
+            }
+        }
+    }
+
+    /** "Open in Notes" and the ▾ / ▴ box, the same height and outline. [path] runs off the main thread. */
+    private fun addNoteFolderButtons(row: LinearLayout, id: String, open: Boolean, expandable: Boolean, path: () -> List<String>) {
+      with(ctx) {
+        val h = s(34)
+        row.addView(text("Open in Notes", sp(13f), bold = true).apply {
+            gravity = Gravity.CENTER
+            setPadding(s(12), 0, s(12), 0)
+            maxLines = 1
+            contentDescription = "Open this folder in Notes"
+            pressable(outline(2, 6))
+            setOnClickListener {
+                io.execute {
+                    val p = path()
+                    main.post { service.openNotesFolderPath(p) }
+                }
+            }
+        }, lp(WRAP, h))
+        if (expandable) row.addView(FrameLayout(ctx).apply {
+            contentDescription = if (open) "Collapse" else "Expand"
+            pressable(outline(2, 6))
+            addView(icon(getDrawable(if (open) R.drawable.ic_expand_less else R.drawable.ic_expand_more), iconPx(22)),
+                FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+            setOnClickListener { toggleNoteFolder(id) }
+        }, lp(s(40), h).apply { marginStart = s(8) })
+      }
+    }
+
+    /** What's inside an open Notes folder, [level] 1 or 2 deep. Only level 1 folders can open further. */
+    private fun loadNoteFolder(holder: LinearLayout, folderId: String, level: Int) {
+        holder.addView(hint("Loading…", 18 + 26 * level))
+        io.execute {
+            val children = NotesDb.folderChildren(service, folderId)
+            val path = NotesDb.folderPathWithSelf(service, folderId)
+            main.post {
+                if (!root.isAttachedToWindow) return@post
+                holder.removeAllViews()
+                when {
+                    children == null -> holder.addView(hint("Folder not found in Notes.", 18 + 26 * level))
+                    children.isEmpty() -> holder.addView(hint("Empty", 18 + 26 * level))
+                }
+                children?.forEach { c ->
+                    val childPath = path + c.title
+                    holder.addView(noteFolderChild(c, childPath, level))
+                    holder.addView(indentRule(18 + 26 * level))
+                    if (c.isFolder && level < 2 && c.id in expandedNoteFolders) {
+                        val sub = ctx.vbox()
+                        holder.addView(sub)
+                        loadNoteFolder(sub, c.id, level + 1)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun noteFolderChild(c: NotesDb.Entry, path: List<String>, level: Int): View = ctx.hbox().apply {
+        setPadding(s(18 + 26 * level), s(if (c.isFolder) 7 else 10), s(14), s(if (c.isFolder) 7 else 10))
+        addView(ctx.icon(ctx.getDrawable(if (c.isFolder) R.drawable.ic_note_folder else R.drawable.ic_note), iconPx(20)))
+        addView(oneLine(ctx.text(c.title, sp(15f))).apply { setPadding(s(12), 0, s(8), 0) }, lp(0, WRAP, 1f))
+        pressable()
+        if (c.isFolder) {
+            val open = c.id in expandedNoteFolders
+            val expandable = level < 2
+            addNoteFolderButtons(this, c.id, open, expandable) { path }
+            setOnClickListener { if (expandable) toggleNoteFolder(c.id) else service.openNotesFolderPath(path) }
+        } else {
+            setOnClickListener {
+                DebugLog.i("pin", "Notes folder row -> note \"${path.last()}\" in ${path.dropLast(1)}")
+                service.openBooxNote(Pin(PinType.BOOX_NOTE, c.title, path.joinToString(" ${BooxNotes.PATH_SEPARATOR} "), noteId = c.id))
+            }
+        }
+    }
+
+    private fun indentRule(startDp: Int): View = View(ctx).apply {
+        setBackgroundColor(Ink.INK)
+        layoutParams = LinearLayout.LayoutParams(MATCH, ctx.dp(1)).apply {
+            marginStart = s(startDp)
+            marginEnd = s(16)
+        }
+    }
+
     private fun loadFolder(holder: LinearLayout, tree: Uri) {
         holder.addView(hint("Loading…", 36))
         io.execute {
@@ -1951,10 +2101,27 @@ class QuickAccessPanel(
     }
 
     private fun addPicked() {
+        // Folders pin as expandable Notes folders. Whether a card is one comes from the Notes
+        // database (the card text alone can miss it), so look every picked note up off the main thread.
+        val labels = picked.toList()
+        val names = labels.filter { it !in pickDocs }
+        io.execute {
+            val ids = names.associateWith { NotesDb.findFolderId(service, it) }
+            main.post { finishPicked(labels, ids) }
+        }
+    }
+
+    private fun finishPicked(labels: List<String>, folderIds: Map<String, String?>) {
         var added = 0
-        picked.forEach { label ->
+        labels.forEach { label ->
             val doc = pickDocs[label]
-            if (doc != null) {
+            val folderId = folderIds[label]
+            if (folderId != null) {
+                if (prefs.pins.none { it.type == PinType.NOTE_FOLDER && it.noteId == folderId }) {
+                    prefs.addPin(Pin(PinType.NOTE_FOLDER, label, label, noteId = folderId))
+                    added++
+                }
+            } else if (doc != null) {
                 if (prefs.pins.none { it.type == PinType.DOCUMENT && it.value == doc.path }) {
                     prefs.addPin(Pin(PinType.DOCUMENT, doc.title, doc.path))
                     added++
@@ -1964,7 +2131,7 @@ class QuickAccessPanel(
                 added++
             }
         }
-        DebugLog.i("pin", "added $added from the library: $picked")
+        DebugLog.i("pin", "added $added from the library: $labels")
         toast(if (added == 1) "Added 1 item" else "Added $added items")
         picked.clear()
         show(Mode.MAIN)

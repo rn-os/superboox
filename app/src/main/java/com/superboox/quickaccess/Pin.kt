@@ -16,6 +16,9 @@ enum class PinType {
     /** A SAF folder; expands inline in the panel to show its newest files. */
     FOLDER,
 
+    /** A folder in BOOX Notes; expands inline to its notes and subfolders. [Pin.noteId] is the folder's id. */
+    NOTE_FOLDER,
+
     /** A launchable app, value is "package" or "package/activity". */
     APP,
 

@@ -142,6 +142,63 @@ object NotesDb {
         return path.joinToString(" ${BooxNotes.PATH_SEPARATOR} ")
     }
 
+    /** One entry inside a Notes folder: a note or a subfolder (folders have no pages). */
+    class Entry(val id: String, val title: String, val isFolder: Boolean)
+
+    /**
+     * What sits in the folder with this [folderId], folders first then notes, each by name; null
+     * if the database isn't readable or the folder is gone. Call off the main thread. Which
+     * `status` means "alive" differs between firmware (0 elsewhere, 1 on the Note Air 6C), so
+     * the status of the most recently edited note counts as alive.
+     */
+    fun folderChildren(context: Context, folderId: String): List<Entry>? {
+        val rows = runCatching { query(context) }.getOrNull() ?: return null
+        if (rows.none { it.id == folderId }) return null
+        val alive = rows.filter { it.pages > 0 && it.updated > 0 }.maxByOrNull { it.updated }?.status
+        return rows.filter { it.parent == folderId && (alive == null || it.status == alive) }
+            .map { Entry(it.id, it.title, isFolderRow(rows, it)) }
+            .sortedWith(compareBy<Entry>({ if (it.isFolder) 0 else 1 }, { it.title.lowercase() }))
+    }
+
+    /**
+     * The id of the folder at [path] (just its name, or "Parent / Folder"), or null if that name
+     * isn't a folder. A folder is a row with no pages or with entries inside it, so this doesn't
+     * depend on how a firmware fills `pageCount`. Several with the name: the one holding most
+     * entries. Off the main thread.
+     */
+    fun findFolderId(context: Context, path: List<String>): String? {
+        val name = path.lastOrNull() ?: return null
+        val rows = runCatching { query(context) }.getOrNull() ?: return null
+        val byId = rows.associateBy { it.id }
+        var folders = rows.filter { NotesScreen.matches(it.title, name) && isFolderRow(rows, it) }
+        if (folders.size > 1 && path.size > 1) {
+            val parentName = path[path.size - 2]
+            val inParent = folders.filter { f -> f.parent?.let { byId[it] }?.let { NotesScreen.matches(it.title, parentName) } == true }
+            if (inParent.isNotEmpty()) folders = inParent
+        }
+        val best = folders.maxByOrNull { f -> rows.count { it.parent == f.id } }
+        DebugLog.i("note", "folder lookup \"$name\": ${rows.count { NotesScreen.matches(it.title, name) }} rows named so, ${folders.size} folder(s)" +
+            (best?.let { " -> ${it.id.take(8)}… (pages ${it.pages}, status ${it.status})" } ?: ""))
+        return best?.id
+    }
+
+    fun findFolderId(context: Context, name: String): String? = findFolderId(context, listOf(name))
+
+    /** True if [id] is a folder in the database (no pages, or something inside it). Off the main thread. */
+    fun isFolderId(context: Context, id: String): Boolean {
+        val rows = runCatching { query(context) }.getOrNull() ?: return false
+        return rows.firstOrNull { it.id == id }?.let { isFolderRow(rows, it) } == true
+    }
+
+    private fun isFolderRow(rows: List<Row>, r: Row): Boolean = r.pages == 0 || rows.any { it.parent == r.id }
+
+    /** The path to the folder from the top, outermost first, ending with its own name. Empty if gone. */
+    fun folderPathWithSelf(context: Context, folderId: String): List<String> {
+        val rows = runCatching { query(context) }.getOrNull() ?: return emptyList()
+        val self = rows.firstOrNull { it.id == folderId } ?: return emptyList()
+        return folderPath(context, folderId) + self.title
+    }
+
     /** Forget cached titles (a note was just created or renamed). */
     fun forgetTitles() {
         titleCache = null

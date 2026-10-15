@@ -63,7 +63,7 @@ class QuickAccessPanel(
     private var dockPage: Int
         get() = service.dockPage
         set(v) { service.dockPage = v }
-    private var dockCellCount = 0
+    private var dockPageCount = 1
 
     /** What BOOX Notes is showing, if it's the app behind the panel. */
     private val notesState: NotesScreen.State? = if (service.isNotesInFront) service.notesState() else null
@@ -2168,40 +2168,68 @@ class QuickAccessPanel(
         }
     }
 
-    // ---- Apps: 2 columns, 4 per page ------------------------------------------------------
+    // ---- Apps: one or two rows, 2 to 4 columns ----------------------------------------------
+
+    /** Tiles across: as many 120 dp tiles as the panel holds, 2 to 4. */
+    private fun dockColumns(): Int =
+        (sheetWidth(ctx, prefs, service.screenWidth()) / ctx.dp(120 * prefs.menuSize.scale)).coerceIn(2, 4)
 
     private fun dock(): View = with(ctx) {
-        val apps = prefs.dock
+        // "Previous app" is always the last tile (bottom right) once there is one, so it never takes a pinned app's place.
+        val pinned = prefs.dock.filter { it.value != Prefs.PREVIOUS_APP }
+        val previous = if (prefs.previousAppInDock) service.previousApp else null
+        val cols = dockColumns()
+        val tiles = pinned.size + if (previous != null) 1 else 0
+        val oneRow = when (prefs.dockLayout) {
+            Prefs.DOCK_ONE -> true
+            Prefs.DOCK_TWO -> false
+            else -> tiles <= minOf(3, cols)
+        }
+        val perPage = if (oneRow) cols else cols * 2
         // Swipe sideways to page, like Quick Controls.
         val box = SwipeRow(ctx, s(40), vertical = true) { dir ->
-            val pageCount = (dockCellCount + DOCK_PER_PAGE - 1) / DOCK_PER_PAGE
             val to = dockPage + dir
-            if (to in 0 until pageCount) {
+            if (to in 0 until dockPageCount) {
                 dockPage = to
                 show(mode)
             }
         }
-        // "Previous app" sits wherever it was placed; it's left out until there is one.
-        val cells: List<View> = apps.mapNotNull { app ->
-            if (app.value == Prefs.PREVIOUS_APP) service.previousApp?.let { previousCell(it) } else appCell(app)
-        }
-        if (cells.isEmpty()) {
+        if (pinned.isEmpty() && previous == null) {
             box.addView(hint("Add apps in Settings."))
             return@with box
         }
-        dockCellCount = cells.size
-        val pages = cells.chunked(DOCK_PER_PAGE)
+        // When apps need more than one page, "Previous app" takes the last slot of every page, so it stays visible, bottom right,
+        // and never spills onto a page of its own. Otherwise it is simply the last tile.
+        val reserve = previous != null && tiles > perPage
+        val pages = (if (reserve) pinned.chunked(perPage - 1) else pinned.chunked(perPage)).ifEmpty { listOf(emptyList()) }
+        dockPageCount = pages.size
+        DebugLog.i("dock", "apps=${pinned.size} previous=${previous ?: "none"} (setting ${prefs.previousAppInDock}) cols=$cols perPage=$perPage page=${dockPage + 1}/${pages.size}")
         dockPage = dockPage.coerceIn(0, pages.size - 1)
-        pages[dockPage].chunked(2).forEachIndexed { r, pair ->
+        // "Previous app" is always the bottom-right cell of the visible page. Blank cells are invisible copies of a real tile, so
+        // every cell has the same height; with several pages each page is filled to the same two rows, so the panel doesn't change size.
+        fun blank(): View = (pinned.firstOrNull()?.let { appCell(it) } ?: previousCell(previous ?: "")).apply {
+            visibility = View.INVISIBLE
+            isClickable = false
+            isLongClickable = false
+            contentDescription = null
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        val shown: List<View> = pages[dockPage].map { appCell(it) }.let { apps ->
+            val slots = if (pages.size > 1) perPage else ((apps.size + (if (previous != null) 1 else 0) + cols - 1) / cols) * cols
+            if (previous == null) apps + List((slots - apps.size).coerceAtLeast(0)) { blank() }
+            else apps + List((slots - apps.size - 1).coerceAtLeast(0)) { blank() } + previousCell(previous)
+        }
+        shown.chunked(cols).forEachIndexed { r, rowCells ->
             if (r > 0) box.addView(rule(1))
             box.addView(hbox().apply {
                 gravity = Gravity.NO_GRAVITY
-                addView(pair[0], lp(0, WRAP, 1f))
-                addView(vRule(), lp(dp(1), MATCH).apply {
-                    topMargin = s(10)
-                    bottomMargin = s(10)
-                })
-                if (pair.size > 1) addView(pair[1], lp(0, WRAP, 1f)) else addView(View(ctx), lp(0, 1, 1f))
+                for (i in 0 until cols) {
+                    if (i > 0) addView(vRule(), lp(dp(1), MATCH).apply {
+                        topMargin = s(10)
+                        bottomMargin = s(10)
+                    })
+                    addView(rowCells.getOrNull(i) ?: blank(), lp(0, WRAP, 1f))
+                }
             }, lp(MATCH, WRAP))
         }
         if (pages.size > 1) {
@@ -2217,6 +2245,11 @@ class QuickAccessPanel(
         box
     }
 
+    /** The icon of an app tile: its own, or the uniform black app glyph when Settings asks for it. */
+    private fun dockIcon(pkgOrComponent: String, sizePx: Int): View =
+        if (prefs.dockOwnIcons) ctx.icon(Launcher.appIcon(service, pkgOrComponent), sizePx, tint = false)
+        else ctx.icon(ctx.getDrawable(R.drawable.ic_apps), sizePx)
+
     /** "Previous app": that app's icon with a small ← badge; tap to switch straight back, hold for recent apps. */
     private fun previousCell(pkg: String): View = with(ctx) {
         vbox().apply {
@@ -2225,7 +2258,7 @@ class QuickAccessPanel(
             contentDescription = "Previous app: ${Launcher.appLabel(service, pkg)}"
             val iconSize = iconPx(40)
             addView(FrameLayout(ctx).apply {
-                addView(icon(Launcher.appIcon(service, pkg), iconSize, tint = false), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.END))
+                addView(dockIcon(pkg, iconSize), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.END))
                 addView(FrameLayout(ctx).apply {
                     background = android.graphics.drawable.GradientDrawable().apply {
                         shape = android.graphics.drawable.GradientDrawable.OVAL
@@ -2254,7 +2287,7 @@ class QuickAccessPanel(
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(s(4), s(9), s(4), s(9))
             contentDescription = app.label
-            addView(icon(Launcher.appIcon(service, app.value), iconPx(40), tint = false))
+            addView(dockIcon(app.value, iconPx(40)))
             addView(oneLine(text(app.label, sp(14f))).apply {
                 gravity = Gravity.CENTER
                 setPadding(0, s(3), 0, 0)
@@ -2308,8 +2341,6 @@ class QuickAccessPanel(
     private fun toast(msg: String) = Toast.makeText(service, msg, Toast.LENGTH_SHORT).show()
 
     companion object {
-        // Two rows of two, like the Supernote photo; more pages with ‹ ›.
-        const val DOCK_PER_PAGE = 4
         const val QC_PER_PAGE = 5
         const val LIGHT_PER_PAGE = 4
         const val CLIPS_PER_PAGE_MIN = 2

@@ -8,7 +8,7 @@
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <!-- Optional, granted by the user in Android settings (All files access): lets the
          Clipboard read BOOX Notes' handwriting copy folder for its preview without
-         Advanced access. Only that folder is read. -->
+         Advanced access, and (when Screenshots are kept) the screenshot folders. Only those are read. -->
     <!-- Lets the tour ask BOOX/Android to keep SuperBoox running in the background. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission
@@ -46,6 +46,11 @@
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- The picture editor Mark up opens: to tell when it closes right after opening. -->
+        <intent>
+            <action android:name="android.intent.action.EDIT" />
+            <data android:mimeType="image/*" />
         </intent>
     </queries>
 
@@ -85,6 +90,30 @@
             <intent-filter>
                 <action android:name="com.superboox.quickaccess.OPEN_PANEL" />
                 <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- "Copy to clipboard" in the share sheet (BOOX's has no Copy): keeps a shared screenshot,
+             picture or text in the Clipboard and puts it on the clipboard. No window of its own. -->
+        <activity
+            android:name=".ShareToClipboardActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/share_copy_label"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.SuperBoox.Transparent">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
 

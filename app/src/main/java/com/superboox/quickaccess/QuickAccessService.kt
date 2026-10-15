@@ -62,6 +62,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         DebugLog.init(this)
         DebugLog.i("service", "connected")
         prefs = Prefs(this)
+        loadRecentApps()
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         noteOpener = NoteOpener(this)
         cover = OpeningCover(this, wm)
@@ -1068,6 +1069,21 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         recentApps.remove(pkg)
         recentApps.addFirst(pkg)
         while (recentApps.size > 6) recentApps.removeLast()
+        saveRecentApps()
+    }
+
+    // Kept in its own file (not Prefs: a change there rebuilds the panel, and Backup would carry it), so "Previous app"
+    // survives an update or a restart of the service instead of waiting for the next app switch.
+    private val recentStore get() = getSharedPreferences("recent_apps_state", MODE_PRIVATE)
+
+    private fun loadRecentApps() {
+        val saved = runCatching { recentStore.getString("apps", null) }.getOrNull() ?: return
+        recentApps.clear()
+        saved.split('\n').filter { it.isNotBlank() && it != packageName }.take(6).forEach { recentApps.addLast(it) }
+    }
+
+    private fun saveRecentApps() {
+        runCatching { recentStore.edit().putString("apps", recentApps.joinToString("\n")).apply() }
     }
 
     /** The app used before the one in front (or the last app, from the home screen). */

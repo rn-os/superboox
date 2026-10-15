@@ -177,9 +177,19 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(K_APP_OWN_ICONS, false)
         set(v) = sp.edit().putBoolean(K_APP_OWN_ICONS, v).apply()
 
+    /** Apps at the bottom: the app's own icon (default, as before) or the uniform black app glyph. Separate from [appOwnIcons] so the two can be mixed. */
+    var dockOwnIcons: Boolean
+        get() = sp.getBoolean(K_DOCK_OWN_ICONS, true)
+        set(v) = sp.edit().putBoolean(K_DOCK_OWN_ICONS, v).apply()
+
+    /** Apps at the bottom: [DOCK_AUTO] one row for 3 or fewer tiles, else two; or always one / two rows. */
+    var dockLayout: Int
+        get() = sp.getInt(K_DOCK_LAYOUT, DOCK_AUTO).coerceIn(DOCK_AUTO, DOCK_TWO)
+        set(v) = sp.edit().putInt(K_DOCK_LAYOUT, v).apply()
+
     /**
      * "Previous app" in the apps grid. It's an item in the dock list
-     * ([PREVIOUS_APP]), so it can be moved like any app.
+     * ([PREVIOUS_APP]) that the panel always draws last (bottom right), whatever its place in the list.
      */
     var previousAppInDock: Boolean
         get() {
@@ -286,6 +296,11 @@ class Prefs(context: Context) {
         const val K_PANEL_WIDTH = "panel_width_pct"
         const val K_SYSTEM_ACTIONS = "system_actions"
         const val K_APP_OWN_ICONS = "app_own_icons"
+        const val K_DOCK_OWN_ICONS = "dock_own_icons"
+        const val K_DOCK_LAYOUT = "dock_layout"
+        const val DOCK_AUTO = 0
+        const val DOCK_ONE = 1
+        const val DOCK_TWO = 2
         const val K_PREVIOUS_APP = "previous_app"
         const val K_THIS_APP = "this_app"
 

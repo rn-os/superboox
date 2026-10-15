@@ -1158,11 +1158,6 @@ class SettingsActivity : Activity() {
             previewButton(),
         )))
         list.addView(note("Changing the size or width shows the real panel beside this page, at that size, so you can see it before opening the panel. It can't be tapped; hide it with the button or by leaving this page."))
-        list.addView(heading("Icons"))
-        list.addView(card(listOf(
-            check("Use apps' own icons for pinned apps", prefs.appOwnIcons) { prefs.appOwnIcons = it },
-        )))
-        list.addView(note("Off: every app gets the same black app icon, to match the rest of the panel."))
         list.addView(heading("Pages"))
         list.addView(card(listOf(
             check("Remember last page", prefs.rememberPages) { prefs.rememberPages = it },
@@ -1190,6 +1185,11 @@ class SettingsActivity : Activity() {
         )
         list.addView(card(rows))
         list.addView(note("Easiest way to add a note or book: open it, swipe the panel open and tap Add."))
+        list.addView(heading("Icons"))
+        list.addView(card(listOf(
+            check("Use apps' own icons for pinned apps", prefs.appOwnIcons) { prefs.appOwnIcons = it },
+        )))
+        list.addView(note("Applies to apps pinned in this list. Off: they get the same black app icon as the rest of the panel. Apps at the bottom has its own setting."))
     }
 
     private fun quickControlsSection() {
@@ -1400,20 +1400,41 @@ class SettingsActivity : Activity() {
 
     private fun dockSection() {
         list.addView(View(this), lp(MATCH, dp(12)))
-        val dock = prefs.dock
+        list.addView(heading("Layout"))
+        val layouts = listOf("Automatic" to Prefs.DOCK_AUTO, "Always one row" to Prefs.DOCK_ONE, "Two rows" to Prefs.DOCK_TWO)
+        list.addView(card(listOf(
+            choiceRow("Rows", layouts.first { it.second == prefs.dockLayout }.first) {
+                pick("Rows", layouts.map { it.first }, layouts.indexOfFirst { it.second == prefs.dockLayout }) { prefs.dockLayout = layouts[it].second }
+            },
+        )))
+        list.addView(note("Automatic: one row for up to 3 apps (counting Previous app when it shows), two rows for more. Extra apps go on more pages with ‹ ›."))
+        list.addView(heading("Apps"))
+        // "Previous app" is always the last tile, so only the pinned apps are listed to move.
+        val dock = prefs.dock.filter { it.value != Prefs.PREVIOUS_APP }
         val rows = mutableListOf<View>(
             check("Show \"Previous app\": the app you were in before this one", prefs.previousAppInDock) { prefs.previousAppInDock = it; render() },
         )
         if (EinkMenus.available) rows += check("Show \"This app\": BOOX's Optimize and EinkWise for the app that's open", prefs.showThisApp) { prefs.showThisApp = it; render() }
         if (dock.isEmpty()) rows += cardText("No apps yet.")
         dock.forEachIndexed { i, app ->
-            rows += itemRow(app, i, dock.size, onMove = { from, to -> prefs.dock = dock.move(from, to) },
-                onEdit = if (app.value == Prefs.PREVIOUS_APP) null else ({ renameDockApp(app) }),
-                onRemove = { prefs.dock = dock.filterNot { it.id == app.id }; render() })
+            rows += itemRow(app, i, dock.size, onMove = { from, to -> prefs.dock = withPrevious(dock.move(from, to)) },
+                onEdit = ({ renameDockApp(app) }),
+                onRemove = { prefs.dock = withPrevious(dock.filterNot { it.id == app.id }); render() })
         }
-        rows += buttonRow("+ Add app" to { pickApp { prefs.dock = prefs.dock + it; render() } })
+        rows += buttonRow("+ Add app" to { pickApp { prefs.dock = withPrevious(dock + it); render() } })
         list.addView(card(rows))
-        if (prefs.previousAppInDock) list.addView(note("Move \"Previous app\" with ↑ ↓ to choose where it sits."))
+        if (prefs.previousAppInDock) list.addView(note("Previous app always sits last (bottom right) once there is one, so it never takes a pinned app's place."))
+        list.addView(heading("Icons"))
+        list.addView(card(listOf(
+            check("Use apps' own icons at the bottom", prefs.dockOwnIcons) { prefs.dockOwnIcons = it },
+        )))
+        list.addView(note("Off: every app at the bottom gets the same black app icon. Pinned apps in Quick Access has its own setting."))
+    }
+
+    /** The saved dock list: [apps] plus the "Previous app" marker when it's on (the panel draws it last anyway). */
+    private fun withPrevious(apps: List<Pin>): List<Pin> {
+        val prev = prefs.dock.filter { it.value == Prefs.PREVIOUS_APP }
+        return prev + apps
     }
 
     /** Edit an app at the bottom of the panel: rename it (only the name SuperBoox shows; Reset puts its own back) or replace it in place. */

@@ -249,6 +249,9 @@ class NoteOpener(private val service: AccessibilityService) {
     private var setupUps = 0
     private var setupUpFrom: String? = null
     private var setupUpAt = 0L
+    private var setupCreateSeenAt = 0L
+    private var createTappedAt = 0L
+    private var createRetapped = false
 
     /**
      * Opens the Notes library and taps its own "new note" button, which brings up
@@ -261,6 +264,7 @@ class NoteOpener(private val service: AccessibilityService) {
         setupCreateTapped = false
         setupUps = 0
         setupUpFrom = null
+        setupCreateSeenAt = 0L
         setupUntil = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
         // Always through BOOX's home screen (its Notes widget has the +). Back from an open note
         // can land on another launcher (build 59 report), so don't rely on it; BOOX saves the note itself.
@@ -315,11 +319,17 @@ class NoteOpener(private val service: AccessibilityService) {
                 setupUps++
                 setupUpFrom = screen
                 setupUpAt = SystemClock.uptimeMillis()
+                setupCreateSeenAt = 0L
                 setupUntil += AFTER_TAP_MS
                 DebugLog.i("note", "new-note setup: library is in a folder; going up ($setupUps)")
                 touch(up)
                 handler.postDelayed({ setupTick(notesPackage) }, POLL_MS)
                 return
+            }
+            // BOOX ignores a tap on Create in the first moments after its Notes screen appears.
+            if (create != null && setupCreateSeenAt == 0L) setupCreateSeenAt = SystemClock.uptimeMillis()
+            if (create != null && SystemClock.uptimeMillis() < setupCreateSeenAt + CREATE_SETTLE_MS) {
+                return run { handler.postDelayed({ setupTick(notesPackage) }, CREATE_SETTLE_MS) }
             }
             if (create != null) {
                 setupCreateTapped = true
@@ -327,6 +337,8 @@ class NoteOpener(private val service: AccessibilityService) {
                 DebugLog.i("note", "new-note setup: tapping the library's Create box ${r.toShortString()}")
                 touch(r)
                 val until = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
+                createTappedAt = SystemClock.uptimeMillis()
+                createRetapped = false
                 handler.postDelayed({ createMenuTick(notesPackage, until) }, POLL_MS)
                 return
             }
@@ -365,6 +377,16 @@ class NoteOpener(private val service: AccessibilityService) {
             val next = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
             handler.postDelayed({ createScreenTick(notesPackage, next) }, POLL_MS)
             return
+        }
+        // No menu yet: the tap may not have registered; tap Create once more rather than wait it out.
+        if (!createRetapped && SystemClock.uptimeMillis() > createTappedAt + CREATE_RETAP_MS) {
+            val create = notesRoot(BooxNotes.packages(notesPackage))?.let { libraryCreateBox(it) }
+            if (create != null) {
+                createRetapped = true
+                createTappedAt = SystemClock.uptimeMillis()
+                DebugLog.i("note", "new-note setup: no menu after Create; tapping it again")
+                touch(Rect().also(create::getBoundsInScreen))
+            }
         }
         if (SystemClock.uptimeMillis() > until) {
             DebugLog.w("note", "new-note setup: no Handwritten Notes choice after tapping Create. Screen:\n" +
@@ -530,7 +552,8 @@ class NoteOpener(private val service: AccessibilityService) {
         when (state) {
             is NotesScreen.State.Editor -> {
                 if (!j.folderOnly && NotesScreen.matches(state.title, j.steps.last())) return succeed(j)
-                back(j, now, signature, "another note is open (\"${state.title}\")")
+                // BOOX's library inside a folder can read as an editor (its header): go up there, not Back.
+                back(j, now, signature, "another note is open (\"${state.title}\")", root)
             }
 
             is NotesScreen.State.Library -> {
@@ -906,6 +929,8 @@ class NoteOpener(private val service: AccessibilityService) {
         private const val SETUP_TIMEOUT_MS = 6_000L
         private const val MAX_SETUP_UPS = 4
         private const val RECENT_RECHECK_MS = 800L
+        private const val CREATE_SETTLE_MS = 350L
+        private const val CREATE_RETAP_MS = 1_500L
 
         /** Opens BOOX's Library screen (com.onyx LibraryActivity); seen on the Note Air 6C. */
         private const val LIBRARY_ACTION = "com.onyx.action.LIBRARY"

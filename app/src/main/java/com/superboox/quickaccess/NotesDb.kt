@@ -123,13 +123,14 @@ object NotesDb {
     }
 
     /**
-     * [title]'s place in the library as "Folder / Note", from BOOX's database: the live note
-     * with that name edited most recently. Just [title] at the top level or if unreadable.
+     * [title]'s place in the library as "Folder / Note", from BOOX's database: the note with
+     * that name edited most recently (the one just opened). Just [title] at the top level or if
+     * unreadable. No status filter: live notes are status 1 on the Note Air 6C (firmware 4.3).
      */
     fun pathOf(context: Context, title: String): String {
         if (BooxNotes.splitPath(title).size > 1) return title
         val rows = runCatching { query(context) }.getOrNull() ?: return title
-        val best = rows.filter { it.status == 0 && it.pages > 0 && NotesScreen.matches(it.title, title) }.maxByOrNull { it.updated } ?: return title
+        val best = rows.filter { it.pages > 0 && NotesScreen.matches(it.title, title) }.maxByOrNull { it.updated } ?: return title
         val byId = rows.associateBy { it.id }
         val path = ArrayList<String>().apply { add(title) }
         var parent = best.parent

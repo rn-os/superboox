@@ -103,10 +103,15 @@ class QuickAccessPanel(
         }
 
         // A tap anywhere else in the panel closes the Front Light box, and still does what it normally does.
+        // The close waits until the finger is up: redrawing on the down would lose the tap.
+        private var tapAway = false
         override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
-            val outside = ev.actionMasked == android.view.MotionEvent.ACTION_DOWN && lightMenu && !touchesLight(ev)
+            if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) tapAway = lightMenu && !touchesLight(ev)
             val handled = super.dispatchTouchEvent(ev)
-            if (outside) post { if (lightMenu) closeLightMenu() }
+            if (tapAway && (ev.actionMasked == android.view.MotionEvent.ACTION_UP || ev.actionMasked == android.view.MotionEvent.ACTION_CANCEL)) {
+                tapAway = false
+                post { if (lightMenu) closeLightMenu() }
+            }
             return handled
         }
     }
@@ -793,6 +798,8 @@ class QuickAccessPanel(
                     if (lightMenu) closeLightMenu() else {
                         lightMenu = true
                         lightPage = activeLightPage()
+                        // Already on Custom: open with its sliders showing, as when a tap lands on it.
+                        if (service.frontLightPreset() == "Custom" && QuickControls.activeMine(prefs) == null) { lightEdit = "custom"; editLevels = null }
                         show(mode)
                         // Make sure it shows what BOOX actually has (it may have been changed there).
                         service.checkFrontLight()

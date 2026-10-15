@@ -134,7 +134,11 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 if (isActivity) foregroundActivity = cls else if (newApp) foregroundActivity = null
                 DebugLog.i("foreground", "$pkg ($cls)")
                 if (newApp) rememberApp(pkg)
-                if (isNotesInFront) handler.postDelayed({ if (isNotesInFront) maybeShowWritingCue() }, CUE_DELAY_MS) else hideCue()
+                // BOOX opens Notes through several screens, and the library lives in its launcher: look again a few times.
+                if (!Cues.seen(prefs, Cues.WRITING) && (pkg == prefs.notesPackage || pkg == BooxNotes.BOOX_HOME_PACKAGE)) {
+                    CUE_CHECKS_MS.forEach { delay -> handler.postDelayed({ if (isNotesInFront) maybeShowWritingCue() }, delay) }
+                }
+                if (!isNotesInFront && pkg != BooxNotes.BOOX_HOME_PACKAGE) hideCue()
             }
             if (newNoteArmed) watchNewNoteBack(pkg)
             trackRecent(pkg, event)
@@ -1265,7 +1269,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         private const val REVEAL_DELAY_MS = 400L
         /** How long after hold New Note leaving BOOX's screens still returns to where it started (writing the new note can take a while). */
         private const val NEW_NOTE_RETURN_MS = 3 * 60 * 60_000L
-        private const val CUE_DELAY_MS = 1_500L
+        private val CUE_CHECKS_MS = listOf(1_500L, 3_500L, 6_000L)
         /** Lets the screen settle before checking that BOOX's home, not the create-note screen, is in front. */
         private const val NEW_NOTE_BACK_CHECK_MS = 300L
         /** How long a tapped tile shows its new state before the system's own reading wins. */

@@ -1893,6 +1893,7 @@ class QuickAccessPanel(
         val reserve = previous != null && tiles > perPage
         val pages = (if (reserve) pinned.chunked(perPage - 1) else pinned.chunked(perPage)).ifEmpty { listOf(emptyList()) }
         dockPageCount = pages.size
+        DebugLog.i("dock", "apps=${pinned.size} previous=${previous ?: "none"} (setting ${prefs.previousAppInDock}) cols=$cols perPage=$perPage page=${dockPage + 1}/${pages.size}")
         dockPage = dockPage.coerceIn(0, pages.size - 1)
         // "Previous app" is always the bottom-right cell of the visible page: blank cells pad the gap before it.
         val shown: List<View?> = pages[dockPage].map { appCell(it) }.let { apps ->

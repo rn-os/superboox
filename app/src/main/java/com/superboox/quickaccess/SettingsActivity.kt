@@ -1502,34 +1502,32 @@ class SettingsActivity : Activity() {
         )))
         list.addView(note("The Clipboard button sits at the top left of the panel (hold it to come here); Recent Files moves to the left end of the Quick Access bar. Off: Recent Files stays at the top."))
         list.addView(heading("What to keep"))
-        val everyCopy = "Every copy with Advanced access"
         // Started or stopped here too, so it follows All files access being allowed in Android settings.
         ClipHistory.watchScreenshots(this, prefs)
         val shots = prefs.clipKeepScreenshots && ClipHistory.hasFileAccess()
         list.addView(card(listOfNotNull(
-            keepRow("Text", "Words and passages you copy: from notes, books, web pages, messages.", everyCopy, prefs.clipKeepText) { prefs.clipKeepText = it },
-            keepRow("Links", "Web addresses. Kept as links, so you can open them again from the clipboard.", everyCopy, prefs.clipKeepLinks) { prefs.clipKeepLinks = it },
+            keepRow("Text", "Words and passages you copy: from notes, books, web pages, messages.", null, prefs.clipKeepText) { prefs.clipKeepText = it },
+            keepRow("Links", "Web addresses. Kept as links, so you can open them again from the clipboard.", null, prefs.clipKeepLinks) { prefs.clipKeepLinks = it },
             keepRow("Images", "Pictures an app copies, like “Copy image” in the browser or gallery. Large images are kept at a reduced size.",
                 "Only when the panel opens", prefs.clipKeepImages, advanced = false) { prefs.clipKeepImages = it },
             keepRow("Handwriting", "Strokes copied with the lasso in BOOX Notes. They paste back into BOOX Notes while BOOX still has the copy, usually until a restart.",
-                everyCopy, prefs.clipKeepHandwriting) { prefs.clipKeepHandwriting = it },
-            keepRow("Screenshots", "Adds each screenshot as you take it, with a preview. Needs All files access to see the screenshot folder. " +
+                null, prefs.clipKeepHandwriting) { prefs.clipKeepHandwriting = it },
+            keepRow("Screenshots", "Adds each screenshot as you take it, with a preview. Needs File access (below). " +
                 "Without it, share a screenshot to “Add to Clipboard”.", "As you take it", shots, advanced = false) { on -> keepScreenshots(on) },
             if (shots) check("Also put it on the clipboard, ready to paste", prefs.clipShotToClipboard) { prefs.clipShotToClipboard = it } else null,
             if (shots) check("Open each one to mark up", prefs.clipShotMarkUp) { prefs.clipShotMarkUp = it } else null,
-            keepRow("Codes", "Short codes on their own, like a 6-digit sign-in code. Off by default; they're usually only needed once.", everyCopy, prefs.clipKeepCodes) { prefs.clipKeepCodes = it },
+            keepRow("Codes", "Short codes on their own, like a 6-digit sign-in code. Off by default; they're usually only needed once.", null, prefs.clipKeepCodes) { prefs.clipKeepCodes = it },
         )))
         list.addView(note("Passwords and anything an app marks as private are never kept."))
-        list.addView(heading("Handwriting previews"))
+        list.addView(heading("File access"))
         val files = ClipHistory.hasFileAccess()
         list.addView(card(listOf(
-            cardText(if (files) "On: SuperBoox reads BOOX Notes' copy folder directly to show what handwriting you copied. It reads nothing else."
-                else "Handwriting copied in BOOX Notes is kept in a BOOX folder SuperBoox can't open on its own. Allow All files access to show a preview of it " +
-                    "even when Advanced access isn't running (e.g. after a restart). SuperBoox only reads BOOX's copy folder."),
+            cardText(if (files) "All files access is on: SuperBoox reads BOOX Notes' copy folder to show handwriting previews, and the screenshot folder to catch screenshots. It reads nothing else."
+                else "Allow All files access to show handwriting previews (even when Advanced access isn't running, e.g. after a restart) and to catch screenshots. SuperBoox only reads BOOX Notes' copy folder and the screenshot folder."),
             buttonRow((if (files) "Change in Android settings" else "Allow file access") to { openAllFilesAccess() }),
         )))
-        list.addView(note("Every copy with Advanced access: caught as you copy while Advanced access is on; otherwise saved when you open the panel (only the latest copy). " +
-            "Only when the panel opens: Android doesn't let SuperBoox fetch images in the background, even with Advanced access. Unticking a kind doesn't remove clips already saved."))
+        list.addView(note("Text, links, handwriting and codes are caught as you copy while Advanced access is on; otherwise they're saved when you open the panel (only the latest copy). " +
+            "Images are only saved when the panel opens: Android doesn't let SuperBoox fetch images in the background, even with Advanced access. Unticking a kind doesn't remove clips already saved."))
         list.addView(heading("While the clipboard is open, still show"))
         list.addView(card(listOf(
             check("Quick Controls", prefs.clipShowControls) { prefs.clipShowControls = it; previewOn = true; render() },
@@ -1560,20 +1558,25 @@ class SettingsActivity : Activity() {
         list.addView(heading("Catching copies"))
         val connected = AdvancedAccess.allowed()
         val every = prefs.clipCatchMode == Prefs.CLIP_EVERY
-        list.addView(card(listOf(
-            radioRow("When the panel opens", "No setup. Saves what's on the clipboard each time you open the panel, so a copy replaced before then is missed.", !every) {
-                prefs.clipCatchMode = Prefs.CLIP_PANEL
-                render()
-            },
-            radioRow("Every copy, as it happens",
-                if (connected) "Uses Advanced access to read the clipboard in the background."
-                else "Needs Advanced access (Shizuku), which isn't connected right now. Until it is, copies are saved when the panel opens.",
-                every) {
-                prefs.clipCatchMode = Prefs.CLIP_EVERY
-                if (!AdvancedAccess.allowed()) toast("Set up Advanced access to catch every copy")
-                render()
-            },
-        )))
+        val panelOpens = radioRow("When the panel opens", "No setup. Saves what's on the clipboard each time you open the panel, so a copy replaced before then is missed.", !every) {
+            prefs.clipCatchMode = Prefs.CLIP_PANEL
+            render()
+        }
+        if (connected || every) {
+            list.addView(card(listOf(
+                panelOpens,
+                radioRow("Every copy, as it happens",
+                    if (connected) "Uses Advanced access to read the clipboard in the background."
+                    else "Needs Advanced access (Shizuku), which isn't connected right now. Until it is, copies are saved when the panel opens.",
+                    every) {
+                    prefs.clipCatchMode = Prefs.CLIP_EVERY
+                    render()
+                },
+            )))
+        } else {
+            list.addView(card(listOf(panelOpens)))
+            list.addView(note("Connect Advanced access (Help → Advanced access) to also catch every copy as it happens."))
+        }
         ClipHistory.backgroundProblem()?.takeIf { every }?.let { list.addView(note("Background reading failed last time: $it")) }
         list.addView(card(listOf(
             buttonRow("Clear history (keeps pinned)" to {

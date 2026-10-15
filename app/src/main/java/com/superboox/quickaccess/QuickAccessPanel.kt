@@ -93,6 +93,7 @@ class QuickAccessPanel(
             if (event.keyCode == KeyEvent.KEYCODE_BACK) {
                 if (event.action == KeyEvent.ACTION_UP) {
                     if (renaming != null) endRename(save = false)
+                    else if (namingClip != null) endNaming(save = false)
                     else if (mode == Mode.CLIPBOARD && clipConfirmClear) { clipConfirmClear = false; fillClips() }
                     else if (mode == Mode.CLIPBOARD && clipOpen != null) { clipOpen = null; fillClips() }
                     else if (mode != Mode.MAIN) show(Mode.MAIN) else service.hidePanel()
@@ -140,6 +141,10 @@ class QuickAccessPanel(
 
     /** The clip whose actions are showing (it was tapped or held). */
     private var clipOpen: String? = null
+    /** The clip whose Name box is open, its field (kept across redraws so typing isn't lost) and its Pin tick. */
+    private var namingClip: String? = null
+    private var nameField: android.widget.EditText? = null
+    private var namePin = false
     private var clipSearch: android.widget.EditText? = null
     private var clipBody: LinearLayout? = null
     private var clipCount: TextView? = null
@@ -1195,6 +1200,7 @@ class QuickAccessPanel(
         }
         val q = clipQuery.trim()
         return kindOk && (q.isEmpty() || c.text.contains(q, ignoreCase = true) ||
+            c.name?.contains(q, ignoreCase = true) == true ||
             (c.source != null && Launcher.appLabel(service, c.source).contains(q, ignoreCase = true)))
     }
 
@@ -1202,6 +1208,7 @@ class QuickAccessPanel(
     private fun fillClips() {
         val body = clipBody ?: return
         body.removeAllViews()
+        if (clipOpen != namingClip) { namingClip = null; nameField = null }
         // Handwriting kept before it could be drawn gets its picture: drawn in the background (finding
         // the strokes can take a while), then shown on the next redraw.
         val all = ClipHistory.list(service).map { ClipHistory.ensurePreview(service, it) }
@@ -1328,10 +1335,24 @@ class QuickAccessPanel(
                 setPadding(s(10), 0, s(6), 0)
                 if (c.kind == ClipHistory.Kind.IMAGE) {
                     addView(clipThumb(c, if (open) 160 else 64))
+                    if (c.name != null) addView(text(c.name, sp(16f), bold = true).apply { maxLines = if (open) 3 else 1; ellipsize = TextUtils.TruncateAt.END })
                 } else if (c.kind == ClipHistory.Kind.HANDWRITING) {
                     // A picture of the strokes when BOOX's copy had one; never the raw address.
                     if (c.image?.endsWith(".png") == true) addView(clipThumb(c, if (open) 160 else 64))
-                    addView(text("Handwriting from BOOX Notes", sp(if (c.image?.endsWith(".png") == true) 12.5f else 15f), medium = true))
+                    if (c.name != null) addView(text(c.name, sp(16f), bold = true).apply { maxLines = if (open) 3 else 1; ellipsize = TextUtils.TruncateAt.END })
+                    else {
+                        addView(text("Handwriting from BOOX Notes", sp(if (c.image?.endsWith(".png") == true) 12.5f else 15f), medium = true))
+                        // A real button, so the option shows without opening the clip.
+                        addView(hbox().apply {
+                            gravity = Gravity.CENTER_VERTICAL
+                            setPadding(s(8), s(2), s(8), s(2))
+                            addView(icon(getDrawable(R.drawable.ic_tag), iconPx(13)))
+                            addView(text("+ Name", sp(12.5f), bold = true).apply { setPadding(s(4), 0, 0, 0) })
+                            contentDescription = "Name this clip"
+                            pressable(outline(1, 12))
+                            setOnClickListener { startNaming(c) }
+                        }, lp(WRAP, WRAP).apply { topMargin = s(4) })
+                    }
                     if (open) addView(text("Pastes back into BOOX Notes while BOOX still has this copy (usually until the tablet restarts).", sp(12.5f), color = Ink.MUTED))
                 } else {
                     addView(text(c.text.trim(), sp(15f)).apply {
@@ -1345,12 +1366,16 @@ class QuickAccessPanel(
                         background = outline(1, 4)
                         setPadding(s(4), 0, s(4), 0)
                     }, lp(WRAP, WRAP).apply { marginEnd = s(6) })
+                    if (c.marked) addView(text("MARKED UP", sp(10.5f), bold = true).apply {
+                        background = outline(1, 4)
+                        setPadding(s(4), 0, s(4), 0)
+                    }, lp(WRAP, WRAP).apply { marginEnd = s(6) })
                     if (c.pinned) addView(icon(getDrawable(R.drawable.ic_pin), iconPx(13)), lp(s(14), s(14)).apply { marginEnd = s(3) })
                     val from = c.source?.let { Launcher.appLabel(service, it) }
                     val what = if (ClipHistory.isScreenshot(c)) "Screenshot" else null
                     addView(oneLine(text(listOfNotNull(if (c.pinned) "Pinned" else null, what, from, ago(c.time)).joinToString(" · "), sp(12f), color = Ink.MUTED)))
                 })
-                if (open) addView(clipActions(c), lp(MATCH, WRAP))
+                if (open) addView(if (namingClip == c.id) nameBox(c) else clipActions(c), lp(MATCH, WRAP))
                 pressable()
                 // Tap or hold: show or hide this clip's actions.
                 val toggle = { clipOpen = if (open) null else c.id; fillClips() }
@@ -1424,7 +1449,8 @@ class QuickAccessPanel(
             Triple(R.drawable.ic_paste, "Paste") { pasteClip(c) },
             if (c.kind == ClipHistory.Kind.LINK) Triple(R.drawable.ic_open, "Open") { openLink(c) } else null,
             if (c.kind == ClipHistory.Kind.HANDWRITING) null else Triple(R.drawable.ic_share, "Share…") { shareClip(c) },
-            if (c.kind == ClipHistory.Kind.IMAGE) Triple(R.drawable.ic_edit, "Mark up") {
+            if (c.kind == ClipHistory.Kind.HANDWRITING || c.kind == ClipHistory.Kind.IMAGE) Triple(R.drawable.ic_tag, "Name") { startNaming(c) } else null,
+            if (c.kind == ClipHistory.Kind.IMAGE || (c.kind == ClipHistory.Kind.HANDWRITING && c.image?.endsWith(".png") == true)) Triple(R.drawable.ic_edit, "Mark up") {
                 service.hidePanel()
                 ClipHistory.markUp(service, c) { ok -> if (!ok) toast("Couldn't open the picture to mark up") }
             } else null,
@@ -1441,7 +1467,7 @@ class QuickAccessPanel(
         vbox().apply {
             setPadding(0, s(8), 0, 0)
             // Rows of buttons that fill the width: 4 as 2 + 2, otherwise 3 to a row.
-            actions.chunked(if (actions.size == 4) 2 else 3).forEach { row ->
+            actions.chunked(when (actions.size) { 4 -> 2; 7 -> 4; else -> 3 }).forEach { row ->
                 addView(hbox().apply {
                     row.forEachIndexed { i, (res, label, action) ->
                         val dark = i == 0 && label == "Copy"
@@ -1457,6 +1483,87 @@ class QuickAccessPanel(
                         }, lp(0, WRAP, 1f).apply { if (i < row.size - 1) marginEnd = s(6) })
                     }
                 }, lp(MATCH, WRAP).apply { bottomMargin = s(6) })
+            }
+        }
+    }
+
+    private fun startNaming(c: ClipHistory.Clip) {
+        clipOpen = c.id
+        namingClip = c.id
+        namePin = c.pinned
+        nameField = null
+        fillClips()
+    }
+
+    /** Closes the Name box, keeping the name and Pin tick when [save]. */
+    private fun endNaming(save: Boolean) {
+        val id = namingClip ?: return
+        val field = nameField
+        field?.let {
+            (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                .hideSoftInputFromWindow(it.windowToken, 0)
+        }
+        val name = field?.text?.toString().orEmpty()
+        namingClip = null
+        nameField = null
+        if (save) ClipHistory.setNameAndPin(service, id, name, namePin)
+        fillClips()
+    }
+
+    /** Name and Pin for one clip, in place under it. */
+    private fun nameBox(c: ClipHistory.Clip): View = with(ctx) {
+        val field = nameField ?: android.widget.EditText(ctx).apply {
+            setText(c.name.orEmpty())
+            setSelection(text.length)
+            textSize = 16f
+            setTextColor(Ink.INK)
+            isSingleLine = true
+            filters = arrayOf(android.text.InputFilter.LengthFilter(ClipHistory.NAME_MAX))
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+            background = outline(2, 6)
+            setPadding(s(10), s(8), s(10), s(8))
+            setOnEditorActionListener { _, _, _ -> endNaming(save = true); true }
+            nameField = this
+        }
+        (field.parent as? ViewGroup)?.removeView(field)
+        vbox().apply {
+            setPadding(0, s(8), 0, 0)
+            addView(text("Name this clip", sp(14f), bold = true).apply { setPadding(0, 0, 0, s(6)) })
+            addView(field, lp(MATCH, WRAP).apply { bottomMargin = s(8) })
+            if (c.kind == ClipHistory.Kind.HANDWRITING) {
+                val suggestion = "Handwriting " + android.text.format.DateFormat.format("HH:mm", c.time)
+                addView(text(suggestion, sp(12.5f), bold = true).apply {
+                    setPadding(s(8), s(2), s(8), s(2))
+                    pressable(outline(1, 12))
+                    setOnClickListener { field.setText(suggestion); field.setSelection(field.text.length) }
+                }, lp(WRAP, WRAP).apply { bottomMargin = s(8) })
+            }
+            addView(hbox().apply {
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(s(2), s(2), s(2), s(8))
+                addView(checkbox(namePin))
+                addView(vbox().apply {
+                    setPadding(s(10), 0, 0, 0)
+                    addView(text("Pin this clip", sp(14f), bold = true))
+                    addView(text("Keeps it when old clips are cleared", sp(12f), color = Ink.MUTED))
+                })
+                contentDescription = "Pin this clip"
+                pressable()
+                setOnClickListener { namePin = !namePin; fillClips() }
+            }, lp(MATCH, WRAP))
+            addView(hbox().apply {
+                addView(inkButton("Cancel", sp(14f)) { endNaming(save = false) }, lp(0, WRAP, 1f).apply { marginEnd = s(8) })
+                addView(inkButton("Save", sp(14f)) { endNaming(save = true) }.apply {
+                    setTextColor(Ink.PAPER)
+                    background = android.graphics.drawable.GradientDrawable().apply { setColor(Ink.INK); cornerRadius = dp(6).toFloat() }
+                }, lp(0, WRAP, 1f))
+            }, lp(MATCH, WRAP))
+            field.post {
+                field.requestFocus()
+                field.setSelection(field.text.length)
+                (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                    .showSoftInput(field, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
             }
         }
     }
@@ -1497,7 +1604,7 @@ class QuickAccessPanel(
             send.putExtra(Intent.EXTRA_TEXT, c.text)
         }
         val chooser = Intent.createChooser(send, "Share clip").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            // It's already in the Clipboard: SuperBoox's own "Copy to clipboard" would only add it again.
+            // It's already in the Clipboard: SuperBoox's own "Add to Clipboard" would only add it again.
             .putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(android.content.ComponentName(service, ShareToClipboardActivity::class.java)))
         if (Launcher.tryStart(service, chooser)) service.hidePanel()
     }

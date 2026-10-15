@@ -1491,7 +1491,7 @@ class SettingsActivity : Activity() {
             keepRow("Handwriting", "Strokes copied with the lasso in BOOX Notes. They paste back into BOOX Notes while BOOX still has the copy, usually until a restart.",
                 everyCopy, prefs.clipKeepHandwriting) { prefs.clipKeepHandwriting = it },
             keepRow("Screenshots", "Adds each screenshot as you take it, with a preview. Needs All files access to see the screenshot folder. " +
-                "Without it, share a screenshot to “Copy to clipboard”.", "As you take it", shots, advanced = false) { on -> keepScreenshots(on) },
+                "Without it, share a screenshot to “Add to Clipboard”.", "As you take it", shots, advanced = false) { on -> keepScreenshots(on) },
             if (shots) check("Also put it on the clipboard, ready to paste", prefs.clipShotToClipboard) { prefs.clipShotToClipboard = it } else null,
             if (shots) check("Open each one to mark up", prefs.clipShotMarkUp) { prefs.clipShotMarkUp = it } else null,
             keepRow("Codes", "Short codes on their own, like a 6-digit sign-in code. Off by default; they're usually only needed once.", everyCopy, prefs.clipKeepCodes) { prefs.clipKeepCodes = it },

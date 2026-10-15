@@ -16,7 +16,8 @@ android {
         val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionCode = build
         // CI sets SB_VERSION: "1.0.0" for a stable release (a v1.0.0 tag), "1.1.0-dev.N" for
-        // pre-release builds. It matches the release tag, for Obtainium's version check.
+        // default-branch pre-releases (matching the release tag, for Obtainium's version check),
+        // "1.1.0-branch.N" for unpublished branch/PR test builds.
         versionName = System.getenv("SB_VERSION") ?: "0.0.0-local.$build"
     }
 

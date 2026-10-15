@@ -143,10 +143,10 @@ object NotesDb {
     }
 
     /** One entry inside a Notes folder: a note or a subfolder (folders have no pages). */
-    class Entry(val id: String, val title: String, val isFolder: Boolean)
+    class Entry(val id: String, val title: String, val isFolder: Boolean, val updated: Long = 0L)
 
     /**
-     * What sits in the folder with this [folderId], folders first then notes, each by name; null
+     * What sits in the folder with this [folderId], most recently changed first (as BOOX Notes lists them); null
      * if the database isn't readable or the folder is gone. Call off the main thread. Which
      * `status` means "alive" differs between firmware (0 elsewhere, 1 on the Note Air 6C), so
      * the status of the most recently edited note counts as alive.
@@ -156,8 +156,9 @@ object NotesDb {
         if (rows.none { it.id == folderId }) return null
         val alive = rows.filter { it.pages > 0 && it.updated > 0 }.maxByOrNull { it.updated }?.status
         return rows.filter { it.parent == folderId && (alive == null || it.status == alive) }
-            .map { Entry(it.id, it.title, isFolderRow(rows, it)) }
-            .sortedWith(compareBy<Entry>({ if (it.isFolder) 0 else 1 }, { it.title.lowercase() }))
+            .map { Entry(it.id, it.title, isFolderRow(rows, it), it.updated) }
+            // Like BOOX Notes' own list: most recently changed first.
+            .sortedWith(compareByDescending<Entry> { it.updated }.thenBy { it.title.lowercase() })
     }
 
     /**

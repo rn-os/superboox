@@ -114,6 +114,27 @@ object ClipHistory {
         }.getOrDefault(emptyList())
     }
 
+    /** Source label of clips made by [TestHooks]; [removeTestClips] takes out exactly these. */
+    const val TEST_SOURCE = "superboox.test"
+
+    /** [TestHooks] only: puts a made-up clip at the front, without touching the system clipboard. */
+    fun insertTestClip(context: Context, kind: Kind, text: String, image: String?, name: String?, pinned: Boolean, label: String? = null, mimes: String? = null): Clip {
+        val now = System.currentTimeMillis()
+        val id = "t${now}_${list(context).size}"
+        val clip = Clip(id, kind, text, image, TEST_SOURCE, now, pinned, label, mimes, name)
+        save(context, listOf(clip) + list(context))
+        return clip
+    }
+
+    /** [TestHooks] only: removes the clips (and files) made by [insertTestClip] or recorded with [TEST_SOURCE]. */
+    fun removeTestClips(context: Context): Int {
+        val all = list(context)
+        val mine = all.filter { it.source == TEST_SOURCE }
+        mine.forEach { discardFiles(context, it) }
+        save(context, all - mine.toSet())
+        return mine.size
+    }
+
     private fun save(context: Context, clips: List<Clip>) {
         val a = JSONArray()
         clips.forEach { c ->

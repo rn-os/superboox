@@ -83,6 +83,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             addAction(Intent.ACTION_USER_PRESENT)
         }
         runCatching { registerReceiver(wakeReceiver, filter) }
+        if (BuildConfig.TEST_HOOKS) TestHooks.register(this)
     }
 
     /**
@@ -191,6 +192,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     private fun teardown() {
         if (instance === this) instance = null
         runCatching { unregisterReceiver(wakeReceiver) }
+        if (BuildConfig.TEST_HOOKS) TestHooks.unregister(this)
         if (::prefs.isInitialized) prefs.sp.unregisterOnSharedPreferenceChangeListener(this)
         runCatching { contentResolver.unregisterContentObserver(lightObserver) }
         if (::noteOpener.isInitialized) noteOpener.cancel()
@@ -1146,6 +1148,9 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     private fun saveRecentApps() {
         runCatching { recentStore.edit().putString("apps", recentApps.joinToString("\n")).apply() }
     }
+
+    /** [TestHooks] only: pretends [pkg] was the last app used. */
+    fun testRememberApp(pkg: String) = rememberApp(pkg)
 
     /** The app used before the one in front (or the last app, from the home screen). */
     val previousApp: String?

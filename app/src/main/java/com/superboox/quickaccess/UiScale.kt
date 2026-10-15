@@ -12,14 +12,15 @@ import kotlin.math.roundToInt
  *
  * BOOX sets each screen's density to its real pixels per inch, so a dp is the same size on a
  * 6" Palma and a 13.3" Tab X, and Settings looked phone-sized on the big screens (smaller than
- * on most Android tablets, which round their density up). Auto picks a size from the screen's
- * short side, a little larger on color (Kaleido) screens, whose color filter softens text.
+ * on most Android tablets, which round their density up). [auto] picks a size from the screen's
+ * short side, a little larger on color (Kaleido) screens, whose color filter softens text, and the
+ * one size choice ([MenuSize], Look & size) scales that up or down.
  *
  * Settings also ignores a system font size below 100% (the Note Air 6C ships at 85%): it shrank
  * our text but not BOOX's own dialog buttons or our boxes around it. Larger font sizes still apply.
  */
 object UiScale {
-    /** Pick for this screen when Settings size is Auto. */
+    /** Settings' size for this screen at the Large size choice. */
     fun auto(context: Context): Float {
         val inches = shortSideInches(context)
         val base = when {
@@ -32,12 +33,13 @@ object UiScale {
         return if (Devices.colorScreen == true) base + 0.05f else base
     }
 
-    fun factor(context: Context, size: SettingsSize): Float =
-        if (size == SettingsSize.AUTO) auto(context) else size.scale
+    /** Settings' size: [auto] for this screen, scaled by the one size choice (Large = [auto]). */
+    fun factor(context: Context): Float =
+        auto(context) * Prefs(context).menuSize.scale / MenuSize.LARGE.scale
 
     /** The configuration Settings draws with: density times [factor], font size at least 100%. */
     fun apply(context: Context, base: Configuration): Configuration {
-        val f = factor(context, Prefs(context).settingsSize)
+        val f = factor(context)
         return Configuration(base).apply {
             densityDpi = (base.densityDpi * f).roundToInt()
             screenWidthDp = (base.screenWidthDp / f).toInt()
@@ -63,7 +65,7 @@ object UiScale {
         @Suppress("DEPRECATION")
         (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealMetrics(dm)
         val dpi = context.applicationContext.resources.displayMetrics.densityDpi
-        val pct = (factor(context, Prefs(context).settingsSize) * 100).roundToInt()
+        val pct = (factor(context) * 100).roundToInt()
         val font = (context.applicationContext.resources.configuration.fontScale * 100).roundToInt()
         return "${dm.widthPixels}×${dm.heightPixels} px · $dpi dpi · Settings at $pct% · system font $font%"
     }

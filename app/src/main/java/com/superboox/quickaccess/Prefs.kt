@@ -6,22 +6,15 @@ import org.json.JSONArray
 
 enum class Edge { LEFT, RIGHT }
 
-/** Overall size of the panel's text, icons and touch targets. */
+/**
+ * The one size choice: the panel's text, icons and touch targets, and the Settings pages
+ * ([UiScale] scales Settings by the same step, Large being Settings' screen-fitted size).
+ */
 enum class MenuSize(val title: String, val scale: Float) {
     SMALL("Small", 0.85f),
     STANDARD("Standard", 1.0f),
     LARGE("Large", 1.2f),
     XL("Extra large", 1.4f),
-}
-
-/** Size of the Settings screens; Auto fits the screen ([UiScale]). */
-enum class SettingsSize(val title: String, val scale: Float) {
-    AUTO("Auto", 0f),
-    P90("90%", 0.9f),
-    P100("100%", 1.0f),
-    P115("115%", 1.15f),
-    P130("130%", 1.3f),
-    P145("145%", 1.45f),
 }
 
 enum class Trigger(val title: String) {
@@ -75,10 +68,6 @@ class Prefs(context: Context) {
     var panelWidthPct: Int
         get() = sp.getInt(K_PANEL_WIDTH, 45)
         set(v) = sp.edit().putInt(K_PANEL_WIDTH, v).apply()
-
-    var settingsSize: SettingsSize
-        get() = enumOr(sp.getString(K_SETTINGS_SIZE, null), SettingsSize.AUTO)
-        set(v) = sp.edit().putString(K_SETTINGS_SIZE, v.name).apply()
 
     var menuSize: MenuSize
         get() = enumOr(sp.getString(K_MENU_SIZE, null), MenuSize.LARGE) // easier to hit on e-ink
@@ -141,6 +130,21 @@ class Prefs(context: Context) {
     var clipKeepImages: Boolean
         get() = sp.getBoolean(K_CLIP_IMAGES, true)
         set(v) = sp.edit().putBoolean(K_CLIP_IMAGES, v).apply()
+
+    /** New screenshots, kept as they're taken (needs All files access to see the screenshot folder). */
+    var clipKeepScreenshots: Boolean
+        get() = sp.getBoolean(K_CLIP_SCREENSHOTS, true)
+        set(v) = sp.edit().putBoolean(K_CLIP_SCREENSHOTS, v).apply()
+
+    /** A kept screenshot is also put on the clipboard, ready to paste. */
+    var clipShotToClipboard: Boolean
+        get() = sp.getBoolean(K_CLIP_SHOT_CLIPBOARD, true)
+        set(v) = sp.edit().putBoolean(K_CLIP_SHOT_CLIPBOARD, v).apply()
+
+    /** Each kept screenshot opens straight away in a picture editor, to mark it up. Off by default. */
+    var clipShotMarkUp: Boolean
+        get() = sp.getBoolean(K_CLIP_SHOT_MARKUP, false)
+        set(v) = sp.edit().putBoolean(K_CLIP_SHOT_MARKUP, v).apply()
 
     var clipKeepAfterRestart: Boolean
         get() = sp.getBoolean(K_CLIP_KEEP_RESTART, true)
@@ -290,7 +294,6 @@ class Prefs(context: Context) {
         const val K_QUICK_CONTROLS = "quick_controls"
         const val K_QC_STATES = "quick_control_states"
         const val K_MENU_SIZE = "menu_size"
-        const val K_SETTINGS_SIZE = "settings_size"
         const val K_RECENTS = "recents"
         const val K_NOTES_PKG = "notes_package"
         const val K_RECENT_URI = "recent_uri"
@@ -338,6 +341,9 @@ class Prefs(context: Context) {
         const val K_CLIP_SHOW_QC = "clip_show_qc"
         const val K_CLIP_SHOW_LAST = "clip_show_last"
         const val K_CLIP_SHOW_APPS = "clip_show_apps"
+        const val K_CLIP_SCREENSHOTS = "clip_screenshots"
+        const val K_CLIP_SHOT_CLIPBOARD = "clip_shot_clipboard"
+        const val K_CLIP_SHOT_MARKUP = "clip_shot_markup"
         const val CLIP_PANEL = "panel"
         const val CLIP_EVERY = "every"
 

@@ -74,6 +74,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         BootRestore.clearNotification(this)
         NoteIds.capture(this, prefs)
         ClipHistory.onStart(this, prefs)
+        refreshReaderLast()
         val filter = android.content.IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
@@ -199,7 +200,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 .firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName?.toString() == prefs.notesPackage } }
         }.getOrNull() ?: return@Runnable
         NotesScreen.trustedTitle(root)?.let { title ->
-            Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, title, prefs.notesPackage, System.currentTimeMillis()))
+            recordNote(title)
             return@Runnable
         }
         if (NotesScreen.isCreateNoteScreen(root)) return@Runnable
@@ -211,7 +212,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             val title = NotesDb.matchTitle(this, shown)
             handler.post {
                 if (title != null) {
-                    Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, title, prefs.notesPackage, System.currentTimeMillis()))
+                    recordNote(title)
                 } else if (tree != null && !editorTreeLogged) {
                     // Once per run, so the next debug report shows how this firmware lays out an open note.
                     editorTreeLogged = true
@@ -254,13 +255,49 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (foregroundPackage != ReaderLibrary.NEOREADER) return@Runnable
         io.execute {
             val doc = ReaderLibrary.lastOpened(this) ?: return@execute
+            readerLast = doc
             Recents.record(prefs, RecentItem(RecentItem.Kind.DOCUMENT, doc.title, ReaderLibrary.NEOREADER, System.currentTimeMillis(), doc.path))
         }
     }
 
+    /**
+     * NeoReader's most recent document, read from its library off the main thread: the panel's
+     * Last Opened Document falls back to it when SuperBoox's own recents have none (cleared, or
+     * nothing opened since install). Null until read, or when NeoReader has none.
+     */
+    @Volatile var readerLast: ReaderLibrary.Doc? = null
+        private set
+
+    /** Same for notes: BOOX Notes' most recently edited note, as a path, for Last Opened Note. */
+    @Volatile var notesLast: String? = null
+        private set
+
+    private fun refreshReaderLast() = io.execute {
+        readerLast = ReaderLibrary.lastOpened(this)
+        notesLast = NotesDb.lastEdited(this)
+    }
+
     /** Called by [NoteOpener] when it has opened a note. */
     fun noteOpened(title: String) {
-        Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, title, prefs.notesPackage, System.currentTimeMillis()))
+        recordNote(title)
+    }
+
+    /**
+     * Remembers an open note with its folder ("Folder / Note", from BOOX's database), so
+     * holding Last Opened Note can open that folder. Recorded at once, the folder added after.
+     */
+    private fun recordNote(title: String) {
+        val now = System.currentTimeMillis()
+        // Already known with its folder (the editor reports the name every few seconds): keep that.
+        val known = Recents.lastNote(prefs)?.title?.takeIf {
+            BooxNotes.splitPath(it).size > 1 && Recents.noteName(it).equals(Recents.noteName(title), ignoreCase = true)
+        }
+        Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, known ?: title, prefs.notesPackage, now))
+        if (known != null || BooxNotes.splitPath(title).size > 1) return
+        io.execute {
+            val path = NotesDb.pathOf(this, title)
+            if (path != title) handler.post { Recents.record(prefs, RecentItem(RecentItem.Kind.NOTE, path, prefs.notesPackage, now)) }
+        }
     }
 
     // ---- Edge handle ---------------------------------------------------------------------
@@ -381,6 +418,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     fun showPanel(keepCover: Boolean = false, fresh: Boolean = true) {
         if (panel != null) return
+        refreshReaderLast()
         hidePreview()
         if (!keepCover) cover.hide()
         if (fresh && !prefs.rememberPages) {
@@ -404,10 +442,15 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     /** Hold New Note: BOOX's new-note screen, through the Notes library's own button. */
     fun openNewNoteSetup() {
         val inEditor = foregroundPackage == prefs.notesPackage
-        // Remember where this started, so leaving BOOX's screen comes back here rather than to BOOX's home.
+        // Remember where this started, so Cancel comes back here. From the Notes library there's nothing to
+        // do (Cancel lands there); with no screen to go back to, the user's own home screen.
         newNoteArmed = false
-        newNoteOrigin = foregroundPackage?.takeIf { it != BooxNotes.BOOX_HOME_PACKAGE }?.let {
-            NewNoteOrigin(it, if (inEditor) Recents.lastNote(prefs)?.title else null, SystemClock.uptimeMillis() + NEW_NOTE_RETURN_MS)
+        val until = SystemClock.uptimeMillis() + NEW_NOTE_RETURN_MS
+        val pkg = foregroundPackage
+        newNoteOrigin = when {
+            pkg == null -> defaultHome()?.let { NewNoteOrigin(it, null, until) }
+            BooxNotes.isNotesScreen(pkg, foregroundActivity, prefs.notesPackage) && pkg == BooxNotes.BOOX_HOME_PACKAGE -> null
+            else -> NewNoteOrigin(pkg, if (inEditor) Recents.lastNote(prefs)?.title else null, until, foregroundActivity)
         }
         // Hold the screen while Notes opens and the button is found, like opening a pinned note.
         cover.show { noteOpener.openNewNoteSetup(prefs.notesPackage, inEditor) }
@@ -1011,8 +1054,13 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     private val homePackages: Set<String> by lazy {
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-        packageManager.queryIntentActivities(home, 0).map { it.activityInfo.packageName }.toSet() + BooxNotes.BOOX_HOME_PACKAGE
+        // Settings' FallbackHome (priority -1000) is only a placeholder home, not a launcher.
+        packageManager.queryIntentActivities(home, 0).filter { it.priority > -1000 }.map { it.activityInfo.packageName }.toSet() +
+            BooxNotes.BOOX_HOME_PACKAGE
     }
+
+    private fun defaultHome(): String? =
+        packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)?.activityInfo?.packageName
 
     private fun rememberApp(pkg: String) {
         if (pkg in homePackages || pkg.contains("quickstep") || pkg.contains("launcher") || pkg in NOT_APPS) return
@@ -1034,21 +1082,37 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     }
 
     /** Opens [pkg] again: Notes reopens [noteTitle] (or the last note), NeoReader its last book, a launcher its home screen. */
+    /** Back to the BOOX screen hold New Note was used from: its book Library, or BOOX home. */
+    private fun reopenBoox(activity: String?) {
+        val library = activity?.endsWith("LibraryActivity") == true &&
+            Launcher.tryStart(this, Intent("com.onyx.action.LIBRARY").addCategory(Intent.CATEGORY_DEFAULT)
+                .setPackage(BooxNotes.BOOX_HOME_PACKAGE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        if (library) return
+        val home = packageManager.getLaunchIntentForPackage(BooxNotes.BOOX_HOME_PACKAGE)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (home == null || !Launcher.tryStart(this, home)) performGlobalAction(GLOBAL_ACTION_HOME)
+    }
+
     private fun reopen(pkg: String, noteTitle: String? = null) {
         when {
             pkg == prefs.notesPackage -> (noteTitle ?: Recents.lastNote(prefs)?.title)?.let { openBooxNote(it) }
                 ?: BooxNotes.launchCandidates(this, prefs.notesPackage).firstOrNull()?.let { Launcher.start(this, it.second) }
             pkg == ReaderLibrary.NEOREADER -> Recents.list(prefs).firstOrNull { it.pkg == pkg && it.path.isNotEmpty() }
                 ?.let { ReaderLibrary.open(this, it.path) } ?: Launcher.launchApp(this, pkg)
-            pkg in homePackages -> Launcher.start(this, Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setPackage(pkg))
-            else -> Launcher.launchApp(this, pkg)
+            // The user's home screen: Home itself (starting its activity from here didn't bring it back on the 6C).
+            pkg in homePackages && pkg != BooxNotes.BOOX_HOME_PACKAGE && pkg == defaultHome() -> performGlobalAction(GLOBAL_ACTION_HOME)
+            pkg in homePackages -> Launcher.start(
+                this,
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+            // An app that can't be started again: the user's home screen instead.
+            else -> if (!Launcher.launchApp(this, pkg)) performGlobalAction(GLOBAL_ACTION_HOME)
         }
     }
 
     // ---- Leaving BOOX's create-note screen (hold New Note) ---------------------------------
 
     /** Where hold New Note was used from (the open note's name, if it was a note). */
-    private class NewNoteOrigin(val pkg: String, val noteTitle: String?, val until: Long)
+    private class NewNoteOrigin(val pkg: String, val noteTitle: String?, val until: Long, val activity: String? = null)
 
     private var newNoteOrigin: NewNoteOrigin? = null
 
@@ -1088,6 +1152,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (root.packageName?.toString() != BooxNotes.BOOX_HOME_PACKAGE || NotesScreen.isCreateNoteScreen(root)) return@Runnable
         forgetNewNoteOrigin()
         DebugLog.i("note", "left BOOX's new-note screen: back to ${origin.pkg}${origin.noteTitle?.let { " (\"$it\")" } ?: ""}")
+        if (origin.pkg == BooxNotes.BOOX_HOME_PACKAGE) return@Runnable reopenBoox(origin.activity)
         reopen(origin.pkg, origin.noteTitle)
     }
 

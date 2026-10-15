@@ -197,7 +197,7 @@ adb_ shell dumpsys accessibility 2>/dev/null | grep -q "$PKG" \
 guard
 SAVED_ROTATION=$(adb_ shell settings get system user_rotation | tr -d '\r')
 SAVED_AUTOROT=$(adb_ shell settings get system accelerometer_rotation | tr -d '\r')
-adb_ shell run-as $PKG sh -c 'touch files/testhooks.on' >/dev/null 2>&1 || { ABORTED="run-as failed (not a debug build?)"; exit 2; }
+adb_ shell run-as $PKG touch files/testhooks.on >/dev/null 2>&1 || { ABORTED="run-as failed (not a debug build?)"; exit 2; }
 hook ping || { ABORTED="test hooks don't answer: install a branch/PR test build (published builds don't have them)"; exit 2; }
 hook snapshot || { ABORTED="snapshot failed"; exit 2; }
 HOOKS_READY=1

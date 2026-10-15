@@ -1958,17 +1958,14 @@ class QuickAccessPanel(
     }
 
     private fun addPicked() {
-        val folderNames = pickChoices.filter { it.isFolder && it.label in picked && it.label !in pickDocs }.map { it.label }.toSet()
-        if (folderNames.isNotEmpty()) {
-            // Notes folders pin as folders (expandable); needs the database, so off the main thread.
-            val labels = picked.toList()
-            io.execute {
-                val ids = folderNames.associateWith { NotesDb.findFolderId(service, it) }
-                main.post { finishPicked(labels, ids) }
-            }
-            return
+        // Folders pin as expandable Notes folders. Whether a card is one comes from the Notes
+        // database (the card text alone can miss it), so look every picked note up off the main thread.
+        val labels = picked.toList()
+        val names = labels.filter { it !in pickDocs }
+        io.execute {
+            val ids = names.associateWith { NotesDb.findFolderId(service, it) }
+            main.post { finishPicked(labels, ids) }
         }
-        finishPicked(picked.toList(), emptyMap())
     }
 
     private fun finishPicked(labels: List<String>, folderIds: Map<String, String?>) {

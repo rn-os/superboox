@@ -1894,7 +1894,14 @@ class QuickAccessPanel(
         val pages = (if (reserve) pinned.chunked(perPage - 1) else pinned.chunked(perPage)).ifEmpty { listOf(emptyList()) }
         dockPageCount = pages.size
         dockPage = dockPage.coerceIn(0, pages.size - 1)
-        val shown: List<View> = pages[dockPage].map { appCell(it) } + listOfNotNull(previous?.let { previousCell(it) })
+        // "Previous app" is always the bottom-right cell of the visible page: blank cells pad the gap before it.
+        val shown: List<View?> = pages[dockPage].map { appCell(it) }.let { apps ->
+            if (previous == null) apps
+            else {
+                val total = ((apps.size + 1 + cols - 1) / cols) * cols
+                apps + List(total - apps.size - 1) { null } + previousCell(previous)
+            }
+        }
         shown.chunked(cols).forEachIndexed { r, rowCells ->
             if (r > 0) box.addView(rule(1))
             box.addView(hbox().apply {

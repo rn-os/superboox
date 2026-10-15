@@ -4,7 +4,6 @@ import android.content.Context
 import android.view.ContextThemeWrapper
 import android.view.View
 import android.widget.LinearLayout
-import com.superboox.R
 
 /**
  * The first-use card: the panel's own look (black outline, rounded, bold title, solid black main

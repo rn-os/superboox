@@ -51,6 +51,9 @@ class NoteOpener(private val service: AccessibilityService) {
         /** Hold Last Opened Note: [steps] is a folder path (maybe empty); stop there, open no note. */
         var folderOnly = false
 
+        /** Hold Last Opened Note: left another BOOX screen (e.g. the book Library) once, after Back landed there. */
+        var wentHome = false
+
         /** Real taps on BOOX home's Notes widget title bar so far. */
         var titleBarTaps = 0
 
@@ -61,6 +64,9 @@ class NoteOpener(private val service: AccessibilityService) {
         val tabsTried = HashSet<Int>()
         var index = 0
         var backs = 0
+
+        /** The screen the folder's up arrow was last tapped on: still showing it means we're at the top. */
+        var upFrom: String? = null
         var relaunches = 0
         var notBefore = 0L
         var missingSince = 0L
@@ -239,6 +245,13 @@ class NoteOpener(private val service: AccessibilityService) {
     private var setupUntil = 0L
     private var setupBacks = 0
     private var setupTabTapped = false
+    private var setupCreateTapped = false
+    private var setupUps = 0
+    private var setupUpFrom: String? = null
+    private var setupUpAt = 0L
+    private var setupCreateSeenAt = 0L
+    private var createTappedAt = 0L
+    private var createRetapped = false
 
     /**
      * Opens the Notes library and taps its own "new note" button, which brings up
@@ -248,6 +261,14 @@ class NoteOpener(private val service: AccessibilityService) {
         cancel()
         setupBacks = 0
         setupTabTapped = false
+        setupCreateTapped = false
+        setupUps = 0
+        setupUpFrom = null
+        // Notes library already in front: Create is ready, no settling wait.
+        setupCreateSeenAt = if ((service as? QuickAccessService)?.let {
+                it.foregroundPackage == BooxNotes.BOOX_HOME_PACKAGE &&
+                    BooxNotes.isNotesScreen(it.foregroundPackage, it.foregroundActivity, notesPackage)
+            } == true) 1L else 0L
         setupUntil = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
         // Always through BOOX's home screen (its Notes widget has the +). Back from an open note
         // can land on another launcher (build 59 report), so don't rely on it; BOOX saves the note itself.
@@ -259,8 +280,9 @@ class NoteOpener(private val service: AccessibilityService) {
                 }
             DebugLog.i("note", "new-note setup: opened Notes via $how")
             setupTabTapped = how != "BOOX launcher"
+            // The tab router shows the library within a few hundred ms; the launcher takes longer.
+            handler.postDelayed({ setupTick(notesPackage) }, if (how == "BOOX tab router") POLL_MS else AFTER_BACK_MS)
         }
-        handler.postDelayed({ setupTick(notesPackage) }, AFTER_BACK_MS)
     }
 
     private fun setupTick(notesPackage: String) {
@@ -286,13 +308,115 @@ class NoteOpener(private val service: AccessibilityService) {
             }
         }
         val button = newNoteButton(root)
-        if (button == null) return run { handler.postDelayed({ setupTick(notesPackage) }, POLL_MS) }
+        if (button == null) {
+            // The Notes library opened directly (BOOX tab router): its "Create" box takes a real
+            // single tap and opens a menu of note types.
+            val create = if (setupCreateTapped) null else libraryCreateBox(root)
+            // BOOX makes the note in the folder on screen; the home widget's + made it at the top level.
+            val screen = NotesScreen.signature(NotesScreen.read(root))
+            // Just went up a folder: wait for the screen to change rather than a fixed delay.
+            if (screen == setupUpFrom && SystemClock.uptimeMillis() < setupUpAt + AFTER_TAP_MS) {
+                return run { handler.postDelayed({ setupTick(notesPackage) }, POLL_MS) }
+            }
+            val up = if (create != null && setupUps < MAX_SETUP_UPS && screen != setupUpFrom) folderUpArrow(root) else null
+            if (up != null) {
+                setupUps++
+                setupUpFrom = screen
+                setupUpAt = SystemClock.uptimeMillis()
+                setupCreateSeenAt = 0L
+                setupUntil += AFTER_TAP_MS
+                DebugLog.i("note", "new-note setup: library is in a folder; going up ($setupUps)")
+                touch(up)
+                handler.postDelayed({ setupTick(notesPackage) }, POLL_MS)
+                return
+            }
+            // BOOX ignores a tap on Create in the first moments after its Notes screen appears.
+            if (create != null && setupCreateSeenAt == 0L) setupCreateSeenAt = SystemClock.uptimeMillis()
+            if (create != null && SystemClock.uptimeMillis() < setupCreateSeenAt + CREATE_SETTLE_MS) {
+                return run { handler.postDelayed({ setupTick(notesPackage) }, CREATE_SETTLE_MS) }
+            }
+            if (create != null) {
+                setupCreateTapped = true
+                val r = Rect().also(create::getBoundsInScreen)
+                DebugLog.i("note", "new-note setup: tapping the library's Create box ${r.toShortString()}")
+                touch(r)
+                val until = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
+                createTappedAt = SystemClock.uptimeMillis()
+                createRetapped = false
+                handler.postDelayed({ createMenuTick(notesPackage, until) }, POLL_MS)
+                return
+            }
+            return run { handler.postDelayed({ setupTick(notesPackage) }, POLL_MS) }
+        }
         DebugLog.i("note", "new-note setup: tapping ${button.viewIdResourceName ?: NotesScreen.textOf(button)}")
         click(button, null)
         // BOOX's + opens its create-note screen (name, page layout, templates, Create / Cancel; build 59
         // report). Reveal it as soon as it's up.
         val until = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
         handler.postDelayed({ createScreenTick(notesPackage, until) }, POLL_MS)
+    }
+
+    /**
+     * The Notes library's "Create" box (Note Air 6C, firmware 4.3), at the top level or inside a
+     * folder: a "Create" label in the dashed com.onyx:id/content box. Not clickable, so it gets a real tap.
+     */
+    private fun libraryCreateBox(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (root.packageName?.toString() != BooxNotes.BOOX_HOME_PACKAGE) return null
+        val contentId = "${BooxNotes.BOOX_HOME_PACKAGE}:id/content"
+        return findFirst(root) { n ->
+            n.isVisibleToUser && NotesScreen.textOf(n).trim().let { it.equals("Create", ignoreCase = true) || it == "新建" } &&
+                generateSequence(n.parent) { it.parent }.take(3).any { it.viewIdResourceName == contentId }
+        }
+    }
+
+    /** After tapping Create: BOOX's menu of note types; picks "Handwritten Notes". */
+    private fun createMenuTick(notesPackage: String, until: Long) {
+        val row = allRoots().firstNotNullOfOrNull { r ->
+            runCatching { r.findAccessibilityNodeInfosByViewId("${BooxNotes.BOOX_HOME_PACKAGE}:id/title") }.getOrNull().orEmpty()
+                .firstOrNull { it.isVisibleToUser && NotesScreen.textOf(it).let { t -> t.contains("handwrit", ignoreCase = true) || t.contains("手写") } }
+        }
+        if (row != null) {
+            DebugLog.i("note", "new-note setup: choosing \"${NotesScreen.textOf(row)}\"")
+            click(row, null)
+            val next = SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS
+            handler.postDelayed({ createScreenTick(notesPackage, next) }, POLL_MS)
+            return
+        }
+        // No menu yet: the tap may not have registered; tap Create once more rather than wait it out.
+        if (!createRetapped && SystemClock.uptimeMillis() > createTappedAt + CREATE_RETAP_MS) {
+            val create = notesRoot(BooxNotes.packages(notesPackage))?.let { libraryCreateBox(it) }
+            if (create != null) {
+                createRetapped = true
+                createTappedAt = SystemClock.uptimeMillis()
+                DebugLog.i("note", "new-note setup: no menu after Create; tapping it again")
+                touch(Rect().also(create::getBoundsInScreen))
+            }
+        }
+        if (SystemClock.uptimeMillis() > until) {
+            DebugLog.w("note", "new-note setup: no Handwritten Notes choice after tapping Create. Screen:\n" +
+                (notesRoot(BooxNotes.packages(notesPackage))?.let { DebugReport.describeTree(it) } ?: "Notes window not found"))
+            (service as? QuickAccessService)?.noteOpenFinished(false)
+            return toast("Couldn't find BOOX's new-note menu. Send a debug report from Settings")
+        }
+        handler.postDelayed({ createMenuTick(notesPackage, until) }, POLL_MS)
+    }
+
+    /** Every app window's root, popups included. */
+    private fun allRoots(): List<AccessibilityNodeInfo> =
+        runCatching { service.windows.mapNotNull { it.root } }.getOrNull().orEmpty().ifEmpty { listOfNotNull(service.rootInActiveWindow) }
+
+    /**
+     * BOOX re-selects the last template category once its templates have loaded, undoing the
+     * tap on Recent: tap it again while it isn't the selected one.
+     */
+    private fun recheckRecent(notesPackage: String, attempt: Int) {
+        val root = notesRoot(BooxNotes.packages(notesPackage))?.takeIf { NotesScreen.isCreateNoteScreen(it) } ?: return
+        val recent = findFirst(root) { n -> n.isVisibleToUser && NotesScreen.textOf(n).equals("Recent", ignoreCase = true) } ?: return
+        val selected = generateSequence(recent) { it.parent }.take(3).any { it.isSelected || it.isChecked }
+        if (selected) return
+        DebugLog.i("note", "new-note setup: Recent isn't selected; tapping it again ($attempt)")
+        click(recent, null)
+        if (attempt < 2) handler.postDelayed({ recheckRecent(notesPackage, attempt + 1) }, RECENT_RECHECK_MS)
     }
 
     private fun createScreenTick(notesPackage: String, until: Long) {
@@ -303,7 +427,10 @@ class NoteOpener(private val service: AccessibilityService) {
                 // BOOX opens on the last template's category (e.g. Work); Recent shows the template used last.
                 val recent = findFirst(root!!) { n -> n.isVisibleToUser && NotesScreen.textOf(n).equals("Recent", ignoreCase = true) }
                 DebugLog.i("note", "new-note setup: BOOX's create-note screen is up" + if (recent != null) "; choosing the Recent templates" else "; no Recent tab found")
-                if (recent != null) click(recent, null)
+                if (recent != null) {
+                    click(recent, null)
+                    handler.postDelayed({ recheckRecent(notesPackage, 1) }, RECENT_RECHECK_MS)
+                }
                 (service as? QuickAccessService)?.newNoteScreenShown()
                 handler.postDelayed({ (service as? QuickAccessService)?.noteOpenFinished(true) }, if (recent != null) 500L else 0L)
             }
@@ -429,13 +556,42 @@ class NoteOpener(private val service: AccessibilityService) {
         when (state) {
             is NotesScreen.State.Editor -> {
                 if (!j.folderOnly && NotesScreen.matches(state.title, j.steps.last())) return succeed(j)
-                back(j, now, signature, "another note is open (\"${state.title}\")")
+                // BOOX's library inside a folder can read as an editor (its header): go up there, not Back.
+                back(j, now, signature, "another note is open (\"${state.title}\")", root)
             }
 
             is NotesScreen.State.Library -> {
                 if (root.packageName?.toString() == BooxNotes.BOOX_HOME_PACKAGE && NotesScreen.isLauncherNotesLibrary(root)) learnNotesTab(root)
+                // Hold Last Opened Note: Back out of a note can land on whatever BOOX screen was behind
+                // Notes (BOOX's book Library, seen on the 6C). Open the Notes library directly, or
+                // go Home and open it from the widget where the firmware has no direct way.
+                if (j.folderOnly && !j.wentHome && !j.needsNotesTab && root.packageName?.toString() == BooxNotes.BOOX_HOME_PACKAGE &&
+                    !NotesScreen.isLauncherNotesLibrary(root) && folderUpArrow(root) == null // a library folder is Notes too
+                ) {
+                    // The Notes library may still be loading, unless another BOOX screen is known to be in front.
+                    val qs = service as? QuickAccessService
+                    val otherScreen = qs != null && qs.foregroundPackage == BooxNotes.BOOX_HOME_PACKAGE && qs.foregroundActivity != null &&
+                        !BooxNotes.isNotesScreen(qs.foregroundPackage, qs.foregroundActivity, j.notesPackage)
+                    if (!otherScreen && now < j.notBefore + UNKNOWN_GRACE_MS) return later(POLL_MS)
+                    j.wentHome = true
+                    j.resetFolder()
+                    val direct = BooxNotes.notesLibraryIntent(service)
+                    if (direct != null && Launcher.tryStart(service, direct)) {
+                        DebugLog.i("note", "Back left Notes for another BOOX screen; opened the Notes library directly")
+                    } else {
+                        j.needsNotesTab = true
+                        DebugLog.i("note", "Back left Notes for another BOOX screen; going Home to open Notes")
+                        service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
+                    }
+                    j.awaitChangeFrom = signature
+                    j.awaitUntil = now + AFTER_BACK_MS
+                    j.notBefore = now
+                    return later(POLL_MS)
+                }
                 if (target == null) {
                     if (openNotesTab(j, root, now, signature)) return
+                    // The library reopens in the folder it was left in: go up to the top level.
+                    if (signature != j.upFrom && folderUpArrow(root) != null) return back(j, now, signature, "library left in a folder", root)
                     // BOOX home's Notes widget also reads as a library: only the real one counts.
                     val library = root.packageName?.toString() != BooxNotes.BOOX_HOME_PACKAGE || NotesScreen.isLauncherNotesLibrary(root)
                     if (library) return succeed(j)
@@ -471,8 +627,22 @@ class NoteOpener(private val service: AccessibilityService) {
                     }
                 }
 
+                // BOOX reopens the library in the folder it was left in: already there is a step done.
+                val header = folderHeader(root)
+                if (header != null && NotesScreen.matches(NotesScreen.textOf(header), target)) {
+                    DebugLog.i("note", "already in \"$target\" step ${j.index + 1}/${j.steps.size}")
+                    j.index++
+                    j.resetFolder()
+                    if (j.index >= j.steps.size) return succeed(j)
+                    return later(0)
+                }
+                // Saved paths start at the top level: in some other folder, go up rather than page through it.
+                if (header != null && j.index == 0 && state.cards.none { NotesScreen.matches(it.label, target) }) {
+                    return back(j, now, signature, "in \"${NotesScreen.textOf(header)}\", not \"$target\"", root)
+                }
                 val card = state.cards.firstOrNull { NotesScreen.matches(it.label, target) }
-                val node = card?.node ?: findLabel(root, target)
+                // Never the folder's own header: tapping it goes up a level.
+                val node = card?.node ?: findLabel(root, target)?.takeUnless { header != null && it == header }
                 if (node != null) {
                     DebugLog.i("note", "found \"$target\" (${node.className}) step ${j.index + 1}/${j.steps.size}")
                     j.tapSignature = signature
@@ -489,7 +659,7 @@ class NoteOpener(private val service: AccessibilityService) {
                 if (turnPage(j, state, signature)) return wait(j, now, AFTER_PAGE_MS)
                 // Not in this folder. Only the first segment is searched from wherever
                 // we are; later segments must be inside the folder we just opened.
-                if (j.index == 0) back(j, now, signature, "\"$target\" not in this folder") else fail(j, "\"$target\" isn't in that folder")
+                if (j.index == 0) back(j, now, signature, "\"$target\" not in this folder", root) else fail(j, "\"$target\" isn't in that folder")
             }
 
             NotesScreen.State.Unknown -> {
@@ -611,12 +781,51 @@ class NoteOpener(private val service: AccessibilityService) {
         DebugLog.i("note", "BOOX launcher: Notes is tab ${selected + 1}")
     }
 
-    private fun back(j: Job, now: Long, signature: String, why: String) {
+    /**
+     * Inside a folder of BOOX's Notes library (its name in com.onyx:id/text_title): where its
+     * on-screen up arrow is, left of the name. Null at the top level or on other screens.
+     */
+    /** The open folder's name in BOOX's Notes library header (com.onyx:id/text_title); null at the top level. */
+    private fun folderHeader(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (root.packageName?.toString() != BooxNotes.BOOX_HOME_PACKAGE) return null
+        return runCatching { root.findAccessibilityNodeInfosByViewId("${BooxNotes.BOOX_HOME_PACKAGE}:id/text_title") }.getOrNull()
+            ?.firstOrNull { it.isVisibleToUser && NotesScreen.textOf(it).isNotBlank() }
+    }
+
+    private fun folderUpArrow(root: AccessibilityNodeInfo): Rect? {
+        val title = folderHeader(root) ?: return null
+        val t = Rect().also(title::getBoundsInScreen)
+        // Note Air 6C, firmware 4.3: the header is one clickable com.onyx:id/icon_back holding arrow and name.
+        runCatching { root.findAccessibilityNodeInfosByViewId("${BooxNotes.BOOX_HOME_PACKAGE}:id/icon_back") }.getOrNull()
+            ?.firstOrNull { it.isVisibleToUser }
+            ?.let { back -> return Rect().also(back::getBoundsInScreen).let { r -> Rect(r.left, r.top, minOf(r.right, t.right), r.bottom) } }
+        // A clickable parent wrapping the name (other layouts): tap it.
+        generateSequence(title.parent) { it.parent }.take(2).firstOrNull { it.isClickable && it.isVisibleToUser }
+            ?.let { return Rect().also(it::getBoundsInScreen) }
+        val arrow = findFirst(root) { n ->
+            if (!n.isVisibleToUser || !n.isClickable) return@findFirst false
+            val r = Rect().also(n::getBoundsInScreen)
+            r.right <= t.left + 4 && r.centerY() in t.top..t.bottom && r.width() < t.height() * 3
+        }
+        return arrow?.let { Rect().also(it::getBoundsInScreen) }
+            ?: Rect(maxOf(0, t.left - t.height() * 2), t.top, maxOf(1, t.left - t.height() / 2), t.bottom)
+    }
+
+    private fun back(j: Job, now: Long, signature: String, why: String, root: AccessibilityNodeInfo? = null) {
         if (j.backs >= MAX_BACKS) return fail(j, "pressed Back $MAX_BACKS times without finding it")
         j.backs++
         j.resetFolder()
-        DebugLog.i("note", "Back ($why) ${j.backs}/$MAX_BACKS")
-        service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+        // Inside a folder of the Notes library, Back can leave Notes altogether (library opened
+        // through the tab router); the folder's own arrow goes up one level instead.
+        val up = root?.takeIf { signature != j.upFrom }?.let { folderUpArrow(it) }
+        if (up != null) {
+            j.upFrom = signature
+            DebugLog.i("note", "up a folder ($why) ${j.backs}/$MAX_BACKS")
+            touch(up)
+        } else {
+            DebugLog.i("note", "Back ($why) ${j.backs}/$MAX_BACKS")
+            service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+        }
         j.awaitChangeFrom = signature
         j.awaitUntil = now + AFTER_BACK_MS
         later(POLL_MS)
@@ -626,7 +835,7 @@ class NoteOpener(private val service: AccessibilityService) {
         job = null
         DebugLog.i("note", "opened \"${j.steps.joinToString(" / ")}\"" + if (j.folderOnly) " (folder)" else "")
         (service as? QuickAccessService)?.apply {
-            if (!j.folderOnly) noteOpened(j.steps.last())
+            if (!j.folderOnly) noteOpened(j.steps.joinToString(" ${BooxNotes.PATH_SEPARATOR} "))
             noteOpenFinished(true)
         }
     }
@@ -741,6 +950,10 @@ class NoteOpener(private val service: AccessibilityService) {
         private const val MAX_TAP_ATTEMPTS = 2
         private const val DIRECT_WAIT_MS = 3_500L
         private const val SETUP_TIMEOUT_MS = 6_000L
+        private const val MAX_SETUP_UPS = 4
+        private const val RECENT_RECHECK_MS = 600L
+        private const val CREATE_SETTLE_MS = 350L
+        private const val CREATE_RETAP_MS = 1_500L
 
         /** Opens BOOX's Library screen (com.onyx LibraryActivity); seen on the Note Air 6C. */
         private const val LIBRARY_ACTION = "com.onyx.action.LIBRARY"

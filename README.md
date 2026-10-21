@@ -16,10 +16,26 @@ No computer or adb needed. No internet permission.
 
 ![The panel open over a book](docs/launch/1-panel.png)
 
+## New in 1.1.0
+
+Coming from 1.0.0? Here is what changed:
+
+- **Swipes inside the panel.** Swipe right on Quick Access for Recent Files and right again to come back. In the Clipboard, swipe left for older clips and right for newer.
+- **Front Light in one tap.** The tile cycles Off, Soft, Bright and Custom; Custom opens its sliders.
+- **Apps at the bottom, rearranged.** Rows fit your pinned apps automatically, **Previous app** always sits bottom-right, and icons can be black glyphs.
+- **Notes folders.** Pin a folder from the Notes library and expand it in the panel. Last Opened Note shows its folder path with a list of the folder's notes.
+- **Clipboard names and Mark up.** Name a handwriting clip, pin it as you save, search by name, and **Mark up** a picture in BOOX's editor (the result is a new clip). Share an image from any app to **Add to Clipboard**. **Tap a clip to paste it; hold for its actions.**
+- **Writing mode.** A Quick Control, plus a "Writing in Notes?" card in BOOX Notes, that turns off Wi‑Fi, Bluetooth and the Front Light in one tap and puts back only what it switched.
+- **This app.** A strip above the apps with **Optimize** and **EinkWise** for the app that's open (BOOX).
+- **Hold Last Opened** to open the note's folder or the document's app. **Replace app** swaps an app in place.
+- **Clear** the clipboard or Recent Files, or remove one row.
+- **Older BOOX models.** Pinned notes open from anywhere on older firmware; Add works in the library and inside a note; **Add on the Library tab** pins books.
+- **Settings.** Fewer pages and switches, sized for 7", 10.3" and 13.3" screens, and **Troubleshooting** shows your BOOX model and what is confirmed on it. **Show tips again** is under Help.
+
 ## Getting started
 
 1. **Install.** Install [Obtainium](https://github.com/ImranR98/Obtainium) on the BOOX. In Obtainium, tap **Add App**, paste `https://github.com/rn-os/superboox`, then tap **Add** and **Install**. Obtainium will let you know when there's a new build.
-   You can also download the latest `superboox-build-N.apk` from [Releases](https://github.com/rn-os/superboox/releases) and open it on the device.
+   You can also download the latest `.apk` from [Releases](https://github.com/rn-os/superboox/releases) and open it on the device.
 2. **Open SuperBoox.** A short tour (10 steps, with Next, Previous and Skip) walks you through:
    - **Turning on the service.** Android settings → Accessibility → SuperBoox Quick Access → On. This is the only required step.
    - **Picking your size.** Small, Standard, Large or Extra large, shown live on the real panel and on Settings itself. One choice sizes both.
@@ -76,7 +92,8 @@ The clipboard is meant to be a hub for carrying things between apps.
 
 Pinned clips stay on top. Search the history, or filter it with **All · Text · Links · Images · Handwriting · Pinned**.
 
-**Using a clip.** Tap ⧉ to copy it again. Tap or hold the clip itself for more:
+**Using a clip.** Tap a clip to paste it into the app you're in. Tap ⧉ to copy it again. Hold the clip for more:
+- Name, and Mark up (pictures)
 - Copy
 - Paste in app
 - Open (links)

@@ -95,6 +95,14 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(K_TOUR_DONE, false)
         set(v) = sp.edit().putBoolean(K_TOUR_DONE, v).apply()
 
+    /** The newest "What's new" page the user has seen or skipped (see [WHATS_NEW]). */
+    var whatsNewSeen: Int
+        get() = sp.getInt(K_WHATS_NEW, 0)
+        set(v) = sp.edit().putInt(K_WHATS_NEW, v).apply()
+
+    /** True for someone who finished 1.0.0's tour and hasn't seen this release's What's new. */
+    val whatsNewDue: Boolean get() = tourDone && whatsNewSeen < WHATS_NEW
+
     var clipKeepText: Boolean
         get() = sp.getBoolean(K_CLIP_TEXT, true)
         set(v) = sp.edit().putBoolean(K_CLIP_TEXT, v).apply()
@@ -361,6 +369,9 @@ class Prefs(context: Context) {
         const val K_CLIP_IGNORED = "clip_ignored"
         const val K_CLIP_MODE = "clip_mode"
         const val K_TOUR_DONE = "tour_done"
+        const val K_WHATS_NEW = "whats_new_seen"
+        /** Bump with each release that has a What's new page. */
+        const val WHATS_NEW = 1
         const val K_RESTORE_AFTER_RESTART = "restore_after_restart"
         /** When SuperBoox last stopped on an error (written as it stops), for Settings' status. */
         const val K_LAST_CRASH = "last_crash"

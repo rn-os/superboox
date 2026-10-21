@@ -56,6 +56,10 @@ class SettingsActivity : Activity() {
         setContentView(scroll)
         // First launch: the tour (it also asks for the permissions SuperBoox uses).
         if (savedInstanceState == null && !prefs.tourDone) tourStep = 0
+        // Someone updating from 1.0.0 has done the tour: show What's new once. A fresh install sees
+        // the tour instead, which already covers it.
+        else if (savedInstanceState == null && (prefs.whatsNewDue || intent?.getBooleanExtra(EXTRA_WHATS_NEW, false) == true)) newStep = 0
+        if (!prefs.tourDone) prefs.whatsNewSeen = Prefs.WHATS_NEW
         openRequestedPage(intent)
         runCatching { rikka.shizuku.Shizuku.addRequestPermissionResultListener(shizukuResult) }
     }
@@ -194,6 +198,11 @@ class SettingsActivity : Activity() {
             updatePreview()
             return
         }
+        if (newStep != null && page == Page.HOME) {
+            renderWhatsNew()
+            updatePreview()
+            return
+        }
         if (page == Page.HOME) {
             statusSection()
             homeMenu()
@@ -231,6 +240,7 @@ class SettingsActivity : Activity() {
         when {
             page != Page.HOME -> open(Page.HOME)
             tourStep != null && tourStep!! > 0 -> { tourStep = tourStep!! - 1; render() }
+            newStep != null && newStep!! > 0 -> { newStep = newStep!! - 1; render() }
             else -> super.onBackPressed()
         }
     }
@@ -293,6 +303,10 @@ class SettingsActivity : Activity() {
         list.addView(card(listOf(
             actionRow(R.drawable.ic_star, "Show the tour again", "A quick walk-through, and the permissions SuperBoox uses") {
                 tourStep = 0
+                render()
+            },
+            actionRow(R.drawable.ic_star, "What's new in 1.1.0", "The features added since 1.0.0") {
+                newStep = 0
                 render()
             },
             actionRow(R.drawable.ic_star, "Show tips again", "First-use cards, such as the Writing mode one in BOOX Notes") {
@@ -826,6 +840,60 @@ class SettingsActivity : Activity() {
 
     private fun ignoringBattery(): Boolean =
         (getSystemService(android.os.PowerManager::class.java))?.isIgnoringBatteryOptimizations(packageName) == true
+
+    // ---- What's new (for people updating from 1.0.0) ----------------------------------------
+
+    /** The What's new page showing (null: not showing). Same look as the tour; Skip leaves it any time. */
+    private var newStep: Int? = null
+
+    private fun endWhatsNew() {
+        newStep = null
+        prefs.whatsNewSeen = Prefs.WHATS_NEW
+        DebugLog.i("whatsnew", "closed")
+        render()
+    }
+
+    private fun renderWhatsNew() {
+        val step = newStep ?: return
+        list.addView(hbox().apply {
+            setPadding(dp(20), dp(18), dp(16), dp(6))
+            addView(text("NEW IN 1.1.0 · ${step + 1} OF ${WHATS_NEW_PAGES.size}", 14f, bold = true).apply { letterSpacing = 0.05f }, lp(0, WRAP, 1f))
+            if (step < WHATS_NEW_PAGES.size - 1) addView(inkButton("Skip", 15f) { endWhatsNew() })
+        })
+        val (heading, items) = WHATS_NEW_PAGES[step]
+        list.addView(text(heading, 28f, bold = true).apply { setPadding(dp(20), dp(8), dp(20), dp(8)) })
+        items.forEach { (t, d) ->
+            list.addView(vbox().apply {
+                setPadding(dp(20), dp(6), dp(20), dp(6))
+                addView(text(t, 17f, bold = true))
+                addView(text(d, 15.5f).apply { setPadding(0, dp(2), 0, 0); setLineSpacing(0f, 1.15f) })
+            })
+        }
+        list.addView(View(this), lp(MATCH, dp(16)))
+        list.addView(divider(2))
+        list.addView(hbox().apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(20))
+            addView(inkButton("‹ Previous") { if (step > 0) { newStep = step - 1; scroll.scrollTo(0, 0); render() } }
+                .apply { isEnabled = step > 0; alpha = if (step > 0) 1f else 0.4f }, lp(dp(140), WRAP))
+            addView(hbox().apply {
+                gravity = Gravity.CENTER
+                repeat(WHATS_NEW_PAGES.size) { k ->
+                    addView(View(context).apply {
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            shape = android.graphics.drawable.GradientDrawable.OVAL
+                            setColor(if (k == step) Ink.INK else Ink.PAPER)
+                            setStroke(dp(2), Ink.INK)
+                        }
+                    }, lp(dp(12), dp(12)).apply { marginStart = dp(4); marginEnd = dp(4) })
+                }
+            }, lp(0, WRAP, 1f))
+            val last = step == WHATS_NEW_PAGES.size - 1
+            addView(inkButton(if (last) "Done" else "Next ›") {
+                if (last) endWhatsNew() else { newStep = step + 1; scroll.scrollTo(0, 0); render() }
+            }, lp(dp(140), WRAP))
+        })
+    }
 
     private fun renderTour() {
         val step = tourStep ?: return
@@ -2122,6 +2190,26 @@ class SettingsActivity : Activity() {
 
         const val K_PAGE = "page"
         const val EXTRA_PAGE = "page"
+        /** Open Settings on the What's new pages (the panel's "New in 1.1.0" card). */
+        const val EXTRA_WHATS_NEW = "whats_new"
+
+        private val WHATS_NEW_PAGES = listOf(
+            "Writing and the clipboard" to listOf(
+                "Writing mode" to "One tap turns off Wi‑Fi, Bluetooth and the Front Light; tap again and only what it switched comes back. Add it in Settings → Quick Controls, or answer the card in BOOX Notes.",
+                "Tap to paste" to "Tap a clip to paste it; hold it for Copy, Name, Mark up, Share, Pin or Delete.",
+                "Names and Mark up" to "Name a handwriting clip, pin it, find it by name, and mark up a picture in BOOX's editor. Share an image from any app to Add to Clipboard.",
+            ),
+            "Getting around" to listOf(
+                "Swipes in the panel" to "Swipe right on Quick Access for Recent Files. In the clipboard, left shows older clips and right newer.",
+                "Notes folders" to "Pin a folder from the Notes library and expand it in the panel. Last Opened Note shows its folder; hold it to open that folder.",
+                "Front Light" to "One tap cycles Off, Soft, Bright and Custom.",
+            ),
+            "Apps and Settings" to listOf(
+                "Apps at the bottom" to "Rows fit your apps automatically, and Previous app always sits bottom-right. Settings → Apps → ✎ → Replace app swaps one in place.",
+                "This app" to "A strip above the apps with Optimize and EinkWise for the app that's open (BOOX).",
+                "Settings" to "Fewer pages and switches, sized for 7\", 10.3\" and 13.3\" screens. Settings → Help has this page again, and Show tips again.",
+            ),
+        )
         const val EXTRA_EDIT_PRESET = "edit_preset"
         private const val K_PREVIEW = "preview"
         private const val K_TOUR = "tour"

@@ -6,9 +6,11 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.InputType
@@ -99,6 +101,11 @@ class SettingsActivity : Activity() {
         rebuild()
     }
 
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_NOTIFY && tourStep == TOUR_READY) render()
+    }
 
     override fun onPause() {
         // The live preview and the black strip only live while their page is on screen.
@@ -749,6 +756,8 @@ class SettingsActivity : Activity() {
     /** The tour's step while it's showing (null: not touring). */
     private var tourStep: Int? = null
     private var tourPanelOpensAtStart = 0
+    /** The user opened BOOX's permissions for "Run at startup" (it can't be read back). */
+    private var startupMarked = false
     private val tourPoll = android.os.Handler(android.os.Looper.getMainLooper())
 
     private fun endTour() {
@@ -917,7 +926,30 @@ class SettingsActivity : Activity() {
                         else "Settings → Troubleshooting lists what's confirmed."),
                 )))
             }
-            1 -> {
+            TOUR_READY -> {
+                title("Get BOOX ready")
+                para("BOOX can keep the switch in the next step greyed out until SuperBoox has these. Each one takes a tap.")
+                val notify = Build.VERSION.SDK_INT < 33 || checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                list.addView(card(listOf(
+                    permissionRow("Notifications", "Lets SuperBoox show its short messages.", notify, "Allow") {
+                        requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFY)
+                    },
+                    permissionRow("Don't pause SuperBoox", "Android's battery exemption.", ignoringBattery(), "Allow", done = "✓ Done", notDone = "Not yet") { requestIgnoreBattery() },
+                    permissionRow("Run at startup", "BOOX's own switch, which SuperBoox can't read. Open SuperBoox's app info, then Permissions → ⋮ (top right) → All permissions → Run at startup.",
+                        startupMarked.takeIf { it }, "Open BOOX permissions", done = "✓ Opened") {
+                        Launcher.tryStart(this, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                        startupMarked = true
+                    },
+                )))
+                list.addView(note("Skip any you don't want; Next is never blocked."))
+                if (!ignoringBattery()) tourPoll.postDelayed(object : Runnable {
+                    override fun run() {
+                        if (tourStep != TOUR_READY) return
+                        if (ignoringBattery()) render() else tourPoll.postDelayed(this, 1500)
+                    }
+                }, 1500)
+            }
+            TOUR_SERVICE -> {
                 title("Turn SuperBoox on")
                 para("SuperBoox works through Android's accessibility settings: that's how it adds the edge strip and the panel over other apps, and opens your notes for you. It's the one thing it can't work without.")
                 list.addView(card(listOf(
@@ -925,6 +957,16 @@ class SettingsActivity : Activity() {
                         startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     },
                 )))
+                if (Build.VERSION.SDK_INT >= 33 && svc == null) list.addView(card(listOf(vbox().apply {
+                    setPadding(dp(16), dp(12), dp(16), dp(12))
+                    addView(text("Switch greyed out?", 17f, medium = true))
+                    addView(text("1) Do the rows on the previous page. 2) Still grey: Open app info → ⋮ (top right) → Allow restricted settings. 3) Come back and turn it on. No developer mode needed.", 13.5f, color = Ink.MUTED).apply { setPadding(0, dp(4), 0, dp(6)) })
+                    addView(inkButton("Open app info") {
+                        DebugLog.i("tour", "greyed-out help: app info")
+                        Launcher.tryStart(this@SettingsActivity, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                    }, lp(MATCH, WRAP))
+                    addView(inkButton("‹ Get BOOX ready") { tourGo(TOUR_READY) }, lp(MATCH, WRAP).apply { topMargin = dp(6) })
+                })))
                 list.addView(note("SuperBoox only reads what's on screen to find your notes and switches. Nothing leaves the tablet."))
             }
             TOUR_SIZE -> {
@@ -954,7 +996,7 @@ class SettingsActivity : Activity() {
             TOUR_TRY -> {
                 title("Open the panel")
                 val opened = (svc?.panelOpens ?: 0) > tourPanelOpensAtStart
-                para(if (svc == null) "Turn the SuperBoox service on first (step 2), then come back here."
+                para(if (svc == null) "Turn the SuperBoox service on first (step 3), then come back here."
                     else "Your swipe strip is shown in black on the ${prefs.edge.name.lowercase()} edge. ${prefs.trigger.title} along it to open the panel. Try it now.")
                 list.addView(card(listOf(cardText(
                     if (opened) "✓ You opened it. Tap outside the panel to close it again."
@@ -2217,14 +2259,16 @@ class SettingsActivity : Activity() {
         private const val K_PREVIEW = "preview"
         private const val K_TOUR = "tour"
         private const val STOPPED_GRACE_MS = 3000L
-        private const val TOUR_STEPS = 10
-        private const val TOUR_SIZE = 2
-        private const val TOUR_KEEP = 3
-        private const val TOUR_PERMISSIONS = 4
-        private const val TOUR_TRY = 5
-        private const val TOUR_PANEL = 6
-        private const val TOUR_CLIPBOARD = 7
-        private const val TOUR_ADVANCED = 8
+        private const val TOUR_STEPS = 11
+        private const val TOUR_READY = 1
+        private const val TOUR_SERVICE = 2
+        private const val TOUR_SIZE = 3
+        private const val TOUR_KEEP = 4
+        private const val TOUR_PERMISSIONS = 5
+        private const val TOUR_TRY = 6
+        private const val TOUR_PANEL = 7
+        private const val TOUR_CLIPBOARD = 8
+        private const val TOUR_ADVANCED = 9
         const val REQ_FILE = 1
         const val REQ_FOLDER = 2
         const val REQ_RECENT = 3

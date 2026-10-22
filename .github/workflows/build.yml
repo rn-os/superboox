@@ -23,7 +23,7 @@ permissions:
 
 env:
   # The version being worked towards: default-branch builds are pre-releases of it.
-  NEXT_VERSION: "1.1.0"
+  NEXT_VERSION: "1.1.2"
 
 jobs:
   build:

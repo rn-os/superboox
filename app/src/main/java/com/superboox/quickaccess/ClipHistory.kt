@@ -135,6 +135,8 @@ object ClipHistory {
         val mine = all.filter { it.source == TEST_SOURCE || it.text.startsWith("SBTEST") || it.name?.startsWith("SBTEST") == true }
         mine.forEach { discardFiles(context, it) }
         save(context, all - mine.toSet())
+        // save() applies in the background; wait until it is on disk, because the script looks at the file straight after.
+        sp(context).edit().commit()
         return mine.size
     }
 

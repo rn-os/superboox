@@ -41,8 +41,9 @@ Coming from 1.0.0? Here is what changed:
 
 1. **Install.** Install [Obtainium](https://github.com/ImranR98/Obtainium) on the BOOX. In Obtainium, tap **Add App**, paste `https://github.com/rn-os/superboox`, then tap **Add** and **Install**. Obtainium will let you know when there's a new build.
    You can also download the latest `.apk` from [Releases](https://github.com/rn-os/superboox/releases) and open it on the device.
-2. **Open SuperBoox.** A short tour (10 steps, with Next, Previous and Skip) walks you through:
-   - **Turning on the service.** Android settings → Accessibility → SuperBoox Quick Access → On. This is the only required step.
+2. **Open SuperBoox.** A short tour (11 steps, with Next, Previous and Skip) walks you through:
+   - **Getting BOOX ready.** Allow notifications, the battery exemption and BOOX's "Run at startup" first; BOOX can keep the next switch greyed out without them.
+   - **Turning on the service.** Android settings → Accessibility → SuperBoox Quick Access → On. This is the only required step. If the switch is greyed out, the tour shows how to allow restricted settings (app info → ⋮ → Allow restricted settings).
    - **Picking your size.** Small, Standard, Large or Extra large, shown live on the real panel and on Settings itself. One choice sizes both.
    - **Keeping it running.** On BOOX, the tour opens BOOX's Optimize panel for SuperBoox: tap **Others** and turn on **Stay active in the background**, or BOOX may stop SuperBoox in the background. It also asks Android to leave SuperBoox's battery use alone. And it has the switch that turns the edge strip back on after a restart (see below).
    - **Trying it.** Your swipe strip is drawn in black, so you can see where to swipe.

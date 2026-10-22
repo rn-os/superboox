@@ -404,6 +404,7 @@ class QuickAccessPanel(
         }
         if (service.isWritingMode) box.addView(writingBar(), lp(MATCH, WRAP).apply { setMargins(s(6), s(4), s(6), s(8)) })
         else if (prefs.writingPill && service.isNotesInFront) box.addView(writingPill(), lp(MATCH, WRAP).apply { setMargins(s(6), s(6), s(6), s(8)) })
+        if (prefs.whatsNewDue) box.addView(whatsNewPill(), lp(MATCH, WRAP).apply { setMargins(s(6), s(6), s(6), s(8)) })
         if (lightMenu && controls.any { it.id == QuickControls.FRONT_LIGHT }) box.addView(frontLightMenu(), lp(MATCH, WRAP))
         box
     }
@@ -451,6 +452,35 @@ class QuickAccessPanel(
             setOnLongClickListener {
                 openSettingsPage("CONTROLS")
                 true
+            }
+        }
+    }
+
+    /** Once, for people updating from 1.0.0: what's new, in the panel's own outline style. Skip dismisses it for good. */
+    private fun whatsNewPill(): View = with(ctx) {
+        hbox().apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = outline(2, 22)
+            setPadding(s(14), s(6), s(6), s(6))
+            contentDescription = "New in 1.1.0. Tap to see what's new"
+            addView(text("New in 1.1.0", sp(14f), medium = true), lp(0, WRAP, 1f))
+            addView(text("Skip", sp(14f), bold = true).apply {
+                background = outline(2, 16)
+                setPadding(s(12), s(7), s(12), s(7))
+                setOnClickListener { prefs.whatsNewSeen = Prefs.WHATS_NEW; DebugLog.i("whatsnew", "skipped from panel"); refresh() }
+            })
+            addView(text("See what's new", sp(14f), bold = true, color = Ink.PAPER).apply {
+                gravity = Gravity.CENTER
+                background = outline(2, 16, fill = Ink.INK)
+                setPadding(s(12), s(7), s(12), s(7))
+            }, lp(WRAP, WRAP).apply { marginStart = s(6) })
+            isClickable = true
+            setOnClickListener {
+                DebugLog.i("whatsnew", "opened from panel")
+                service.hidePanel()
+                Launcher.start(service, Intent(service, SettingsActivity::class.java)
+                    .putExtra(SettingsActivity.EXTRA_WHATS_NEW, true)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
             }
         }
     }

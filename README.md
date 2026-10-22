@@ -28,6 +28,7 @@ Coming from 1.0.0? Here is what changed:
 - **Writing mode.** A Quick Control, plus a "Writing in Notes?" card in BOOX Notes, that turns off Wi‑Fi, Bluetooth and the Front Light in one tap and puts back only what it switched.
 - **This app.** A strip above the apps with **Optimize** and **EinkWise** for the app that's open (BOOX).
 - **Hold Last Opened** to open the note's folder or the document's app. **Replace app** swaps an app in place.
+- **Clipboard settings** ask for All files access in one place, and only offer "Every copy, as it happens" once Advanced access is connected.
 - **Clear** the clipboard or Recent Files, or remove one row.
 - **Older BOOX models.** Pinned notes open from anywhere on older firmware; Add works in the library and inside a note; **Add on the Library tab** pins books.
 - **Settings.** Fewer pages and switches, sized for 7", 10.3" and 13.3" screens, and **Troubleshooting** shows your BOOX model and what is confirmed on it. **Show tips again** is under Help.

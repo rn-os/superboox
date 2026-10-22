@@ -56,6 +56,7 @@ SUMMARY="$OUT/summary.md"
 HOOK_ID=0
 CHECK=""; CHECK_FAILED=0; CHECK_NOTES=""
 ABORTED=""
+WARNINGS=""
 
 # ---- helpers available to check files ---------------------------------------------------------
 
@@ -165,6 +166,12 @@ restore_all() {
     hook close_panel >/dev/null
     hook remove_test_clips >/dev/null
     hook clear_test_recents >/dev/null
+    # Nothing of the tests may be left in the clipboard history file (checked on disk, not through the app).
+    sleep 1
+    if adb_ exec-out run-as $PKG cat shared_prefs/clipboard.xml 2>/dev/null | grep -q SBTEST; then
+      WARNINGS="$WARNINGS SBTEST clip(s) were left in the clipboard history after cleanup."
+      log "WARNING: SBTEST clip left behind"
+    fi
     hook restore >/dev/null && log "settings restored" || log "WARNING: settings restore failed; the snapshot is in $OUT/snapshot-backup.json"
   fi
   # System settings the checks may have moved: rotation and the front light.
@@ -190,7 +197,7 @@ write_summary() {
   pass=$(grep -c "^PASS" "$RESULTS" 2>/dev/null); fail=$(grep -c "^FAIL" "$RESULTS" 2>/dev/null)
   {
     echo "# Tablet test: $(date '+%Y-%m-%d %H:%M')"
-    echo "Build: ${BUILD_VERSION:-unknown} on ${DEVICE:-unknown}. Passed: ${pass:-0}, failed: ${fail:-0}.${ABORTED:+ **ABORTED: $ABORTED**}"
+    echo "Build: ${BUILD_VERSION:-unknown} on ${DEVICE:-unknown}. Passed: ${pass:-0}, failed: ${fail:-0}.${ABORTED:+ **ABORTED: $ABORTED**}${WARNINGS:+ **WARNING:$WARNINGS**}"
     echo
     echo "| Check | Result |"
     echo "|---|---|"

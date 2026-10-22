@@ -10,6 +10,10 @@ tools/tablet-test.sh --apk superboox-1.1.0-branch.N.apk run apps-grid clipboard 
 Output is `tools/tablet-results/<time>/summary.md` (pass/fail table, log tail for each failure), plus a screenshot
 and panel dump before every tap and for every failure. The run prints the summary at the end.
 
+**The tablet test runner uses only this script.** No hand-made adb taps, swipes, `uiautomator dump` (it unbinds the
+accessibility service) or ad-hoc edits of SuperBoox's files; if a check is missing, add it to `tools/tablet-checks/`
+(or a hook to `TestHooks.kt`) and run that. Anything not covered by a check is reported as manual instead.
+
 ## What it will and won't do
 - Taps only SuperBoox's own windows, by finding a view in the panel dump (test hook `dump_ui`; never uiautomator, whose dump unbinds the accessibility service) (no coordinates), after a screenshot and dump,
   and never while the BOOX Notes editor is in front (the run aborts instead).

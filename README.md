@@ -20,6 +20,8 @@ No computer or adb needed. No internet permission.
 
 Coming from 1.0.0? Here is what changed:
 
+![Writing mode on: the panel's black bar says what it switched off](docs/launch/5-writing.png)
+
 - **Swipes inside the panel.** Swipe right on Quick Access for Recent Files and right again to come back. In the Clipboard, swipe left for older clips and right for newer.
 - **Front Light in one tap.** The tile cycles Off, Soft, Bright and Custom; Custom opens its sliders.
 - **Apps at the bottom, rearranged.** Rows fit your pinned apps automatically, **Previous app** always sits bottom-right, and icons can be black glyphs.
@@ -32,6 +34,8 @@ Coming from 1.0.0? Here is what changed:
 - **Clear** the clipboard or Recent Files, or remove one row.
 - **Older BOOX models.** Pinned notes open from anywhere on older firmware; Add works in the library and inside a note; **Add on the Library tab** pins books.
 - **Settings.** Fewer pages and switches, sized for 7", 10.3" and 13.3" screens, and **Troubleshooting** shows your BOOX model and what is confirmed on it. **Show tips again** is under Help.
+
+![The What's new pages and the one-time panel card, shown to people updating from 1.0.0](docs/launch/6-whats-new.png)
 
 ## Getting started
 
@@ -245,4 +249,4 @@ The UI is built in code (`Ui.kt`). The only libraries are Shizuku's API (used on
 
 `./gradlew assembleDebug` needs JDK 17 and the Android SDK. Every push builds an APK and publishes it as a GitHub release.
 
-The launch images are drawn from `docs/launch/launch.html`, with made-up names and a public-domain book.
+The images in `docs/launch/` are drawn mockups of the 1.1.0 panel (not device screenshots), rendered from `docs/launch/launch.html` with made-up names and a public-domain book.

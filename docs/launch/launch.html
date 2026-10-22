@@ -1,6 +1,6 @@
 <!doctype html>
 <html><head><meta charset="utf-8">
-<!-- Launch and Reddit images: the panel as built (build 63), with made-up names and a public-domain book. Rendered at 2x. -->
+<!-- Launch and Reddit images: drawn mockups of the panel as of 1.1.0 (not device screenshots), with made-up names and a public-domain book. Rendered at 2x. -->
 <style>
   @font-face { font-family: Roboto; src: url(../mockups/fonts/roboto-latin-400-normal.woff2); }
   @font-face { font-family: Roboto; font-weight: 500; src: url(../mockups/fonts/roboto-latin-500-normal.woff2); }
@@ -30,7 +30,7 @@
   .pin { display: flex; align-items: center; gap: 12px; padding: 12px 18px; font-size: 17px; }
   .apps { margin-top: auto; border-top: 2.5px solid #000; }
   .apps .row { display: flex; } .apps .row + .row { border-top: 1px solid #000; }
-  .apps .cell { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 8px 0; font-size: 14px; gap: 3px; }
+  .apps .cell { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 6px 0; font-size: 14px; gap: 3px; }
   .apps .vs { width: 1px; background: #000; margin: 10px 0; }
   .appi { width: 40px; height: 40px; border-radius: 10px; background: #3a3a3a; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; }
   .bubble { position: absolute; background: #fff; border: 2px solid #000; border-radius: 12px; padding: 6px 10px; font-size: 13px; font-weight: 500; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
@@ -126,6 +126,20 @@
   .pvtag { position: absolute; z-index: 5; right: 240px; transform: translateX(50%); bottom: 230px; background: #000; color: #fff; font-size: 13px; font-weight: 700; padding: 4px 12px; border-radius: 10px; white-space: nowrap; }
   .sl2 { padding: 14px 18px; } .sl2 .t { font-size: 17px; } .sl2 .tr { height: 6px; background: #999; border-radius: 3px; margin-top: 14px; position: relative; }
   .sl2 .tr i { position: absolute; left: 0; top: 0; bottom: 0; background: #000; border-radius: 3px; } .sl2 .tr b { position: absolute; top: -8px; width: 22px; height: 22px; border-radius: 50%; background: #000; }
+  .thisapp { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #000; }
+  .thisapp .ta1 { flex: 1; } .thisapp b { display: block; font-size: 15px; font-weight: 500; } .lab2 { font-size: 11px; font-weight: 700; letter-spacing: .06em; }
+  .appi.prev { background: #000; border: 2px solid #000; }
+  .exp { margin-left: auto; }
+  .sub { display: flex; align-items: center; gap: 10px; padding: 8px 18px 8px 52px; font-size: 16px; }
+  .wbar { margin: 6px 6px 8px; background: #000; color: #fff; border-radius: 10px; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; }
+  .wbar b { display: block; font-size: 15px; } .wbar span { font-size: 12.5px; }
+  .wbar .off { margin-left: auto; background: #fff; color: #000; border-radius: 8px; padding: 6px 10px; font-weight: 700; font-size: 14px; }
+  .pill { margin: 6px 6px 8px; border: 2px solid #000; border-radius: 22px; display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 14px; font-size: 14px; font-weight: 500; }
+  .pill .l { flex: 1; } .pill .b2 { border: 2px solid #000; border-radius: 16px; padding: 6px 12px; font-weight: 700; } .pill .b2.k { background: #000; color: #fff; }
+  .nm { font-weight: 700; font-size: 16px; }
+  .nmchip { border: 2px dashed #000; border-radius: 12px; padding: 1px 8px; font-size: 12px; font-weight: 700; }
+  .wn { padding: 8px 24px; } .wn b { display: block; font-size: 19px; } .wn p { margin: 2px 0 10px; font-size: 16.5px; line-height: 1.4; }
+  .notesui { position: absolute; inset: 26px 0 0 0; background: #fff; }
 </style></head>
 <body><div class="stage" id="stage"></div>
 <script>
@@ -169,6 +183,7 @@ const notes = (h, items) => `<div class="notes"><h3>${h}</h3><ul>${items.map(i =
 const ib = (k, off) => `<div class="ib ${off ? "off" : ""}">${g(k, 22)}</div>`;
 const radio = (on, t1, t2) => `<div class="opt2"><div class="radio ${on ? "on" : ""}" style="width:20px;height:20px;border:2px solid #000;border-radius:50%;flex:none;box-sizing:border-box;${on ? "background:radial-gradient(#000 45%,#fff 50%)" : ""}"></div><div><div class="t1" style="font-size:17px;font-weight:500">${t1}</div><div class="t2" style="font-size:13px;color:#333">${t2}</div></div></div>`;
 const head = (t) => `<div class="title" style="display:flex;align-items:center;gap:12px"><div class="back">${g("left", 26)}</div>${t}</div><div class="rule3"></div>`;
+F.folder = "M10,4H4c-1.1,0 -1.99,0.9 -1.99,2L2,18c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V8c0,-1.1 -0.9,-2 -2,-2h-8l-2,-2z";
 F.drag = "M20,9H4v2h16V9zM4,15h16v-2H4v2z";
 F.save = "M17,3H5c-1.11,0 -2,0.9 -2,2v14c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2V7l-4,-4zM12,19c-1.66,0 -3,-1.34 -3,-3s1.34,-3 3,-3 3,1.34 3,3 -1.34,3 -3,3zM15,9H5V5h10v4z";
 F.bug = "M20,8h-2.81c-0.45,-0.78 -1.07,-1.45 -1.82,-1.96L17,4.41 15.59,3l-2.17,2.17C12.96,5.06 12.49,5 12,5s-0.96,0.06 -1.41,0.17L8.41,3 7,4.41l1.62,1.63C7.88,6.55 7.26,7.22 6.81,8H4v2h2.09c-0.05,0.33 -0.09,0.66 -0.09,1v1H4v2h2v1c0,0.34 0.04,0.67 0.09,1H4v2h2.81c1.04,1.79 2.97,3 5.19,3s4.15,-1.21 5.19,-3H20v-2h-2.09c0.05,-0.33 0.09,-0.66 0.09,-1v-1h2v-2h-2v-1c0,-0.34 -0.04,-0.67 -0.09,-1H20V8zM14,16h-4v-2h4v2zM14,12h-4v-2h4v2z";
@@ -192,7 +207,7 @@ const css = `
   .hub .hh { display: flex; align-items: center; gap: 10px; padding: 12px 14px 6px; }
   .hub .hh b { font-size: 18px; } .hub .hh span { font-size: 13px; color: #333; }
   .srch { margin: 4px 12px 8px; border: 2px solid #000; border-radius: 8px; display: flex; align-items: center; gap: 8px; padding: 7px 10px; font-size: 15px; color: #555; }
-  .chips { display: flex; gap: 6px; padding: 0 12px 8px; }
+  .chips { display: flex; gap: 6px; padding: 0 12px 8px; flex: none; }
   .chip { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; border: 2px solid #000; border-radius: 16px; padding: 4px 11px; font-size: 13.5px; font-weight: 700; }
   .chip.on { background: #000; color: #fff; }
   .chip svg { display: inline; }
@@ -216,15 +231,18 @@ document.head.insertAdjacentHTML("beforeend", `<style>${css}</style>`);
 
 const topBar = (lit) => `<div class="top"><div class="c ${lit ? "lit" : ""}">${g("clip", 32, lit ? "#fff" : "#000")}Clipboard</div><div class="sep"></div><div class="c">${g("note_new", 32)}New Note</div><div class="sep"></div><div class="gear">${g("settings", 26)}</div></div>`;
 const tile = ([k, l, on]) => `<div class="tile"><div class="dot ${on ? "on" : ""}">${g(k, 26, on ? "#fff" : "#000")}</div>${l}</div>`;
-const QC = [["wifi", "Wi‑Fi", 1], ["bt", "Bluetooth", 0], ["light", "Front Light", 1], ["moon", "Do Not Disturb", 0], ["refresh", "Full Refresh", 0]];
+const QC = [["wifi", "Wi‑Fi", 1], ["bt", "Bluetooth", 0], ["light", "Front Light", 1], ["pencil", "Writing", 0], ["refresh", "Full Refresh", 0]];
 const qc = `<div class="qc"><div class="tiles">${QC.map(tile).join("")}</div><div class="pager">${g("left", 22, "#999")}1 / 2${g("right", 22)}</div></div>`;
 const lastRows = `<div class="last">${g("note", 30)}<div><b>Last Opened Note</b><span>Meeting Notes</span></div></div><div class="ir"></div>
   <div class="last">${g("book", 30)}<div><b>Last Opened Document</b><span>Field Guide · NeoReader</span></div></div>`;
 const qaBar = (mark) => `<div class="qa"><div class="rec ${mark ? "new" : ""}">${g("clock", 24)}Recent</div>Quick Access<div class="add">${g("link_add", 24)}Add</div></div>`;
 const pins = [["note", "Meeting Notes"], ["note", "Daily Journal"], ["note", "Project Ideas"], ["book", "Field Guide"]]
   .map(([k, t], i) => (i ? `<div class="ir"></div>` : "") + `<div class="pin">${g(k, 22)}${t}</div>`).join("");
-const apps = `<div class="apps"><div class="row"><div class="cell"><div class="appi">10</div>Calendar</div><div class="vs"></div><div class="cell"><div class="appi">Aa</div>Dictionary</div></div>
-  <div class="row"><div class="cell"><div class="appi">±</div>Calculator</div><div class="vs"></div><div class="cell"><div class="appi">◎</div>Browser</div></div></div>`;
+const thisApp = `<div class="thisapp"><div class="ta1"><span class="lab2">THIS APP</span><b>Walden · NeoReader</b></div><div class="small">Optimize</div><div class="small">EinkWise</div></div>`;
+const appCell = (ic, l) => `<div class="cell"><div class="appi">${ic}</div>${l}</div>`;
+const prevCell = `<div class="cell"><div class="appi prev">${g("back", 22, "#fff")}</div>Previous app</div>`;
+const apps = `<div class="apps">${thisApp}<div class="row">${appCell("10", "Calendar")}<div class="vs"></div>${appCell("Aa", "Dictionary")}<div class="vs"></div>${appCell("±", "Calculator")}</div>
+  <div class="row">${appCell("◎", "Browser")}<div class="vs"></div>${appCell("✉", "Mail")}<div class="vs"></div>${prevCell}</div></div>`;
 const shell = (inner, mark) => `<div class="panel">${inner}</div>`;
 
 const scribble = `<svg class="thumb" viewBox="0 0 120 56"><path fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" d="M10,40 C20,10 30,10 34,30 S48,46 54,22 M62,36 l10,-20 l10,20 M66,28 h12 M92,14 v28 M92,14 c14,0 14,14 0,14 c16,0 16,14 0,14"/></svg>`;
@@ -239,7 +257,7 @@ const CLIPS = {
   ref: { k: "link", s: "https://example.com/docs/getting-started", m: "Browser · 2 days ago" },
 };
 const clip = (c, acts = "") => `<div class="clip ${c.now ? "now" : ""}"><div class="k">${g(c.k, 18)}</div><div class="b">
-  ${c.img ? scribble : `<div class="s">${c.s}</div>`}
+  ${c.name ? `<div class="nm">${c.name}</div>` : ""}${c.img ? scribble : `<div class="s">${c.s}</div>`}${c.chip ? `<span class="nmchip">+ Name</span>` : ""}
   <div class="m">${c.now ? `<span class="tag">ON CLIPBOARD</span>` : ""}${c.pin ? g("pinned", 13) : ""}${c.m}</div>${acts}</div>
   ${acts ? "" : `<div class="cp">${g("copy", 20)}</div>`}</div>`;
 const hub = (items, page, pages, extra = "") => `<div class="hub">
@@ -279,11 +297,12 @@ const homeSettings = `<div class="hs"><div class="title">SuperBoox</div><div cla
       ${menuRow("apps", "Apps at the bottom", "6 apps · Previous app included")}
       ${menuRow("clip", "Clipboard", "On · 23 clips · saved when the panel opens")}</div></div>
   <div><div class="sec">HELP</div><div class="card">
+      ${menuRow("star", "What's new in 1.1.0", "The features added since 1.0.0")}
       ${menuRow("star", "Show the tour again", "A quick walk-through, and the permissions SuperBoox uses")}
       ${menuRow("bug", "Troubleshooting", "Copy or share a debug report")}
       ${menuRow("shield", "Advanced access", "Optional · unlocks independent Front Light presets")}
       ${menuRow("save", "Backup &amp; restore", "Save your settings to a file")}
-      ${menuRow("settings", "Advanced", "BOOX Notes package")}</div>
+</div>
     <div class="para">Every page with a panel setting shows the real panel beside it while you change things.</div></div>
   </div></div>`;
 
@@ -297,10 +316,10 @@ const sbar = `<div class="sb"><span>9:41</span><span>Wi‑Fi&nbsp;&nbsp;82%</spa
 const reader = sbar + `<div class="reader"><h1>Walden</h1><h2>ECONOMY</h2>${WALDEN.map(p => `<p>${p}</p>`).join("")}</div><div class="rfoot"><span>Walden — Henry David Thoreau</span><span>12 / 284</span></div>`;
 const over = (inner) => reader + `<div class="panel">${inner}</div>`;
 
-const lastW = `<div class="last">${g("note", 30)}<div><b>Last Opened Note</b><span>Meeting Notes</span></div></div><div class="ir"></div>
+const lastW = `<div class="last">${g("note", 30)}<div><b>Last Opened Note</b><span>Daily › Meeting Notes</span></div></div><div class="ir"></div>
   <div class="last">${g("book", 30)}<div><b>Last Opened Document</b><span>Walden · NeoReader</span></div></div>`;
-const pins4 = [["note", "Meeting Notes"], ["note", "Daily Journal"], ["note", "Project Ideas"], ["book", "Field Guide"]]
-  .map(([k, t], i) => (i ? `<div class="ir"></div>` : "") + `<div class="pin">${g(k, 22)}${t}</div>`).join("");
+const pins4 = [["note", "Meeting Notes"], ["folder", "Daily"], ["book", "Field Guide"]]
+  .map(([k, t], i) => (i ? `<div class="ir"></div>` : "") + `<div class="pin">${g(k, 22)}${t}${k === "folder" ? `<span class="exp">${g("down", 24)}</span>` : ""}</div>`).join("");
 const pins2 = pins4.split(`<div class="ir"></div>`).slice(0, 2).join(`<div class="ir"></div>`);
 
 // Front Light presets, page 2: your own (Advanced access).
@@ -311,19 +330,21 @@ const flMine = `<div style="padding:6px 6px 8px"><div class="fl" style="margin:0
   <div class="hint">Tap to switch · hold to adjust · page 1 has BOOX's own Bright, Soft, Custom, Off</div></div></div>`;
 
 const CL = {
-  ink: { k: "pencil", img: 1, m: "Notes · lasso copy · 3 min ago", now: 1 },
+  ink: { k: "pencil", img: 1, name: "Whiteboard sketch", m: "Notes · lasso copy · 3 min ago", now: 1, pin: 1 },
+  ink2: { k: "pencil", img: 1, chip: 1, m: "Notes · lasso copy · 20 min ago" },
   addr: { k: "text", s: "Hall B, 2nd floor · doors open 9:30, bring the printed agenda", m: "Calendar · 20 min ago" },
   link: { k: "link", s: "https://example.org/articles/e-ink-workflows", m: "Browser · 1 h ago" },
   quote: { k: "text", s: "“Our life is frittered away by detail. Simplify, simplify.”", m: "NeoReader · 2 h ago" },
   wifi: { k: "text", s: "Guest network password: lantern-maple-42", m: "Settings", pin: 1 },
 };
-const acts = `<div class="acts">${btn("copy", "Copy", 1)}${btn("paste", "Paste in app")}${btn("share", "Share…")}${btn("pinned", "Pin")}${btn("del", "Delete")}</div>`;
+F.markup = F.pencil;
+const acts = `<div class="acts">${btn("copy", "Copy", 1)}${btn("paste", "Paste in app")}${btn("share", "Share…")}${btn("pencil", "Name")}${btn("image", "Mark up")}${btn("del", "Delete")}</div>`;
 const hubL = `<div class="hub">
   <div class="hh">${g("clip", 24)}<b>Clipboard</b><span>· 23 items</span><span style="margin-left:auto">${g("close", 24)}</span></div>
   <div class="srch">${g("search", 20, "#555")}Search clipboard</div>
   <div class="chips" style="overflow:hidden"><span class="chip on">All</span><span class="chip">Text</span><span class="chip">Links</span><span class="chip">Images</span><span class="chip">Handwriting</span><span class="chip">${g("pinned", 13)} Pinned</span></div>
   <div class="lab"><span>PINNED</span></div>${clip(CL.wifi)}
-  <div class="lab"><span>RECENT</span></div>${clip(CL.ink)}${clip(CL.addr)}${clip(CL.quote, acts)}${clip(CL.link)}
+  <div class="lab"><span>RECENT</span></div>${clip(CL.ink)}${clip(CL.ink2)}${clip(CL.quote, acts)}${clip(CL.link)}
   <div class="hubfoot"><div class="pager">${g("left", 22, "#999")}1 / 4${g("right", 22)}</div></div></div>`;
 
 const SCREENS = {
@@ -342,7 +363,7 @@ const hero = () => over(topBar(false) + qc + lastW + qaBar(false) + pins4 + apps
   co(400, 4, "Quick Access.", "Pinned notes, books, folders, apps. Add pins what's open; Recent lists what you opened.") +
   co(745, 5, "Your apps,", "a swipe for more.");
 
-const tour = () => `${sbar}<div class="tset"><div class="bar">STEP 4 OF 8<span class="skip">Skip tour</span></div>
+const tour = () => `${sbar}<div class="tset"><div class="bar">STEP 7 OF 10<span class="skip">Skip tour</span></div>
   <h2>Around the panel</h2><p>The real panel is open beside this page, with your own items. Here's what each part does:</p>
   <div class="steps">
     <div><span class="num">1</span><div><b>Top bar.</b> Clipboard, New Note, Settings.</div></div>
@@ -350,7 +371,7 @@ const tour = () => `${sbar}<div class="tset"><div class="bar">STEP 4 OF 8<span c
     <div><span class="num">3</span><div><b>Last opened</b> note and document.</div></div>
     <div><span class="num">4</span><div><b>Quick Access.</b> Your pinned notes, books, folders. <b>Add</b> pins what's open; hold the list to edit it. <b>Recent</b> lists recent files.</div></div>
     <div><span class="num">5</span><div><b>Apps</b> at the bottom, swipe for more.</div></div></div>
-  <div class="tfoot"><div class="btn">‹ Previous</div><div class="tdots">${Array.from({ length: 8 }, (_, k) => `<i class="${k === 3 ? "on" : ""}"></i>`).join("")}</div><div class="btn go">Next ›</div></div></div>
+  <div class="tfoot"><div class="btn">‹ Previous</div><div class="tdots">${Array.from({ length: 10 }, (_, k) => `<i class="${k === 6 ? "on" : ""}"></i>`).join("")}</div><div class="btn go">Next ›</div></div></div>
   <div class="panel">${topBar(false) + qc + lastW + qaBar(false) + pins4 + apps}</div>`;
 
 const sl2 = (t, pct) => `<div class="sl2"><div class="t">${t}</div><div class="tr"><i style="width:${pct}%"></i><b style="left:calc(${pct}% - 11px)"></b></div></div>`;
@@ -360,6 +381,16 @@ const live = () => `${sbar}<div class="tset" style="display:block">${head("Look 
   <div class="sec">PAGES</div><div class="card" style="margin:0 16px"><div class="check"><div class="box on"></div>Remember the last page</div><div class="check"><div class="box"></div>Use apps' own icons</div></div></div>
   <div class="panel">${topBar(false) + qc + lastW + qaBar(false) + pins4 + apps}</div><div class="pvtag">PREVIEW · 40%</div>`;
 
-Object.assign(SCREENS, { hero, tour, live });
+const whatsnew = () => `${sbar}<div class="tset"><div class="bar">NEW IN 1.1.0 · 1 OF 3<span class="skip">Skip</span></div>
+  <h2>Writing and the clipboard</h2>
+  <div class="wn"><b>Writing mode</b><p>One tap turns off Wi‑Fi, Bluetooth and the Front Light; tap again and only what it switched comes back.</p>
+  <b>Tap to paste</b><p>Tap a clip to paste it; hold it for Copy, Name, Mark up, Share, Pin or Delete.</p>
+  <b>Names and Mark up</b><p>Name a handwriting clip, pin it, find it by name, and mark up a picture in BOOX's editor.</p></div>
+  <div class="tfoot" style="margin-top:auto"><div class="btn" style="opacity:.4">‹ Previous</div><div class="tdots"><i class="on"></i><i></i><i></i></div><div class="btn go">Next ›</div></div></div>
+  <div class="panel">${topBar(false) + qc + `<div class="pill"><span class="l">New in 1.1.0</span><span class="b2">Skip</span><span class="b2 k">See what's new</span></div>` + lastW + qaBar(false) + pins4 + apps}</div>`;
+const writing = () => `<div class="notesui"><div style="padding:60px 80px;font-size:26px;line-height:1.6;color:#222">Notes · Meeting Notes<br><svg width="640" height="360" viewBox="0 0 640 360"><path fill="none" stroke="#000" stroke-width="3" stroke-linecap="round" d="M20,60 C80,10 140,110 200,50 S320,20 380,70 M20,140 C120,100 160,200 260,150 S420,120 520,160 M20,240 C100,210 180,300 300,240"/></svg></div></div>
+  <div class="panel">${topBar(false) + `<div class="qc"><div class="tiles">${[["wifi", "Wi‑Fi", 0], ["bt", "Bluetooth", 0], ["light", "Front Light", 0], ["pencil", "Writing", 1], ["refresh", "Full Refresh", 0]].map(tile).join("")}</div></div>
+  <div class="wbar">${g("pencil", 24, "#fff")}<div><b>Writing mode is on</b><span>Wi‑Fi, Bluetooth and Front Light are off</span></div><span class="off">Turn off</span></div>` + lastW + qaBar(false) + pins4 + apps}</div>`;
+Object.assign(SCREENS, { hero, tour, live, whatsnew, writing });
 document.getElementById("stage").innerHTML = `<div class="device"><div class="screen">${SCREENS[location.hash.slice(1) || "panel"]()}</div></div>`;
 </script></body></html>

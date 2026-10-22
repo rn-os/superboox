@@ -23,4 +23,11 @@ GitHub: https://github.com/rn-os/superboox
 
 Built with Claude Code. Feedback welcome.
 
-[Gallery: panel over a book, clipboard with handwriting, Writing mode card, Notes folder expanded, Settings]
+**Images** (in `docs/launch/reddit/`; drawn mockups, not device screenshots, with made-up names and a public-domain book):
+
+1. `1-hero.png`: the panel over a book, with callouts.
+2. `2-clipboard.png`: named handwriting clip, "+ Name" chip, tap-and-hold actions with Mark up.
+3. `3-light.png`: your own Front Light presets.
+4. `7-writing-mode.png`: Writing mode on, with the black bar.
+5. `8-whats-new.png`: the What's new pages and the panel card.
+6. `6-settings.png`: Settings home.

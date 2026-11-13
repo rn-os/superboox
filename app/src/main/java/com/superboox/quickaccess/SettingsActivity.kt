@@ -758,6 +758,8 @@ class SettingsActivity : Activity() {
     private var tourPanelOpensAtStart = 0
     /** The user opened BOOX's permissions for "Run at startup" (it can't be read back). */
     private var startupMarked = false
+    /** The tour sent the user to Accessibility at least once; if the service is still off after that, the greyed-out help opens in full. */
+    private var serviceTried = false
     private val tourPoll = android.os.Handler(android.os.Looper.getMainLooper())
 
     private fun endTour() {
@@ -954,19 +956,38 @@ class SettingsActivity : Activity() {
                 para("SuperBoox works through Android's accessibility settings: that's how it adds the edge strip and the panel over other apps, and opens your notes for you. It's the one thing it can't work without.")
                 list.addView(card(listOf(
                     permissionRow("SuperBoox service", "Android settings → Accessibility → SuperBoox Quick Access → On.", isServiceEnabled()) {
+                        serviceTried = true
                         startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     },
                 )))
-                if (Build.VERSION.SDK_INT >= 33 && svc == null) list.addView(card(listOf(vbox().apply {
-                    setPadding(dp(16), dp(12), dp(16), dp(12))
-                    addView(text("Switch greyed out?", 17f, medium = true))
-                    addView(text("1) Do the rows on the previous page. 2) Still grey: Open app info → ⋮ (top right) → Allow restricted settings. 3) Come back and turn it on. No developer mode needed.", 13.5f, color = Ink.MUTED).apply { setPadding(0, dp(4), 0, dp(6)) })
-                    addView(inkButton("Open app info") {
+                val stillOff = serviceTried && !isServiceEnabled()
+                if (Build.VERSION.SDK_INT >= 33 && svc == null) {
+                    if (stillOff) DebugLog.i("tour", "service still off after Accessibility: showing restricted-settings steps")
+                    val openInfo = {
                         DebugLog.i("tour", "greyed-out help: app info")
+                        serviceTried = true
                         Launcher.tryStart(this@SettingsActivity, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
-                    }, lp(MATCH, WRAP))
-                    addView(inkButton("‹ Get BOOX ready") { tourGo(TOUR_READY) }, lp(MATCH, WRAP).apply { topMargin = dp(6) })
-                })))
+                        Unit
+                    }
+                    list.addView(card(listOf(vbox().apply {
+                        setPadding(dp(16), dp(12), dp(16), dp(12))
+                        if (stillOff) {
+                            // Came back from Accessibility with the switch still off: most likely Android's restricted settings.
+                            addView(text("Still off? Android may be blocking it.", 17f, bold = true))
+                            listOf("1.  Tap Open app info", "2.  Tap ⋮ at the top right", "3.  Tap Allow restricted settings", "4.  Come back and turn the switch on").forEach {
+                                addView(text(it, 15f).apply { setPadding(0, dp(6), 0, 0) })
+                            }
+                            addView(text("No ⋮ there? Do the rows on the previous page first. No developer mode needed.", 13.5f, color = Ink.MUTED).apply { setPadding(0, dp(8), 0, dp(8)) })
+                            addView(inkButton("Open app info") { openInfo() }.apply { background = outline(2, 6, Ink.INK); setTextColor(Ink.PAPER) }, lp(MATCH, WRAP))
+                            addView(inkButton("Open Accessibility again") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }, lp(MATCH, WRAP).apply { topMargin = dp(6) })
+                        } else {
+                            addView(text("Switch greyed out?", 17f, medium = true))
+                            addView(text("1) Do the rows on the previous page. 2) Still grey: Open app info → ⋮ (top right) → Allow restricted settings. 3) Come back and turn it on. No developer mode needed.", 13.5f, color = Ink.MUTED).apply { setPadding(0, dp(4), 0, dp(6)) })
+                            addView(inkButton("Open app info") { openInfo() }, lp(MATCH, WRAP))
+                        }
+                        addView(inkButton("‹ Get BOOX ready") { tourGo(TOUR_READY) }, lp(MATCH, WRAP).apply { topMargin = dp(6) })
+                    })))
+                }
                 list.addView(note("SuperBoox only reads what's on screen to find your notes and switches. Nothing leaves the tablet."))
             }
             TOUR_SIZE -> {

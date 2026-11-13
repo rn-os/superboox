@@ -161,6 +161,36 @@ object NotesDb {
             .sortedWith(compareByDescending<Entry> { it.updated }.thenBy { it.title.lowercase() })
     }
 
+    /** A search hit: a note or folder, with the folders it sits in (outermost first). */
+    class Found(val id: String, val title: String, val folders: List<String>, val isFolder: Boolean, val updated: Long)
+
+    /**
+     * Notes and folders whose name contains [query] (names only, never contents), most recently
+     * changed first, at most [limit]. Empty if the database isn't readable. "Alive" is judged as in
+     * [folderChildren]. Off the main thread.
+     */
+    fun search(context: Context, query: String, limit: Int = 12): List<Found> {
+        val q = query.trim()
+        if (q.isEmpty()) return emptyList()
+        val rows = runCatching { query(context) }.getOrNull() ?: return emptyList()
+        val alive = rows.filter { it.pages > 0 && it.updated > 0 }.maxByOrNull { it.updated }?.status
+        val byId = rows.associateBy { it.id }
+        return rows.asSequence()
+            .filter { (alive == null || it.status == alive) && it.title.contains(q, ignoreCase = true) }
+            .sortedByDescending { it.updated }
+            .take(limit)
+            .map { r ->
+                val folders = ArrayList<String>()
+                var parent = r.parent
+                while (!parent.isNullOrEmpty() && folders.size < 12) {
+                    val f = byId[parent] ?: break
+                    folders.add(0, f.title)
+                    parent = f.parent
+                }
+                Found(r.id, r.title, folders, isFolderRow(rows, r), r.updated)
+            }.toList()
+    }
+
     /**
      * The id of the folder at [path] (just its name, or "Parent / Folder"), or null if that name
      * isn't a folder. A folder is a row with no pages or with entries inside it, so this doesn't

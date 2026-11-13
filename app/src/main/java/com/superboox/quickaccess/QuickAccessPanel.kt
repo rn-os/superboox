@@ -150,6 +150,11 @@ class QuickAccessPanel(
     private var nameField: android.widget.EditText? = null
     private var namePin = false
     private var clipSearch: android.widget.EditText? = null
+    // Search in Quick Access and Recent Files: the field is kept across redraws, like the clipboard's.
+    private var panelQuery = ""
+    private var panelSearch: android.widget.EditText? = null
+    private var panelSearchApply: (() -> Unit)? = null
+    private var panelSearchRun = 0
     private var clipBody: LinearLayout? = null
     private var clipCount: TextView? = null
     private var clipClear: View? = null
@@ -1048,23 +1053,25 @@ class QuickAccessPanel(
         box.addView(rule(1))
 
         val pins = prefs.pins
+        val normal = vbox()
         if (pins.isEmpty()) {
-            box.addView(hint("Nothing here yet. Open a note and tap Add, or tap Add in the Notes library to pick several."))
+            normal.addView(hint("Nothing here yet. Open a note and tap Add, or tap Add in the Notes library to pick several."))
         }
         pins.forEachIndexed { i, pin ->
-            if (i > 0) box.addView(insetRule())
-            box.addView(itemRow(pin))
+            if (i > 0) normal.addView(insetRule())
+            normal.addView(itemRow(pin))
             if (pin.type == PinType.FOLDER && pin.id in expandedFolders) {
                 val holder = vbox()
-                box.addView(holder)
+                normal.addView(holder)
                 loadFolder(holder, Uri.parse(pin.value))
             }
             if (pin.type == PinType.NOTE_FOLDER && pin.noteId in expandedNoteFolders) {
                 val holder = vbox()
-                box.addView(holder)
+                normal.addView(holder)
                 loadNoteFolder(holder, pin.noteId, 1)
             }
         }
+        addPanelSearch(box, normal)
         box
     }
 
@@ -1743,7 +1750,7 @@ class QuickAccessPanel(
         })
         box.addView(rule(1))
         val list = vbox()
-        box.addView(list)
+        addPanelSearch(box, list)
 
         var remembered = Recents.list(prefs).filterNot(::isCurrent).map { item ->
             val ago = ago(item.time)
@@ -1812,6 +1819,158 @@ class QuickAccessPanel(
             }
         }
         box
+    }
+
+    /**
+     * The search box under the Quick Access / Recent Files title, then [normal] (the usual list).
+     * While something is typed, [normal] gives way to one list of matching pins, BOOX note names
+     * and recent items. Redrawn in place so typing and the keyboard aren't interrupted.
+     */
+    private fun addPanelSearch(box: LinearLayout, normal: View) = with(ctx) {
+        val results = vbox()
+        val field = panelSearch ?: android.widget.EditText(ctx).apply {
+            hint = "Search notes, pins and recent"
+            textSize = sp(15f)
+            setTextColor(Ink.INK)
+            setHintTextColor(Ink.MUTED)
+            isSingleLine = true
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            background = outline(2, 8)
+            setPadding(s(10), s(7), s(10), s(7))
+            setCompoundDrawablesRelativeWithIntrinsicBounds(getDrawable(R.drawable.ic_search)?.mutate()?.apply {
+                setTint(Ink.MUTED)
+                setBounds(0, 0, s(20), s(20))
+            }, null, null, null)
+            compoundDrawablePadding = s(8)
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(t: CharSequence?, a: Int, b: Int, c: Int) = Unit
+                override fun onTextChanged(t: CharSequence?, a: Int, b: Int, c: Int) = Unit
+                override fun afterTextChanged(e: android.text.Editable?) {
+                    panelQuery = e?.toString().orEmpty()
+                    panelSearchApply?.invoke()
+                }
+            })
+            setOnEditorActionListener { v, _, _ ->
+                (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                    .hideSoftInputFromWindow(v.windowToken, 0)
+                true
+            }
+            panelSearch = this
+        }
+        (field.parent as? ViewGroup)?.removeView(field)
+        val clear = FrameLayout(ctx).apply {
+            contentDescription = "Clear search"
+            addView(icon(getDrawable(R.drawable.ic_close), iconPx(16)), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+            pressable(outline(2, 8))
+            setOnClickListener { field.setText("") }
+        }
+        box.addView(hbox().apply {
+            addView(field, lp(0, WRAP, 1f))
+            addView(clear, lp(s(34), s(34)).apply { marginStart = s(6) })
+        }, lp(MATCH, WRAP).apply { setMargins(s(12), s(8), s(12), s(8)) })
+        box.addView(normal)
+        box.addView(results)
+        panelSearchApply = {
+            val searching = panelQuery.isNotBlank()
+            normal.visibility = if (searching) View.GONE else View.VISIBLE
+            results.visibility = if (searching) View.VISIBLE else View.GONE
+            clear.visibility = if (panelQuery.isEmpty()) View.GONE else View.VISIBLE
+            if (searching) fillPanelSearch(results) else panelSearchRun++
+        }
+        panelSearchApply?.invoke()
+    }
+
+    private fun fillPanelSearch(results: LinearLayout) {
+        val q = panelQuery.trim()
+        val run = ++panelSearchRun
+        val pins = prefs.pins.filter { it.label.contains(q, ignoreCase = true) }
+        val recent = Recents.list(prefs).filterNot(::isCurrent).filter { item ->
+            (if (item.kind == RecentItem.Kind.NOTE) Recents.noteName(item.title) else item.title).contains(q, ignoreCase = true)
+        }
+        fun draw(notes: List<NotesDb.Found>) {
+            results.removeAllViews()
+            val pinnedIds = pins.map { it.noteId }.filter { it.isNotEmpty() }.toSet()
+            val pinnedNames = pins.filter { it.type == PinType.BOOX_NOTE || it.type == PinType.NOTE_FOLDER }.map { it.label.lowercase() }.toSet()
+            val shownNotes = notes.filterNot { it.id in pinnedIds }
+            val noteNames = notes.map { it.title.lowercase() }.toSet()
+            // A recent note the Notes list already shows isn't repeated; documents always are listed.
+            val shownRecent = recent.filterNot {
+                it.kind == RecentItem.Kind.NOTE && Recents.noteName(it.title).lowercase().let { n -> n in noteNames || n in pinnedNames }
+            }
+            fun section(name: String) = results.addView(ctx.text(name, sp(11.5f), bold = true).apply { setPadding(s(16), s(10), s(16), s(2)) })
+            if (pins.isNotEmpty()) {
+                section("PINNED")
+                pins.forEachIndexed { i, pin ->
+                    if (i > 0) results.addView(insetRule())
+                    results.addView(searchRow(pinIcon(pin), pin.label, when (pin.type) {
+                        PinType.BOOX_NOTE -> BooxNotes.splitPath(pin.value).dropLast(1).joinToString(" › ").ifEmpty { "Note" }
+                        PinType.NOTE_FOLDER -> "Notes folder"
+                        PinType.APP -> "App"
+                        PinType.FOLDER -> "Folder"
+                        else -> "Document"
+                    }, q, null) {
+                        // A folder pin expands in the usual list, so show that list again.
+                        if (pin.type == PinType.FOLDER || pin.type == PinType.NOTE_FOLDER) panelSearch?.setText("")
+                        activate(pin)
+                    })
+                }
+            }
+            if (shownNotes.isNotEmpty()) {
+                section("NOTES")
+                shownNotes.forEachIndexed { i, n ->
+                    if (i > 0) results.addView(insetRule())
+                    val path = n.folders + n.title
+                    val icon = ctx.icon(ctx.getDrawable(if (n.isFolder) R.drawable.ic_note_folder else R.drawable.ic_note), iconPx(24))
+                    results.addView(searchRow(icon, n.title, n.folders.joinToString(" › ").ifEmpty { if (n.isFolder) "Notes folder" else "Notes" }, q,
+                        onHold = { service.openNotesFolderPath(n.folders) }) {
+                        DebugLog.i("search", "open ${if (n.isFolder) "folder" else "note"} \"${n.title}\" in ${n.folders}")
+                        if (n.isFolder) service.openNotesFolderPath(path)
+                        else service.openBooxNote(Pin(PinType.BOOX_NOTE, n.title, path.joinToString(" ${BooxNotes.PATH_SEPARATOR} "), noteId = n.id))
+                    })
+                }
+            }
+            if (shownRecent.isNotEmpty()) {
+                section("RECENT")
+                shownRecent.forEachIndexed { i, item ->
+                    if (i > 0) results.addView(insetRule())
+                    val note = item.kind == RecentItem.Kind.NOTE
+                    val icon = ctx.icon(ctx.getDrawable(if (note) R.drawable.ic_note else R.drawable.ic_book), iconPx(24))
+                    results.addView(searchRow(icon, if (note) Recents.noteName(item.title) else item.title,
+                        if (note) "Note · ${ago(item.time)}" else "${Launcher.appLabel(service, item.pkg)} · ${ago(item.time)}", q,
+                        onHold = if (note) ({ service.openNotesFolder(item.title) }) else null) {
+                        if (note) service.openBooxNote(item.title) else openRecentDocument(item)
+                    })
+                }
+            }
+            if (pins.isEmpty() && shownNotes.isEmpty() && shownRecent.isEmpty()) results.addView(hint("Nothing matches “$q”."))
+        }
+        draw(emptyList())
+        io.execute {
+            val notes = runCatching { NotesDb.search(service, q) }.getOrDefault(emptyList())
+            main.post {
+                if (run != panelSearchRun || !root.isAttachedToWindow) return@post
+                DebugLog.i("search", "\"$q\" -> ${pins.size} pins, ${notes.size} notes, ${recent.size} recent")
+                draw(notes)
+            }
+        }
+    }
+
+    /** One search result: tap opens it; the matching part of the name is underlined. */
+    private fun searchRow(icon: View, title: String, subtitle: String, q: String, onHold: (() -> Unit)?, onClick: () -> Unit): View = ctx.hbox().apply {
+        setPadding(s(16), s(5), s(10), s(5))
+        addView(icon)
+        val shown = android.text.SpannableString(title).apply {
+            val at = title.indexOf(q, ignoreCase = true)
+            if (at >= 0) setSpan(android.text.style.UnderlineSpan(), at, at + q.length, 0)
+        }
+        addView(ctx.vbox().apply {
+            setPadding(s(12), s(6), s(4), s(6))
+            addView(oneLine(ctx.text(title, sp(17f)).apply { text = shown }))
+            addView(oneLine(ctx.text(subtitle, sp(13f), color = Ink.MUTED)))
+        }, lp(0, WRAP, 1f))
+        pressable()
+        setOnClickListener { onClick() }
+        if (onHold != null) setOnLongClickListener { onHold(); true }
     }
 
     private fun fillRecent(list: LinearLayout, rows: List<RecentRow>, onRemove: (RecentRow) -> Unit) {

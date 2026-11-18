@@ -477,4 +477,9 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - 56: split screen beside the book, following the open book, with typed notes.
   - 57: Save to Digest (ACTION_PROCESS_TEXT, the share target, a clipboard action).
   - 58: Settings → Digests.
-  - Awaiting review.
+  - Decisions:
+    - Panel section can be turned on or off, and shows the latest 1 or 2 highlights (default 2). It's a glance plus a shortcut to the full view.
+    - Export defaults to Documents/SuperBoox/Digests: a shared SuperBoox folder.
+    - Google Drive works through the Drive app's folder in Android's picker (SAF). SuperBoox stays offline.
+    - The user doesn't sync Obsidian on the tablet; their notes sync to Drive for a daily review.
+    - "Digests" is the app-icon name for now.

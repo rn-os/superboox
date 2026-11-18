@@ -436,7 +436,8 @@ const D1 = () => shell(topBar(false) + qc + lastRows.replace("Field Guide · Neo
   "No new top-bar button. A small <b>Highlights</b> section (dashed outline) sits under Last Opened, for the book that's open, or the last one you read.",
   "Its 2 newest highlights, with the page. Tap one to copy it, hold it for Open at page · Add note · Share.",
   "<b>See all</b> opens the Digests screen on that book.",
-  "Shown only when that book has highlights; it can be turned off or set to 1–3 in Settings. Quick Access gets the rest of the space, as now.",
+  "Shown only when that book has highlights. It can be turned off, or set to show the latest 1 or 2, in Settings. Quick Access gets the rest of the space, as now.",
+  "Meant as a glance and a shortcut: the full view is one tap away.",
 ]);
 
 // 54 · Digests screen, portrait
@@ -506,23 +507,24 @@ const D5 = () => `<div class="tablet"><div class="bar0">${g("left", 24)} Instapa
 // 58 · Settings → Digests
 const D6 = () => `<div class="set" style="width:600px;height:1180px">${head("Digests")}
   <div class="sec">IN THE PANEL</div><div class="card">
-    <div class="check"><div class="box on"></div>Show highlights from the open book</div>
-    <div class="choice">How many<b>2 ›</b></div></div>
+    <div class="check"><div class="box on"></div>Show the latest highlights from the open book</div>
+    <div class="choice">How many<b>1 · <u>2</u> ›</b></div></div>
   <div class="sec">WHERE HIGHLIGHTS COME FROM</div><div class="card">
     ${keepRow(true, "KOReader", "Highlights and notes from KOReader's own book files. Read only; KOReader is never changed.", "Needs All files access", true)}
     ${keepRow(true, "NeoReader", "Highlights from NeoReader's library.", "", false)}
     ${keepRow(true, "Save to Digest", "In the text-selection menu, the Share list and the clipboard, for any other app (Instapaper, browser…).", "", false)}
   </div>
   <div class="sec">EXPORT</div><div class="card">
-    <div class="choice">Folder<b>Documents/Digests ›</b></div>
+    <div class="choice">Save to<b>Documents/SuperBoox/Digests ›</b></div>
     <div class="choice">Format<b>Markdown, one file per book ›</b></div>
     <div class="check"><div class="box"></div>Export again when highlights change</div>
     <div class="btns"><div class="btn">${g("open", 18)}&nbsp; Open Digests</div><div class="btn">${g("export", 18)}&nbsp; Export now</div></div></div>
-  <div class="para">Highlights stay on this tablet; nothing is uploaded and no internet access is needed. Pick a folder your notes app syncs (for example your Obsidian vault) to have them there too. Your notes, pins and hidden highlights are included in Backup &amp; restore.</div></div>` + notes("58 · Settings → Digests", [
+  <div class="para">Highlights stay on this tablet; nothing is uploaded and no internet access is needed. <b>Save to</b> can also be a <b>Google Drive</b> folder, if the Google Drive app is on this tablet: Drive uploads the files, SuperBoox still never goes online. Your notes, pins and hidden highlights are included in Backup &amp; restore.</div></div>` + notes("58 · Settings → Digests", [
   "Under <b>In the panel</b> on Settings' home, next to Clipboard.",
-  "Panel: the Highlights section on or off, and how many highlights it shows (1–3).",
+  "Panel: the Highlights section on or off, and whether it shows the latest <b>1 or 2</b> (2 by default).",
   "Each source can be turned off. KOReader needs <b>All files access</b>, which SuperBoox already asks for (optionally) for handwriting pictures.",
   "Export: one Markdown file per book, each highlight as a quote with its page, date and your note.",
+  "<b>Save to</b> starts at <b>Documents/SuperBoox/Digests</b>, a SuperBoox folder other saved files can share later. Tap it for Android's folder picker: this tablet, or <b>Google Drive</b> (e.g. the folder your daily-review notes sync to) when the Drive app is installed.",
 ]);
 const h = location.hash;
 document.getElementById("stage").innerHTML = ({ "#2": () => D3(), "#3": () => D4(), "#4": () => D5() + D6() }[h] || (() => D1() + D2()))();

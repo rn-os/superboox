@@ -118,7 +118,7 @@ class SettingsActivity : Activity() {
     /** The real panel is shown beside Look & size or Clipboard (after a change there, or on request). */
     private var previewOn = false
 
-    private fun previewable() = page == Page.LOOK || page == Page.CLIPBOARD
+    private fun previewable() = page == Page.LOOK || page == Page.CLIPBOARD || page == Page.SECTIONS
 
     /** Shows (or hides) the real panel and the black strip for this page, and keeps this page clear of the panel. */
     private fun updatePreview() {
@@ -173,7 +173,7 @@ class SettingsActivity : Activity() {
     /** The settings pages: Home lists the others. */
     private enum class Page(val title: String) {
         HOME("SuperBoox"), GESTURE("Gesture"), LOOK("Look & size"), ITEMS("Quick Access items"),
-        CONTROLS("Quick Controls"), APPS("Apps at the bottom"), RECENT("Recent files"), CLIPBOARD("Clipboard"), DIGESTS("Digests"),
+        CONTROLS("Quick Controls"), APPS("Apps at the bottom"), RECENT("Recent files"), CLIPBOARD("Clipboard"), DIGESTS("Digests"), SECTIONS("Panel sections"),
         TROUBLESHOOTING("Troubleshooting"), BACKUP("Backup & restore"), ADVANCED_ACCESS("Advanced access"),
     }
 
@@ -225,6 +225,7 @@ class SettingsActivity : Activity() {
                 Page.RECENT -> recentSection()
                 Page.CLIPBOARD -> clipboardSection()
                 Page.DIGESTS -> digestsSection()
+                Page.SECTIONS -> panelSectionsCard()
                 Page.TROUBLESHOOTING -> troubleshootingSection()
                 Page.BACKUP -> backupSection()
                 Page.ADVANCED_ACCESS -> advancedAccessSection()
@@ -236,7 +237,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun open(to: Page) {
-        if (to != page) previewOn = false
+        if (to != page) previewOn = to == Page.SECTIONS // that page is about the panel's layout: show it from the start
         if (to != page) DebugLog.i("settings", "page ${to.name}")
         page = to
         scroll.scrollTo(0, 0)
@@ -290,6 +291,7 @@ class SettingsActivity : Activity() {
                 if (prefs.handleEnabled) "${prefs.edge.name.lowercase().replaceFirstChar { it.uppercase() }} edge · ${prefs.trigger.title}" else "Edge gesture off"),
             menuRow(R.drawable.ic_panel, Page.LOOK,
                 "${prefs.panelWidthPct}% wide · ${prefs.menuSize.title} size · ${if (prefs.rememberPages) "Remembers last page" else "Starts on page 1"}"),
+            menuRow(R.drawable.ic_drag, Page.SECTIONS, sectionsSummary()),
         )))
         list.addView(heading("In the panel"))
         list.addView(card(listOf(
@@ -1383,7 +1385,8 @@ class SettingsActivity : Activity() {
             previewButton(),
         )))
         list.addView(note("Changing the size or width shows the real panel beside this page, at that size, so you can see it before opening the panel. It can't be tapped; hide it with the button or by leaving this page."))
-        panelSectionsCard()
+        list.addView(heading("Layout"))
+        list.addView(card(listOf(menuRow(R.drawable.ic_panel, Page.SECTIONS, sectionsSummary()))))
         list.addView(heading("Pages"))
         list.addView(card(listOf(
             check("Remember last page", prefs.rememberPages) { prefs.rememberPages = it },
@@ -1391,9 +1394,13 @@ class SettingsActivity : Activity() {
         list.addView(note("Quick Controls and apps reopen on the page you left them on. Off: they start on page 1 each time the panel opens."))
     }
 
-    /** Look & size → Panel sections: drag to reorder, untick to hide; the live panel shows it. */
+    private fun sectionsSummary(): String =
+        if (PanelSections.isDefault(prefs)) "Usual order · drag to reorder, untick to hide"
+        else PanelSections.order(prefs).filter { PanelSections.ticked(prefs, it) }.joinToString(" · ") { it.title }
+
+    /** Panel sections: drag to reorder, untick to hide; the real panel shows beside the page. */
     private fun panelSectionsCard() {
-        list.addView(heading("Panel sections"))
+        list.addView(View(this), lp(MATCH, dp(12)))
         val order = PanelSections.order(prefs)
         fun fixedRow(title: String, sub: String, tag: String) = hbox().apply {
             setPadding(dp(12), dp(10), dp(12), dp(10))
@@ -1435,7 +1442,8 @@ class SettingsActivity : Activity() {
             render()
         })
         list.addView(card(rows))
-        list.addView(note("Drag ≡ to move a section; untick it to hide it. The panel beside this page shows the result. Quick Access fills whatever height is left, wherever it sits."))
+        list.addView(note("Drag ≡ to move a section; untick it to hide it. The real panel shows beside this page and changes as you do. Quick Access fills whatever height is left, wherever it sits."))
+        list.addView(card(listOf(previewButton())).apply { (layoutParams as LinearLayout.LayoutParams).topMargin = dp(10) })
     }
 
     private fun pinsSection() {

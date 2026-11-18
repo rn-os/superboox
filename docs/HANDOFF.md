@@ -523,7 +523,7 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
 
 ## Panel sections (mockups 59–60, approved)
 
-- Settings → Look & size → **Panel sections**: drag ≡ to reorder, untick to hide.
+- Settings → **Panel sections** (its own page, from Home and from Look & size; it opens with the live panel preview showing): drag ≡ to reorder, untick to hide.
   - The sections are Quick Controls, Last Opened Note, Last Opened Document, Highlights and Quick Access.
   - The top bar is always first and the apps always last.
   - Reset to the usual order appears once anything changes.

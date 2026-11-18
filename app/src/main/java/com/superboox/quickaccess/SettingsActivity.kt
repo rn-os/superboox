@@ -1244,6 +1244,13 @@ class SettingsActivity : Activity() {
                 startActivity(Intent(this, DigestsActivity::class.java))
             },
         )))
+        list.addView(heading("In the panel"))
+        list.addView(card(listOf(
+            check("Show the latest highlights", prefs.digestPanel) { prefs.digestPanel = it; render() },
+            cardText("Under Last Opened: from the book that's open (or the last one read), else the newest anywhere. Tap one or swipe down for more; See all opens Digests."),
+        ) + listOfNotNull(if (prefs.digestPanel) choiceRow("How many", "${prefs.digestPanelCount}") {
+            pick("How many highlights", listOf("1", "2"), prefs.digestPanelCount - 1) { prefs.digestPanelCount = it + 1 }
+        } else null)))
         list.addView(heading("Where highlights come from"))
         val koInstalled = KoreaderHighlights.installed(this) != null
         val rows = mutableListOf<View>(

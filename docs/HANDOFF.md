@@ -500,5 +500,18 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - Export:
     - Markdown, one file per book.
     - Goes to the picked document tree (Drive works through SAF), else Documents/SuperBoox/Digests (needs All files access).
-  - Not yet built: the panel's Highlights section and peek (53, 53b), NeoReader (waiting for the probe report), and the "Add note" button in the Saved message (it's a plain toast for now).
+  - **Part 2:** the panel's Highlights section and peek are built (`QuickAccessPanel.highlightsSection` and `highlightsPeek`, plus `VerticalSwipe`).
+    - The section sits under Last Opened in MAIN mode. It shows the newest 1–2 highlights from the open or last-read book, or the newest anywhere when that book has none.
+    - Tapping a highlight, swiping down or tapping the grip opens the peek (5 a page, This book / All books). Swipe up, the grip or Back closes it.
+    - Holding a highlight in the peek gives Copy · Share… · Open book · Note (Note opens Digests).
+    - Settings → Digests → In the panel: on/off and how many (1 or 2).
+  - Also in part 2:
+    - Digests uses UiScale like Settings and recreates on rotation, keeping its state.
+    - It can be added to Apps at the bottom and Quick Access (it's the one SuperBoox entry the app picker allows).
+  - **Quick Controls in any language (`TileNames`):** labels are translated to English through com.android.systemui's string resources.
+    - It walks that package's string ids from a known anchor and compares the local and English values.
+    - Used for tile names, tile On/Off states and the Front Light preset buttons.
+    - The table is built once per language, in the background when the service starts.
+  - Not yet built: NeoReader (waiting for the probe report), and the "Add note" button in the Saved message (it's a plain toast).
+  - Instapaper: its selection toolbar is its own, so there's no PROCESS_TEXT. Use its Share arrow (Save to Digest is in the share sheet) or Copy then the clip's Digest button.
   - Offline compile check without the Android SDK: Kotlin compiler 2.0.21 plus Robolectric `android-all-14` and the Shizuku/HiddenApiBypass jars, all from Maven Central, with a stub R generated from res/. See the session scratchpad `kc/check.sh`.

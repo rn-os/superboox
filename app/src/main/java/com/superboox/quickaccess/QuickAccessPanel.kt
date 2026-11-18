@@ -100,7 +100,9 @@ class QuickAccessPanel(
                     else if (namingClip != null) endNaming(save = false)
                     else if (mode == Mode.CLIPBOARD && clipConfirmClear) { clipConfirmClear = false; fillClips() }
                     else if (mode == Mode.CLIPBOARD && clipOpen != null) { clipOpen = null; fillClips() }
-                    else if (mode != Mode.MAIN) show(Mode.MAIN) else service.hidePanel()
+                    else if (mode != Mode.MAIN) show(Mode.MAIN)
+                    else if (peek) { peek = false; peekOpen = null; show(Mode.MAIN) }
+                    else service.hidePanel()
                 }
                 return true
             }
@@ -156,6 +158,22 @@ class QuickAccessPanel(
 
     /** "Clear" in the clipboard's header was tapped and is waiting to be confirmed. */
     private var clipConfirmClear = false
+
+    // Highlights (Digests), declared before init like the clipboard state: show() reads them.
+    /** The Highlights section is opened up over Last Opened and Quick Access ("peek"). */
+    private var peek = false
+    /** Peek shows every book's highlights instead of just the open book's. */
+    private var peekAll = false
+    private var peekPage = 0
+    /** The highlight in the peek whose actions are showing. */
+    private var peekOpen: String? = null
+    private val digests: List<Digests.Highlight> by lazy { runCatching { Digests.all(service) }.getOrDefault(emptyList()) }
+
+    /** The book open in a reading app (or the last one read), if Digests has highlights from it. */
+    private val digestBook: Digests.Book? by lazy {
+        val doc = currentDocument ?: Recents.list(prefs).firstOrNull { it.kind == RecentItem.Kind.DOCUMENT } ?: return@lazy null
+        Digests.books(digests).firstOrNull { NotesScreen.matches(it.title, Recents.noteName(doc.title)) || NotesScreen.matches(it.title, doc.title) }
+    }
 
     init {
         // Tapping outside the sheet closes it (no dimming: it only costs an e-ink refresh).
@@ -240,6 +258,14 @@ class QuickAccessPanel(
             content.addView(quickControlsRow(), lp(MATCH, WRAP))
             content.addView(rule(2))
         }
+        if (peek && mode != Mode.MAIN) peek = false
+        if (peek) {
+            // Highlights opened up over Last Opened and Quick Access; the apps stay.
+            content.addView(highlightsPeek(), lp(MATCH, 0, 1f))
+            content.addView(rule(3))
+            content.addView(dock(), lp(MATCH, WRAP))
+            return
+        }
         // A swipe right anywhere in the Last Opened rows and the list below flips between
         // Quick Access and Recent Files (not while editing, where rows are dragged). The controls
         // above and the apps below keep their own sideways paging.
@@ -250,6 +276,10 @@ class QuickAccessPanel(
         flip.addView(insetRule())
         flip.addView(lastDocumentRow())
         flip.addView(rule(3))
+        if (mode == Mode.MAIN) highlightsSection()?.let {
+            flip.addView(it)
+            flip.addView(rule(3))
+        }
         val middle = when (mode) {
             Mode.RECENT -> recentList()
             Mode.EDIT -> editList()
@@ -2342,6 +2372,178 @@ class QuickAccessPanel(
         }
     }
 
+    // ---- Highlights (Digests) ----------------------------------------------------------------
+
+    /**
+     * Under Last Opened: the newest 1 or 2 highlights from the book that's open (or the last one
+     * read), else the newest anywhere. Tap a highlight, or swipe down, to peek at more; See all
+     * opens the Digests screen. Null when there's nothing to show or it's turned off.
+     */
+    private fun highlightsSection(): View? = with(ctx) {
+        if (!prefs.digestPanel) return null
+        val book = digestBook
+        val pool = if (book != null) digests.filter { it.bookKey == book.key } else digests
+        val latest = pool.sortedByDescending { it.time }.take(prefs.digestPanelCount)
+        if (latest.isEmpty()) return null
+        VerticalSwipe(ctx, s(40), down = true) { openPeek() }.apply {
+            addView(highlightsHeader(if (book != null) "${book.title} · ${book.count}" else "recent", book?.key))
+            latest.forEach { h -> addView(highlightLine(h, showBook = book == null, compact = true) { openPeek() }) }
+            addView(grip("Swipe down for more", down = true) { openPeek() })
+        }
+    }
+
+    private fun openPeek() {
+        peek = true
+        peekAll = digestBook == null
+        peekPage = 0
+        peekOpen = null
+        show(Mode.MAIN)
+    }
+
+    private fun closePeek() {
+        peek = false
+        peekOpen = null
+        show(Mode.MAIN)
+    }
+
+    private fun highlightsPeek(): View = with(ctx) {
+        val book = digestBook
+        if (book == null) peekAll = true
+        val pool = (if (peekAll || book == null) digests else digests.filter { it.bookKey == book.key }).sortedByDescending { it.time }
+        val pages = ((pool.size + PEEK_PER_PAGE - 1) / PEEK_PER_PAGE).coerceAtLeast(1)
+        peekPage = peekPage.coerceIn(0, pages - 1)
+        VerticalSwipe(ctx, s(40), down = false) { closePeek() }.apply {
+            addView(highlightsHeader("recent", if (peekAll) null else book?.key))
+            if (book != null) addView(hbox().apply {
+                background = outline(2, 8)
+                setPadding(dp(2), dp(2), dp(2), dp(2))
+                fun seg(label: String, on: Boolean, onClick: () -> Unit) = oneLine(text(label, sp(14f), bold = true, color = if (on) Ink.PAPER else Ink.INK)).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(s(6), s(7), s(6), s(7))
+                    if (on) setBackgroundColor(Ink.INK) else { pressable(); setOnClickListener { onClick() } }
+                }
+                addView(seg("This book", !peekAll) { peekAll = false; peekPage = 0; peekOpen = null; show(Mode.MAIN) }, lp(0, WRAP, 1f))
+                addView(seg("All books", peekAll) { peekAll = true; peekPage = 0; peekOpen = null; show(Mode.MAIN) }, lp(0, WRAP, 1f))
+            }, lp(MATCH, WRAP).apply { setMargins(s(12), s(2), s(12), s(6)) })
+            val list = vbox()
+            pool.drop(peekPage * PEEK_PER_PAGE).take(PEEK_PER_PAGE).forEach { h ->
+                list.addView(highlightLine(h, showBook = peekAll, compact = false) { peekOpen = if (peekOpen == h.id) null else h.id; show(Mode.MAIN) })
+                if (peekOpen == h.id) list.addView(highlightActions(h))
+            }
+            addView(list, lp(MATCH, 0, 1f))
+            addView(hbox().apply {
+                gravity = Gravity.CENTER
+                addView(pagerButton(R.drawable.ic_chevron_left, "Newer highlights", peekPage > 0) { peekPage--; peekOpen = null; show(Mode.MAIN) })
+                addView(text("${peekPage + 1} / $pages", sp(15f), bold = true).apply { setPadding(s(8), 0, s(8), 0) })
+                addView(pagerButton(R.drawable.ic_chevron_right, "Older highlights", peekPage < pages - 1) { peekPage++; peekOpen = null; show(Mode.MAIN) })
+            })
+            addView(grip("Swipe up to close", down = false) { closePeek() })
+        }
+    }
+
+    private fun highlightsHeader(sub: String, bookKey: String?): View = with(ctx) {
+        hbox().apply {
+            setPadding(s(16), s(10), s(12), s(4))
+            addView(icon(getDrawable(R.drawable.ic_digest), iconPx(22)))
+            addView(oneLine(text("Highlights", sp(16f), bold = true)).apply { setPadding(s(10), 0, 0, 0) })
+            addView(oneLine(text(" · $sub", sp(12.5f), color = Ink.MUTED)), lp(0, WRAP, 1f))
+            addView(hbox().apply {
+                contentDescription = "See all highlights"
+                setPadding(s(8), s(4), s(2), s(4))
+                addView(text("See all", sp(14f), bold = true))
+                addView(icon(getDrawable(R.drawable.ic_chevron_right), iconPx(20)))
+                pressable()
+                setOnClickListener { openDigests(bookKey) }
+            })
+        }
+    }
+
+    /** One highlight: a black bar, the passage in a book face, and where it's from. */
+    private fun highlightLine(h: Digests.Highlight, showBook: Boolean, compact: Boolean, onClick: () -> Unit): View = with(ctx) {
+        hbox().apply {
+            gravity = Gravity.TOP
+            background = outline(2, 8)
+            setPadding(s(10), s(7), s(10), s(7))
+            layoutParams = lp(MATCH, WRAP).apply { setMargins(s(10), s(4), s(10), s(4)) }
+            addView(View(ctx).apply { setBackgroundColor(Ink.INK) }, lp(s(4), MATCH).apply { marginEnd = s(10) })
+            addView(vbox().apply {
+                addView(text(h.text, sp(14f)).apply {
+                    typeface = android.graphics.Typeface.SERIF
+                    maxLines = 2
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                })
+                val meta = listOfNotNull(if (showBook) h.source.label else null, if (showBook) h.book else null, h.page?.let { "p. $it" })
+                if (meta.isNotEmpty()) addView(oneLine(text(meta.joinToString(" · "), sp(11.5f), color = Ink.MUTED)).apply { setPadding(0, s(3), 0, 0) })
+            }, lp(0, WRAP, 1f))
+            contentDescription = h.text.take(80)
+            isClickable = true
+            setOnClickListener { onClick() }
+            setOnLongClickListener { if (peek) { peekOpen = h.id; show(Mode.MAIN) } else openPeek(); true }
+        }
+    }
+
+    private fun highlightActions(h: Digests.Highlight): View = with(ctx) {
+        hbox().apply {
+            setPadding(s(10), 0, s(10), s(4))
+            fun act(res: Int, label: String, dark: Boolean = false, onClick: () -> Unit) = hbox().apply {
+                gravity = Gravity.CENTER
+                minimumHeight = s(38)
+                setPadding(s(4), s(4), s(4), s(4))
+                addView(icon(getDrawable(res), iconPx(17)).apply { if (dark) imageTintList = ColorStateList.valueOf(Ink.PAPER) })
+                addView(oneLine(text(label, sp(13f), bold = true, color = if (dark) Ink.PAPER else Ink.INK)).apply { setPadding(s(5), 0, 0, 0) })
+                contentDescription = label
+                pressable(outline(2, 6, if (dark) Ink.INK else Ink.PAPER))
+                setOnClickListener { onClick() }
+            }
+            val quoted = h.text + "\n— " + listOfNotNull(h.book, h.page?.let { "p. $it" }).joinToString(", ")
+            listOf(
+                act(R.drawable.ic_copy, "Copy", dark = true) {
+                    service.getSystemService(android.content.ClipboardManager::class.java)
+                        ?.setPrimaryClip(android.content.ClipData.newPlainText("Highlight", quoted))
+                    toast("Copied")
+                },
+                act(R.drawable.ic_share, "Share…") {
+                    service.hidePanel()
+                    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, quoted)
+                    Launcher.start(service, Intent.createChooser(send, "Share highlight").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                },
+                act(R.drawable.ic_open, if (h.source == Digests.Source.SAVED) "Open app" else "Open book") {
+                    service.hidePanel()
+                    if (!Digests.open(service, h)) toast("Couldn't open it")
+                },
+                act(R.drawable.ic_digest, "Note") { openDigests(h.bookKey) },
+            ).forEachIndexed { i, v ->
+                if (i > 0) addView(View(ctx), lp(s(5), 1))
+                addView(v, lp(0, WRAP, 1f))
+            }
+        }
+    }
+
+    /** "Swipe down for more" / "Swipe up to close" under a short bar; also a tap target (swipes lag on e-ink). */
+    private fun grip(label: String, down: Boolean, onClick: () -> Unit): View = with(ctx) {
+        vbox().apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, s(4), 0, s(6))
+            contentDescription = label
+            val bar = View(ctx).apply { background = outline(0, 3, Ink.INK) }
+            val line = hbox().apply {
+                gravity = Gravity.CENTER
+                addView(icon(getDrawable(if (down) R.drawable.ic_expand_more else R.drawable.ic_expand_less), iconPx(18)))
+                addView(text(label, sp(12f), color = Ink.MUTED).apply { setPadding(s(3), 0, 0, 0) })
+            }
+            if (down) { addView(bar, lp(s(44), s(5))); addView(line) } else { addView(line); addView(bar, lp(s(44), s(5))) }
+            pressable()
+            setOnClickListener { onClick() }
+        }
+    }
+
+    private fun openDigests(bookKey: String?) {
+        service.hidePanel()
+        Launcher.start(service, Intent(service, DigestsActivity::class.java)
+            .apply { bookKey?.let { putExtra(DigestsActivity.EXTRA_BOOK, it) } }
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
     // ---- Building blocks -----------------------------------------------------------------
 
     private fun scrolling(child: View): View = ScrollView(ctx).apply {
@@ -2377,6 +2579,7 @@ class QuickAccessPanel(
         const val QC_PER_PAGE = 5
         const val LIGHT_PER_PAGE = 4
         const val CLIPS_PER_PAGE_MIN = 2
+        const val PEEK_PER_PAGE = 5
 
         /** The panel's width in pixels on a screen [screenW] wide (also used for Settings' live preview). */
         fun sheetWidth(context: Context, prefs: Prefs, screenW: Int): Int =
@@ -2395,6 +2598,47 @@ class QuickAccessPanel(
  * A row that turns a sideways swipe into a page change, while taps and long
  * presses still reach its children.
  */
+/**
+ * A column that reacts to a clear vertical swipe ([down] or up) on top of its children's taps.
+ * For the Highlights peek; there are always tap targets too, since swipes lag on e-ink.
+ */
+private class VerticalSwipe(
+    context: android.content.Context,
+    private val threshold: Int,
+    private val down: Boolean,
+    private val onSwipe: () -> Unit,
+) : android.widget.LinearLayout(context) {
+    private var downX = 0f
+    private var downY = 0f
+
+    init {
+        orientation = VERTICAL
+    }
+
+    private fun wanted(dx: Float, dy: Float) = (if (down) dy > 0 else dy < 0) && kotlin.math.abs(dy) > 2 * kotlin.math.abs(dx)
+
+    override fun onInterceptTouchEvent(e: android.view.MotionEvent): Boolean {
+        when (e.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN -> { downX = e.x; downY = e.y }
+            android.view.MotionEvent.ACTION_MOVE -> {
+                val dx = e.x - downX
+                val dy = e.y - downY
+                if (kotlin.math.abs(dy) > threshold / 2 && wanted(dx, dy)) return true
+            }
+        }
+        return false
+    }
+
+    override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
+        if (e.actionMasked == android.view.MotionEvent.ACTION_UP) {
+            val dx = e.x - downX
+            val dy = e.y - downY
+            if (kotlin.math.abs(dy) > threshold && wanted(dx, dy)) onSwipe()
+        }
+        return true
+    }
+}
+
 private class SwipeRow(
     context: android.content.Context,
     private val threshold: Int,

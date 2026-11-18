@@ -255,6 +255,16 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(K_DIGEST_KO, true)
         set(v) = sp.edit().putBoolean(K_DIGEST_KO, v).apply()
 
+    /** Digests: the panel's Highlights section (latest highlights from the open book). */
+    var digestPanel: Boolean
+        get() = sp.getBoolean(K_DIGEST_PANEL, true)
+        set(v) = sp.edit().putBoolean(K_DIGEST_PANEL, v).apply()
+
+    /** How many highlights that section shows: 1 or 2. */
+    var digestPanelCount: Int
+        get() = sp.getInt(K_DIGEST_PANEL_COUNT, 2).coerceIn(1, 2)
+        set(v) = sp.edit().putInt(K_DIGEST_PANEL_COUNT, v.coerceIn(1, 2)).apply()
+
     /** Digests: "Save to Digest" in the text-selection menu and the share sheet. */
     var digestSave: Boolean
         get() = sp.getBoolean(K_DIGEST_SAVE, true)
@@ -395,6 +405,8 @@ class Prefs(context: Context) {
         const val K_DIGEST_SAVE = "digest_save"
         const val K_DIGEST_EXPORT_URI = "digest_export_uri"
         const val K_DIGEST_EXPORTED = "digest_exported"
+        const val K_DIGEST_PANEL = "digest_panel"
+        const val K_DIGEST_PANEL_COUNT = "digest_panel_count"
         const val K_NOTES_TAB = "boox_launcher_notes_tab"
         const val K_CLIP_TEXT = "clip_text"
         const val K_CLIP_LINKS = "clip_links"

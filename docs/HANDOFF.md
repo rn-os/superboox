@@ -483,3 +483,4 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
     - Google Drive works through the Drive app's folder in Android's picker (SAF). SuperBoox stays offline.
     - The user doesn't sync Obsidian on the tablet; their notes sync to Drive for a daily review.
     - "Digests" is the app-icon name for now.
+    - Peek (53b): swipe down on the panel's Highlights section, or tap a highlight, and it expands over Last Opened and Quick Access in one redraw. 5 a page, This book or All books. Swipe up, the grip or Back closes it. See all opens the full screen. Hold a highlight for its actions.

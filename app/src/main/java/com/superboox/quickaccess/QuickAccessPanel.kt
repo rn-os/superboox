@@ -1560,6 +1560,9 @@ class QuickAccessPanel(
             Triple(R.drawable.ic_paste, "Paste") { pasteClip(c) },
             if (c.kind == ClipHistory.Kind.LINK) Triple(R.drawable.ic_open, "Open") { openLink(c) } else null,
             if (c.kind == ClipHistory.Kind.HANDWRITING) null else Triple(R.drawable.ic_share, "Share…") { shareClip(c) },
+            if (c.kind == ClipHistory.Kind.TEXT && prefs.digestSave) Triple(R.drawable.ic_digest, "Digest") {
+                toast(if (Digests.saveText(service, c.text, c.source)) "Saved to Digests" else "Nothing to save")
+            } else null,
             if (c.kind == ClipHistory.Kind.HANDWRITING || c.kind == ClipHistory.Kind.IMAGE) Triple(R.drawable.ic_tag, "Name") { startNaming(c) } else null,
             if (c.kind == ClipHistory.Kind.IMAGE || (c.kind == ClipHistory.Kind.HANDWRITING && c.image?.endsWith(".png") == true)) Triple(R.drawable.ic_edit, "Mark up") {
                 service.hidePanel()

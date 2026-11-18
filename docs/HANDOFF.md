@@ -484,3 +484,21 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
     - The user doesn't sync Obsidian on the tablet; their notes sync to Drive for a daily review.
     - "Digests" is the app-icon name for now.
     - Peek (53b): swipe down on the panel's Highlights section, or tap a highlight, and it expands over Last Opened and Quick Access in one redraw. 5 a page, This book or All books. Swipe up, the grip or Back closes it. See all opens the full screen. Hold a highlight for its actions.
+
+- **Build 1 of Digests (pre-release):**
+  - `DigestsActivity`: its own launcher icon "Digests" and its own task, for split screen.
+    - Wide (600dp and up): books rail on the left, highlights on the right.
+    - Narrow: one column with a book chooser.
+    - 6 highlights a page. Tap a highlight to expand it: Open book/app, Copy, Add/Edit note, Share…, Pin, Hide/Delete.
+  - `KoreaderHighlights`: finds `.sdr/metadata.*.lua` and reads it with a small Lua table reader.
+    - Handles `annotations` (new) and `highlight` (old); page bookmarks (no `pos0`) are skipped.
+    - Results are cached in filesDir/digests-koreader.json and re-scanned when Digests opens.
+  - `SaveToDigestActivity`: PROCESS_TEXT and SEND text/plain. Turned on or off with Settings → Digests (component enabled state, kept in sync at app start).
+  - Clipboard: a "Digest" action on text clips.
+  - User state is stored in Prefs `digests` (JSON), so backups include it:
+    - saved passages, notes, pinned, hidden.
+  - Export:
+    - Markdown, one file per book.
+    - Goes to the picked document tree (Drive works through SAF), else Documents/SuperBoox/Digests (needs All files access).
+  - Not yet built: the panel's Highlights section and peek (53, 53b), NeoReader (waiting for the probe report), and the "Add note" button in the Saved message (it's a plain toast for now).
+  - Offline compile check without the Android SDK: Kotlin compiler 2.0.21 plus Robolectric `android-all-14` and the Shizuku/HiddenApiBypass jars, all from Maven Central, with a stub R generated from res/. See the session scratchpad `kc/check.sh`.

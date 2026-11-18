@@ -17,6 +17,8 @@ object Backup {
         Prefs.K_FL_MINE_ACTIVE, Prefs.K_LAST_BACKUP, Prefs.K_FL_LEVELS, Prefs.K_FL_BOOX_CUSTOM,
         Prefs.K_ADV_BOOT, Prefs.K_ADV_TEST, Prefs.K_TOUR_DONE, Prefs.K_WHATS_NEW, Prefs.K_LAST_CRASH, Prefs.K_NOTES_TAB, Prefs.K_FL_SIGNATURES, Prefs.K_FL_DIRECT_BEFORE, Prefs.K_ADV_METHOD,
         Prefs.K_WM_ON, Prefs.K_WM_RESTORE, Prefs.K_WM_NO_LIGHT,
+        // A picked folder only works on the tablet that picked it.
+        Prefs.K_DIGEST_EXPORT_URI, Prefs.K_DIGEST_EXPORTED,
     )
 
     /** What a backup file holds, ready to restore. */

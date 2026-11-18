@@ -173,7 +173,7 @@ class SettingsActivity : Activity() {
     /** The settings pages: Home lists the others. */
     private enum class Page(val title: String) {
         HOME("SuperBoox"), GESTURE("Gesture"), LOOK("Look & size"), ITEMS("Quick Access items"),
-        CONTROLS("Quick Controls"), APPS("Apps at the bottom"), RECENT("Recent files"), CLIPBOARD("Clipboard"),
+        CONTROLS("Quick Controls"), APPS("Apps at the bottom"), RECENT("Recent files"), CLIPBOARD("Clipboard"), DIGESTS("Digests"),
         TROUBLESHOOTING("Troubleshooting"), BACKUP("Backup & restore"), ADVANCED_ACCESS("Advanced access"),
     }
 
@@ -224,6 +224,7 @@ class SettingsActivity : Activity() {
                 Page.APPS -> dockSection()
                 Page.RECENT -> recentSection()
                 Page.CLIPBOARD -> clipboardSection()
+                Page.DIGESTS -> digestsSection()
                 Page.TROUBLESHOOTING -> troubleshootingSection()
                 Page.BACKUP -> backupSection()
                 Page.ADVANCED_ACCESS -> advancedAccessSection()
@@ -305,6 +306,9 @@ class SettingsActivity : Activity() {
                     prefs.clipKeepHandwriting -> "handwriting as you copy, text when the panel opens"
                     else -> "text when the panel opens"
                 } + if (prefs.clipKeepScreenshots && ClipHistory.hasFileAccess()) " · screenshots as you take them" else ""),
+            menuRow(R.drawable.ic_digest, Page.DIGESTS, Digests.all(this).let { l ->
+                if (l.isEmpty()) "Highlights from KOReader and Save to Digest" else "${l.size} highlights · ${Digests.books(l).size} books"
+            }),
         )))
         list.addView(heading("Help"))
         list.addView(card(listOf(
@@ -1232,6 +1236,69 @@ class SettingsActivity : Activity() {
         if (runCatching { startActivity(details) }.isFailure) startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
     }
 
+    // ---- Digests -------------------------------------------------------------------------
+
+    private fun digestsSection() {
+        list.addView(card(listOf(
+            actionRow(R.drawable.ic_digest, "Open Digests", "Every highlight, by book. Also its own app icon") {
+                startActivity(Intent(this, DigestsActivity::class.java))
+            },
+        )))
+        list.addView(heading("Where highlights come from"))
+        val koInstalled = KoreaderHighlights.installed(this) != null
+        val rows = mutableListOf<View>(
+            check("KOReader", prefs.digestKoreader) { prefs.digestKoreader = it; render() },
+            cardText(when {
+                !koInstalled -> "KOReader isn't installed."
+                !ClipHistory.hasFileAccess() -> "Reads the highlights and notes in KOReader's own book files (never changes them). Needs All files access."
+                else -> "Reads the highlights and notes in KOReader's own book files. KOReader is never changed."
+            }),
+        )
+        if (koInstalled && !ClipHistory.hasFileAccess()) rows += actionRow(R.drawable.ic_folder, "Allow All files access", "So SuperBoox can read KOReader's highlights") {
+            runCatching { startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName"))) }
+        }
+        rows += check("Save to Digest", prefs.digestSave) {
+            prefs.digestSave = it
+            SaveToDigestActivity.setEnabled(this, it)
+        }
+        rows += cardText("In the menu that pops up when you select text in most apps (Instapaper, the browser…), and in the Share list. Saved passages keep the app's name.")
+        rows += cardText("NeoReader: coming once its highlights have been checked on your tablet (send a debug report).")
+        list.addView(card(rows))
+        list.addView(heading("Export"))
+        val folder = prefs.digestExportUri?.let { Launcher.displayName(this, Uri.parse(it)) } ?: "Documents/SuperBoox/Digests"
+        val exported = prefs.sp.getLong(Prefs.K_DIGEST_EXPORTED, 0L)
+        list.addView(card(listOf(
+            choiceRow("Save to", folder) {
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION,
+                )
+                runCatching { startActivityForResult(intent, REQ_DIGEST_FOLDER) }
+            },
+            choiceRow("Format", "Markdown, one file per book") { toast("Markdown: each highlight as a quote, with its page, date and your note") },
+            actionRow(R.drawable.ic_export, "Export now", if (exported > 0) "Last export: ${java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(exported))}" else "Writes every book's highlights") {
+                toast("Exporting…")
+                io.execute {
+                    val r = runCatching { Digests.export(applicationContext) }
+                    runOnUiThread {
+                        r.onSuccess { n -> toast(if (n == 1) "Exported 1 book" else "Exported $n books") }.onFailure { toast(it.message ?: "Couldn't export") }
+                        render()
+                    }
+                }
+            },
+        ) + listOfNotNull(prefs.digestExportUri?.let {
+            actionRow(R.drawable.ic_delete, "Use Documents/SuperBoox/Digests again", "Forget the chosen folder") {
+                prefs.digestExportUri = null
+                render()
+            }
+        })))
+        list.addView(note("Highlights stay on this tablet; nothing is uploaded and SuperBoox has no internet access. Save to can also be a Google Drive folder if the Google Drive app is installed: Drive uploads the files. Your notes, pins and saved passages are included in Backup & restore."))
+        val hidden = Digests.hiddenCount(prefs)
+        if (hidden > 0) list.addView(card(listOf(actionRow(R.drawable.ic_digest, "Show hidden highlights again", "$hidden hidden") {
+            Digests.unhideAll(this)
+            render()
+        })).apply { (layoutParams as LinearLayout.LayoutParams).topMargin = dp(12) })
+    }
+
     private fun gestureSection() {
         list.addView(heading("Edge gesture"))
         list.addView(card(listOf(
@@ -1985,6 +2052,7 @@ class SettingsActivity : Activity() {
             REQ_FILE -> prefs.addPin(Pin(PinType.FILE, name, uri.toString()))
             REQ_FOLDER -> prefs.addPin(Pin(PinType.FOLDER, name, uri.toString()))
             REQ_RECENT -> prefs.recentFolderUri = uri.toString()
+            REQ_DIGEST_FOLDER -> prefs.digestExportUri = uri.toString()
         }
         render()
     }
@@ -2275,6 +2343,7 @@ class SettingsActivity : Activity() {
         const val REQ_BACKUP = 4
         const val REQ_RESTORE = 5
         const val REQ_NOTIFY = 6
+        const val REQ_DIGEST_FOLDER = 7
         val io = Executors.newSingleThreadExecutor()
     }
 }

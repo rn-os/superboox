@@ -250,6 +250,21 @@ class Prefs(context: Context) {
         set(v) = sp.edit().putString(K_NOTES_PKG, v.trim()).apply()
 
     /** SAF tree whose newest files appear under "Recent" (e.g. the BOOX note export folder). */
+    /** Digests: read KOReader's highlights. */
+    var digestKoreader: Boolean
+        get() = sp.getBoolean(K_DIGEST_KO, true)
+        set(v) = sp.edit().putBoolean(K_DIGEST_KO, v).apply()
+
+    /** Digests: "Save to Digest" in the text-selection menu and the share sheet. */
+    var digestSave: Boolean
+        get() = sp.getBoolean(K_DIGEST_SAVE, true)
+        set(v) = sp.edit().putBoolean(K_DIGEST_SAVE, v).apply()
+
+    /** Digests: export folder picked in Settings (a document tree, e.g. Google Drive); null = Documents/SuperBoox/Digests. */
+    var digestExportUri: String?
+        get() = sp.getString(K_DIGEST_EXPORT_URI, null)
+        set(v) = sp.edit().putString(K_DIGEST_EXPORT_URI, v).apply()
+
     var recentFolderUri: String?
         get() = sp.getString(K_RECENT_URI, null)
         set(v) = sp.edit().putString(K_RECENT_URI, v).apply()
@@ -375,6 +390,11 @@ class Prefs(context: Context) {
         const val K_RESTORE_AFTER_RESTART = "restore_after_restart"
         /** When SuperBoox last stopped on an error (written as it stops), for Settings' status. */
         const val K_LAST_CRASH = "last_crash"
+        const val K_DIGESTS = "digests"
+        const val K_DIGEST_KO = "digest_koreader"
+        const val K_DIGEST_SAVE = "digest_save"
+        const val K_DIGEST_EXPORT_URI = "digest_export_uri"
+        const val K_DIGEST_EXPORTED = "digest_exported"
         const val K_NOTES_TAB = "boox_launcher_notes_tab"
         const val K_CLIP_TEXT = "clip_text"
         const val K_CLIP_LINKS = "clip_links"

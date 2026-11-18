@@ -1305,6 +1305,41 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         return dm.widthPixels to dm.heightPixels
     }
 
+    /** Article titles last seen per reading app, for Digests passages copied further down the page. */
+    private val titles = HashMap<String, Pair<String, Long>>()
+
+    /**
+     * The title of what's open in [pkg] (an article in Instapaper, a page in the browser): the
+     * first heading near the top of its window, else the one seen there in the last few hours.
+     * Null when there's none, so passages are grouped under the app instead.
+     */
+    fun articleTitle(pkg: String, notText: String? = null): String? {
+        val now = System.currentTimeMillis()
+        val seen = runCatching {
+            val root = windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+                .firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName?.toString() == pkg } } ?: return@runCatching null
+            val limit = screenSize().second / 2
+            var found: String? = null
+            fun walk(n: android.view.accessibility.AccessibilityNodeInfo, depth: Int) {
+                if (found != null || depth > 60) return
+                val r = android.graphics.Rect().also(n::getBoundsInScreen)
+                if (r.top > limit) return
+                if (n.isHeading && n.isVisibleToUser) {
+                    val t = (n.text ?: n.contentDescription)?.toString()?.replace('\n', ' ')?.trim().orEmpty()
+                    if (t.length in 4..200 && (notText == null || !notText.startsWith(t))) { found = t; return }
+                }
+                for (i in 0 until n.childCount) n.getChild(i)?.let { walk(it, depth + 1) }
+            }
+            walk(root, 0)
+            found
+        }.getOrNull()
+        if (seen != null) {
+            titles[pkg] = seen to now
+            return seen
+        }
+        return titles[pkg]?.takeIf { now - it.second < 3 * 3600_000L }?.first
+    }
+
     fun screenWidth(): Int = screenSize().first
 
     companion object {

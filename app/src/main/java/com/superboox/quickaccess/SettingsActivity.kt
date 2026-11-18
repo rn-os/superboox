@@ -1266,9 +1266,25 @@ class SettingsActivity : Activity() {
         }
         rows += check("Save to Digest", prefs.digestSave) {
             prefs.digestSave = it
-            SaveToDigestActivity.setEnabled(this, it)
+            SaveToDigestActivity.sync(this)
+            render()
         }
-        rows += cardText("In the menu that pops up when you select text in most apps (Instapaper, the browser…), and in the Share list. Saved passages keep the app's name.")
+        rows += cardText("In the menu that pops up when you select text in most apps, and in the Share list. Saved passages keep the app's name.")
+        if (prefs.digestSave) {
+            val apps = prefs.digestCopyApps.map { Launcher.appLabel(this, it) }.sorted()
+            rows += choiceRow("Copies go to Digests from", if (apps.isEmpty()) "No apps" else apps.joinToString())  { pickCopyApps() }
+            rows += cardText("Copy in these apps and it's saved to Digests too: one tap, for apps with their own menu (Instapaper). " +
+                if (prefs.clipCatchMode == Prefs.CLIP_EVERY && AdvancedAccess.allowed()) "Saved as you copy." else "Saved when you next open the panel; with Advanced access, as you copy.")
+            val shareNames = mapOf(Prefs.SHARE_TEXT_BOTH to "Both entries", Prefs.SHARE_TEXT_DIGEST to "Save to Digest only", Prefs.SHARE_TEXT_CLIPBOARD to "Add to Clipboard only")
+            rows += choiceRow("Sharing text to SuperBoox", shareNames[prefs.digestShareText] ?: "Both entries") {
+                val keys = shareNames.keys.toList()
+                pick("Sharing text to SuperBoox", shareNames.values.toList(), keys.indexOf(prefs.digestShareText).coerceAtLeast(0)) {
+                    prefs.digestShareText = keys[it]
+                    SaveToDigestActivity.sync(this)
+                }
+            }
+            rows += cardText("With one entry, BOOX's share sheet shows it straight away instead of under SuperBoox's ▾.")
+        }
         rows += cardText("NeoReader: coming once its highlights have been checked on your tablet (send a debug report).")
         list.addView(card(rows))
         list.addView(heading("Export"))
@@ -1304,6 +1320,29 @@ class SettingsActivity : Activity() {
             Digests.unhideAll(this)
             render()
         })).apply { (layoutParams as LinearLayout.LayoutParams).topMargin = dp(12) })
+    }
+
+    /** Settings → Digests: which apps' copies are saved to Digests too. */
+    private fun pickCopyApps() {
+        toast("Loading apps…")
+        io.execute {
+            val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val apps = packageManager.queryIntentActivities(launcher, 0)
+                .map { it.activityInfo.packageName }.distinct().filter { it != packageName }
+                .map { it to Launcher.appLabel(this, it) }.sortedBy { it.second.lowercase() }
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                val chosen = prefs.digestCopyApps.toMutableSet()
+                AlertDialog.Builder(this)
+                    .setTitle("Copies go to Digests from")
+                    .setMultiChoiceItems(apps.map { it.second }.toTypedArray(), apps.map { it.first in chosen }.toBooleanArray()) { _, i, on ->
+                        if (on) chosen += apps[i].first else chosen -= apps[i].first
+                    }
+                    .setPositiveButton("Done") { _, _ -> prefs.digestCopyApps = chosen; render() }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
     }
 
     private fun gestureSection() {

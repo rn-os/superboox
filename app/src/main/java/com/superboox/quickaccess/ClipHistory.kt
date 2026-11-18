@@ -484,6 +484,7 @@ object ClipHistory {
         } else {
             val c = Clip("c$now", kind, text, image, source, now, pinned = false, label = label, mimes = mimes)
             DebugLog.i("clipboard", "saved a ${kind.name.lowercase()} clip from ${source ?: "?"}")
+            toDigests(context, prefs, kind, text, source)
             listOf(c) + all
         }
         // Keep the newest unpinned clips up to the limit; pinned ones always stay.
@@ -492,6 +493,15 @@ object ClipHistory {
         updated.filterNot { it in kept }.forEach { discardFiles(context, it) }
         save(context, kept)
         setCurrent(context, (same ?: kept.first()).id)
+    }
+
+    /** A copy in an app picked in Settings → Digests (Instapaper by default) is saved to Digests too. */
+    private fun toDigests(context: Context, prefs: Prefs, kind: Kind, text: String, source: String?) {
+        if (kind != Kind.TEXT || source == null || !prefs.digestSave || source !in prefs.digestCopyApps) return
+        val title = runCatching { QuickAccessService.instance?.articleTitle(source, text) }.getOrNull()
+        if (runCatching { Digests.saveText(context, text, source, title) }.getOrDefault(false)) {
+            main.post { android.widget.Toast.makeText(context.applicationContext, "Saved to Digests" + (title?.let { " · $it" } ?: ""), android.widget.Toast.LENGTH_SHORT).show() }
+        }
     }
 
     private fun copyImage(context: Context, uri: Uri, to: File): Boolean {

@@ -113,7 +113,6 @@
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
-                <data android:mimeType="text/plain" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
@@ -121,6 +120,21 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
+
+        <!-- "Add to Clipboard" for shared text: its own entry, so Settings → Digests can leave
+             only one SuperBoox entry for text (no ▾ in BOOX's share sheet). -->
+        <activity-alias
+            android:name=".ShareTextToClipboard"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/share_copy_label"
+            android:targetActivity=".ShareToClipboardActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity-alias>
 
         <!-- Digests: every highlight, by book. Its own launcher icon and task, so it can sit
              beside a book in split screen. -->
@@ -154,12 +168,21 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
+        </activity>
+
+        <!-- "Save to Digest" in the share sheet (its own entry, see ShareTextToClipboard). -->
+        <activity-alias
+            android:name=".ShareToDigest"
+            android:exported="true"
+            android:icon="@mipmap/ic_digests"
+            android:label="@string/save_digest_label"
+            android:targetActivity=".SaveToDigestActivity">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
-        </activity>
+        </activity-alias>
 
         <service
             android:name=".QuickAccessService"

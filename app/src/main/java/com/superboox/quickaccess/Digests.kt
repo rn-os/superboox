@@ -94,6 +94,8 @@ object Digests {
         val s = state(prefs)
         val appLabel = app?.let { runCatching { Launcher.appLabel(context, it) }.getOrNull() }
         val now = System.currentTimeMillis()
+        // Copied and shared, or caught twice: once is enough.
+        if (s.saved.any { it.optString("text") == t.take(MAX_TEXT) && now - it.optLong("time") < 30 * 60_000L }) return true
         s.saved += JSONObject()
             .put("id", "s" + hash(t + now))
             .put("text", t.take(MAX_TEXT))

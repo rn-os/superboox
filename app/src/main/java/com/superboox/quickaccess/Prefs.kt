@@ -265,6 +265,16 @@ class Prefs(context: Context) {
         get() = sp.getInt(K_DIGEST_PANEL_COUNT, 2).coerceIn(1, 2)
         set(v) = sp.edit().putInt(K_DIGEST_PANEL_COUNT, v.coerceIn(1, 2)).apply()
 
+    /** Digests: apps whose copies are also saved to Digests (Instapaper by default). */
+    var digestCopyApps: Set<String>
+        get() = sp.getStringSet(K_DIGEST_COPY_APPS, null) ?: setOf("com.instapaper.android")
+        set(v) = sp.edit().putStringSet(K_DIGEST_COPY_APPS, v).apply()
+
+    /** Text shared to SuperBoox: both entries, or only Save to Digest / Add to Clipboard (no ▾ in BOOX's share sheet). */
+    var digestShareText: String
+        get() = sp.getString(K_DIGEST_SHARE_TEXT, null) ?: SHARE_TEXT_BOTH
+        set(v) = sp.edit().putString(K_DIGEST_SHARE_TEXT, v).apply()
+
     /** Digests: "Save to Digest" in the text-selection menu and the share sheet. */
     var digestSave: Boolean
         get() = sp.getBoolean(K_DIGEST_SAVE, true)
@@ -406,6 +416,11 @@ class Prefs(context: Context) {
         const val K_DIGEST_EXPORT_URI = "digest_export_uri"
         const val K_DIGEST_EXPORTED = "digest_exported"
         const val K_DIGEST_PANEL = "digest_panel"
+        const val K_DIGEST_COPY_APPS = "digest_copy_apps"
+        const val K_DIGEST_SHARE_TEXT = "digest_share_text"
+        const val SHARE_TEXT_BOTH = "both"
+        const val SHARE_TEXT_DIGEST = "digest"
+        const val SHARE_TEXT_CLIPBOARD = "clipboard"
         const val K_DIGEST_PANEL_COUNT = "digest_panel_count"
         const val K_NOTES_TAB = "boox_launcher_notes_tab"
         const val K_CLIP_TEXT = "clip_text"

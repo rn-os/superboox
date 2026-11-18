@@ -38,22 +38,33 @@ class SaveToDigestActivity : Activity() {
     }
 
     companion object {
-        /** [setEnabled] only when it differs, so app start stays cheap. */
-        fun sync(context: Context, on: Boolean) {
-            val now = context.packageManager.getComponentEnabledSetting(ComponentName(context, SaveToDigestActivity::class.java))
-            val enabled = now != PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-            if (enabled != on) setEnabled(context, on)
+        private const val SHARE_TO_DIGEST = "com.superboox.quickaccess.ShareToDigest"
+        private const val SHARE_TEXT_TO_CLIPBOARD = "com.superboox.quickaccess.ShareTextToClipboard"
+
+        /**
+         * Which SuperBoox entries other apps offer for text, from Settings → Digests: Save to Digest
+         * in the selection menu, and one or both entries in the share sheet. Only switched when it
+         * differs, so app start stays cheap.
+         */
+        fun sync(context: Context) {
+            val prefs = Prefs(context)
+            val share = prefs.digestShareText
+            set(context, ComponentName(context, SaveToDigestActivity::class.java), prefs.digestSave)
+            set(context, ComponentName(context.packageName, SHARE_TO_DIGEST), prefs.digestSave && share != Prefs.SHARE_TEXT_CLIPBOARD)
+            set(context, ComponentName(context.packageName, SHARE_TEXT_TO_CLIPBOARD), !prefs.digestSave || share != Prefs.SHARE_TEXT_DIGEST)
         }
 
-        /** Shows or hides "Save to Digest" in other apps' menus (Settings → Digests). */
-        fun setEnabled(context: Context, on: Boolean) {
+        private fun set(context: Context, cn: ComponentName, on: Boolean) {
             runCatching {
-                context.packageManager.setComponentEnabledSetting(
-                    ComponentName(context, SaveToDigestActivity::class.java),
+                val pm = context.packageManager
+                val enabled = pm.getComponentEnabledSetting(cn) != PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                if (enabled == on) return
+                pm.setComponentEnabledSetting(
+                    cn,
                     if (on) PackageManager.COMPONENT_ENABLED_STATE_DEFAULT else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                     PackageManager.DONT_KILL_APP,
                 )
-            }.onFailure { DebugLog.w("digests", "couldn't switch Save to Digest: ${it.message}") }
+            }.onFailure { DebugLog.w("digests", "couldn't switch ${cn.shortClassName}: ${it.message}") }
         }
     }
 }

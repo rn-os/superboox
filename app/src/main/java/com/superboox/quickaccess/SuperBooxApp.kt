@@ -9,7 +9,7 @@ class SuperBooxApp : Application() {
         // Errors in Settings or the panel are recovered from instead of stopping the service.
         MainGuard.install()
         // "Save to Digest" in other apps' menus follows its setting (also after a restore).
-        runCatching { SaveToDigestActivity.sync(this, Prefs(this).digestSave) }
+        runCatching { SaveToDigestActivity.sync(this) }
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             // Recorded before the process dies so the next report shows the crash.

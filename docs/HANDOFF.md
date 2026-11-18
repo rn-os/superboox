@@ -513,5 +513,10 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
     - Used for tile names, tile On/Off states and the Front Light preset buttons.
     - The table is built once per language, in the background when the service starts.
   - Not yet built: NeoReader (waiting for the probe report), and the "Add note" button in the Saved message (it's a plain toast).
-  - Instapaper: its selection toolbar is its own, so there's no PROCESS_TEXT. Use its Share arrow (Save to Digest is in the share sheet) or Copy then the clip's Digest button.
+  - Instapaper: its selection toolbar is its own, so there's no PROCESS_TEXT. Two ways in:
+    - **Copies go to Digests from** (Prefs `digest_copy_apps`, Instapaper by default). `ClipHistory.add` hands new text clips from those apps to `Digests.saveText`.
+      - With Advanced access (catch every copy) that's one tap; otherwise the copy is saved when the panel next opens.
+      - The title comes from `QuickAccessService.articleTitle`: the first `isHeading` node in the top half of the app's window, remembered for 3 h, else the app label.
+      - `saveText` skips a duplicate within 30 min.
+    - **Sharing text to SuperBoox:** both entries, Save to Digest only, or Add to Clipboard only. Those are the activity-aliases `.ShareToDigest` and `.ShareTextToClipboard`, switched by `SaveToDigestActivity.sync`. With one entry, BOOX's share sheet has no ▾.
   - Offline compile check without the Android SDK: Kotlin compiler 2.0.21 plus Robolectric `android-all-14` and the Shizuku/HiddenApiBypass jars, all from Maven Central, with a stub R generated from res/. See the session scratchpad `kc/check.sh`.

@@ -520,3 +520,18 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
       - `saveText` skips a duplicate within 30 min.
     - **Sharing text to SuperBoox:** both entries, Save to Digest only, or Add to Clipboard only. Those are the activity-aliases `.ShareToDigest` and `.ShareTextToClipboard`, switched by `SaveToDigestActivity.sync`. With one entry, BOOX's share sheet has no ▾.
   - Offline compile check without the Android SDK: Kotlin compiler 2.0.21 plus Robolectric `android-all-14` and the Shizuku/HiddenApiBypass jars, all from Maven Central, with a stub R generated from res/. See the session scratchpad `kc/check.sh`.
+
+## Panel sections (mockups 59–60, approved)
+
+- Settings → Look & size → **Panel sections**: drag ≡ to reorder, untick to hide.
+  - The sections are Quick Controls, Last Opened Note, Last Opened Document, Highlights and Quick Access.
+  - The top bar is always first and the apps always last.
+  - Reset to the usual order appears once anything changes.
+- `PanelSections` stores the order in Prefs `panel_order` and hidden sections in `panel_hidden`, so backups include them.
+  - Highlights' tick is `digestPanel`, shared with Settings → Digests.
+  - Quick Controls is drawn only when it's ticked and has controls.
+  - Sections added in later versions slot in at their default position.
+- `QuickAccessPanel.show` draws the sections in order:
+  - Neighbouring sections other than Quick Controls share one sideways-swipe area (Quick Access ↔ Recent). Quick Controls splits them, since it pages sideways itself.
+  - Quick Access takes the height left. If it's hidden, a spacer does.
+  - When Highlights sits below Quick Access, it peeks with a swipe up and closes with a swipe down (`peekUp`).

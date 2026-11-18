@@ -167,6 +167,8 @@ class QuickAccessPanel(
     private var peekPage = 0
     /** The highlight in the peek whose actions are showing. */
     private var peekOpen: String? = null
+    /** Highlights sits below Quick Access: it peeks with a swipe up (and closes with one down). */
+    private var peekUp = false
     private val digests: List<Digests.Highlight> by lazy { runCatching { Digests.all(service) }.getOrDefault(emptyList()) }
 
     /** The book open in a reading app (or the last one read), if Digests has highlights from it. */
@@ -254,40 +256,77 @@ class QuickAccessPanel(
             }
             return
         }
-        if (prefs.showSystemActions) {
-            content.addView(quickControlsRow(), lp(MATCH, WRAP))
-            content.addView(rule(2))
-        }
+        // The middle sections in the order set in Settings → Look & size → Panel sections.
+        val order = PanelSections.order(prefs).filter { PanelSections.shown(prefs, it) }
+        val showQc = PanelSection.CONTROLS in order
         if (peek && mode != Mode.MAIN) peek = false
         if (peek) {
-            // Highlights opened up over Last Opened and Quick Access; the apps stay.
+            // Highlights opened up over the other sections; Quick Controls and the apps stay.
+            if (showQc) {
+                content.addView(quickControlsRow(), lp(MATCH, WRAP))
+                content.addView(rule(2))
+            }
             content.addView(highlightsPeek(), lp(MATCH, 0, 1f))
             content.addView(rule(3))
             content.addView(dock(), lp(MATCH, WRAP))
             return
         }
-        // A swipe right anywhere in the Last Opened rows and the list below flips between
-        // Quick Access and Recent Files (not while editing, where rows are dragged). The controls
-        // above and the apps below keep their own sideways paging.
-        val flip = SwipeRow(ctx, s(40), vertical = true, only = -1) { _ ->
-            show(if (mode == Mode.RECENT) Mode.MAIN else Mode.RECENT)
+        // Highlights below Quick Access opens upward (swipe up), above it downward.
+        val quickAt = order.indexOf(PanelSection.QUICK)
+        peekUp = quickAt >= 0 && order.indexOf(PanelSection.HIGHLIGHTS) > quickAt
+        val views = order.mapNotNull { sec ->
+            val v: View? = when (sec) {
+                PanelSection.CONTROLS -> quickControlsRow()
+                PanelSection.NOTE -> lastNoteRow()
+                PanelSection.DOCUMENT -> lastDocumentRow()
+                PanelSection.HIGHLIGHTS -> if (mode == Mode.MAIN) highlightsSection() else null
+                PanelSection.QUICK -> scrolling(when (mode) {
+                    Mode.RECENT -> recentList()
+                    Mode.EDIT -> editList()
+                    else -> quickAccessList()
+                })
+            }
+            v?.let { sec to it }
         }
-        flip.addView(lastNoteRow())
-        flip.addView(insetRule())
-        flip.addView(lastDocumentRow())
-        flip.addView(rule(3))
-        if (mode == Mode.MAIN) highlightsSection()?.let {
-            flip.addView(it)
-            flip.addView(rule(3))
+        // A swipe right anywhere in these sections (other than Quick Controls, which pages sideways
+        // itself) flips between Quick Access and Recent Files; not while editing, where rows are dragged.
+        // Neighbouring sections share one swipe area; Quick Controls splits them.
+        var run: SwipeRow? = null
+        var prev: PanelSection? = null
+        var filled = false
+        for ((sec, v) in views) {
+            val sep: View? = when {
+                prev == null -> null
+                prev == PanelSection.CONTROLS || sec == PanelSection.CONTROLS -> rule(2)
+                prev in LAST_ROWS && sec in LAST_ROWS -> insetRule()
+                else -> rule(3)
+            }
+            if (sec == PanelSection.CONTROLS) {
+                run = null
+                sep?.let { content.addView(it) }
+                content.addView(v, lp(MATCH, WRAP))
+            } else {
+                val r = run ?: SwipeRow(ctx, s(40), vertical = true, only = -1) { _ ->
+                    show(if (mode == Mode.RECENT) Mode.MAIN else Mode.RECENT)
+                }.also { r ->
+                    r.swipeOn = mode != Mode.EDIT
+                    sep?.let { content.addView(it) }
+                    content.addView(r, lp(MATCH, WRAP))
+                    run = r
+                }
+                if (r.childCount > 0) sep?.let { r.addView(it) }
+                if (sec == PanelSection.QUICK) {
+                    r.addView(v, lp(MATCH, 0, 1f))
+                    r.layoutParams = lp(MATCH, 0, 1f)
+                    filled = true
+                } else {
+                    r.addView(v)
+                }
+            }
+            prev = sec
         }
-        val middle = when (mode) {
-            Mode.RECENT -> recentList()
-            Mode.EDIT -> editList()
-            else -> quickAccessList()
-        }
-        flip.addView(scrolling(middle), lp(MATCH, 0, 1f))
-        if (mode == Mode.EDIT) flip.swipeOn = false
-        content.addView(flip, lp(MATCH, 0, 1f))
+        // Quick Access hidden: the space left goes under the sections.
+        if (!filled) content.addView(View(ctx), lp(MATCH, 0, 1f))
         content.addView(rule(3))
         thisAppStrip()?.let {
             content.addView(it, lp(MATCH, WRAP))
@@ -2385,10 +2424,10 @@ class QuickAccessPanel(
         val pool = if (book != null) digests.filter { it.bookKey == book.key } else digests
         val latest = pool.sortedByDescending { it.time }.take(prefs.digestPanelCount)
         if (latest.isEmpty()) return null
-        VerticalSwipe(ctx, s(40), down = true) { openPeek() }.apply {
+        VerticalSwipe(ctx, s(40), down = !peekUp) { openPeek() }.apply {
             addView(highlightsHeader(if (book != null) "${book.title} · ${book.count}" else "recent", book?.key))
             latest.forEach { h -> addView(highlightLine(h, showBook = book == null, compact = true) { openPeek() }) }
-            addView(grip("Swipe down for more", down = true) { openPeek() })
+            addView(grip(if (peekUp) "Swipe up for more" else "Swipe down for more", down = !peekUp) { openPeek() })
         }
     }
 
@@ -2412,7 +2451,7 @@ class QuickAccessPanel(
         val pool = (if (peekAll || book == null) digests else digests.filter { it.bookKey == book.key }).sortedByDescending { it.time }
         val pages = ((pool.size + PEEK_PER_PAGE - 1) / PEEK_PER_PAGE).coerceAtLeast(1)
         peekPage = peekPage.coerceIn(0, pages - 1)
-        VerticalSwipe(ctx, s(40), down = false) { closePeek() }.apply {
+        VerticalSwipe(ctx, s(40), down = peekUp) { closePeek() }.apply {
             addView(highlightsHeader("recent", if (peekAll) null else book?.key))
             if (book != null) addView(hbox().apply {
                 background = outline(2, 8)
@@ -2437,7 +2476,7 @@ class QuickAccessPanel(
                 addView(text("${peekPage + 1} / $pages", sp(15f), bold = true).apply { setPadding(s(8), 0, s(8), 0) })
                 addView(pagerButton(R.drawable.ic_chevron_right, "Older highlights", peekPage < pages - 1) { peekPage++; peekOpen = null; show(Mode.MAIN) })
             })
-            addView(grip("Swipe up to close", down = false) { closePeek() })
+            addView(grip(if (peekUp) "Swipe down to close" else "Swipe up to close", down = peekUp) { closePeek() })
         }
     }
 
@@ -2580,6 +2619,7 @@ class QuickAccessPanel(
         const val LIGHT_PER_PAGE = 4
         const val CLIPS_PER_PAGE_MIN = 2
         const val PEEK_PER_PAGE = 5
+        private val LAST_ROWS = setOf(PanelSection.NOTE, PanelSection.DOCUMENT)
 
         /** The panel's width in pixels on a screen [screenW] wide (also used for Settings' live preview). */
         fun sheetWidth(context: Context, prefs: Prefs, screenW: Int): Int =

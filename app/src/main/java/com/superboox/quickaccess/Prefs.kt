@@ -416,6 +416,8 @@ class Prefs(context: Context) {
         const val K_DIGEST_EXPORT_URI = "digest_export_uri"
         const val K_DIGEST_EXPORTED = "digest_exported"
         const val K_DIGEST_PANEL = "digest_panel"
+        const val K_PANEL_ORDER = "panel_order"
+        const val K_PANEL_HIDDEN = "panel_hidden"
         const val K_DIGEST_COPY_APPS = "digest_copy_apps"
         const val K_DIGEST_SHARE_TEXT = "digest_share_text"
         const val SHARE_TEXT_BOTH = "both"

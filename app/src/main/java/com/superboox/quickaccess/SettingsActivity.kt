@@ -1383,11 +1383,59 @@ class SettingsActivity : Activity() {
             previewButton(),
         )))
         list.addView(note("Changing the size or width shows the real panel beside this page, at that size, so you can see it before opening the panel. It can't be tapped; hide it with the button or by leaving this page."))
+        panelSectionsCard()
         list.addView(heading("Pages"))
         list.addView(card(listOf(
             check("Remember last page", prefs.rememberPages) { prefs.rememberPages = it },
         )))
         list.addView(note("Quick Controls and apps reopen on the page you left them on. Off: they start on page 1 each time the panel opens."))
+    }
+
+    /** Look & size → Panel sections: drag to reorder, untick to hide; the live panel shows it. */
+    private fun panelSectionsCard() {
+        list.addView(heading("Panel sections"))
+        val order = PanelSections.order(prefs)
+        fun fixedRow(title: String, sub: String, tag: String) = hbox().apply {
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            addView(View(context), lp(dp(42), 1))
+            addView(vbox().apply {
+                addView(text(title, 17f, medium = true))
+                addView(text(sub, 13f, color = Ink.MUTED))
+            }, lp(0, WRAP, 1f))
+            addView(text(tag, 11f, bold = true).apply { background = outline(1, 4); setPadding(dp(6), dp(1), dp(6), dp(1)) })
+        }
+        val rows = mutableListOf<View>(fixedRow("Top bar", "Clipboard · New Note · Settings", "ALWAYS FIRST"))
+        order.forEachIndexed { i, sec ->
+            val on = PanelSections.ticked(prefs, sec)
+            rows += hbox().apply {
+                setPadding(dp(6), dp(4), dp(12), dp(4))
+                gravity = Gravity.CENTER_VERTICAL
+                addView(dragHandle(this, i, order.size) { from, to ->
+                    PanelSections.save(prefs, order.move(from, to))
+                    previewOn = true
+                })
+                addView(CheckBox(context).apply {
+                    buttonTintList = android.content.res.ColorStateList.valueOf(Ink.INK)
+                    isChecked = on
+                    contentDescription = "Show ${sec.title}"
+                    setOnCheckedChangeListener { _, checked -> PanelSections.setShown(prefs, sec, checked); previewOn = true; render() }
+                })
+                addView(vbox().apply {
+                    setPadding(dp(4), dp(6), 0, dp(6))
+                    addView(text(sec.title, 17f, medium = true, color = if (on) Ink.INK else Ink.DISABLED))
+                    val sub = if (sec == PanelSection.CONTROLS && on && !prefs.showSystemActions) "None chosen: add some in Quick Controls" else sec.summary
+                    addView(text(sub, 13f, color = if (on) Ink.MUTED else Ink.DISABLED))
+                }, lp(0, WRAP, 1f))
+            }
+        }
+        rows += fixedRow("Apps at the bottom", "${prefs.dock.size} apps", "ALWAYS LAST")
+        if (!PanelSections.isDefault(prefs)) rows += buttonRow("Reset to the usual order" to {
+            PanelSections.reset(prefs)
+            previewOn = true
+            render()
+        })
+        list.addView(card(rows))
+        list.addView(note("Drag ≡ to move a section; untick it to hide it. The panel beside this page shows the result. Quick Access fills whatever height is left, wherever it sits."))
     }
 
     private fun pinsSection() {

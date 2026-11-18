@@ -475,9 +475,9 @@ const S1 = () => `<div class="set" style="width:600px;height:1000px">${head("Loo
   "<b>Reset to the usual order</b> puts it back. Included in Backup &amp; restore.",
 ]);
 const S2 = () => shell(topBar(false) + qc + `<div style="flex:1">${qaList.replace('<div class="qa">', '<div class="qa" style="border-top:0">')}</div>` +
-  `<div style="border-top:2.5px solid #000"></div>` + hlSection.replace(`${g("down", 18)} Swipe down for more`, `${g("up", 18)} Swipe up for more`).replace('<div class="grip"><i></i>', '<div class="grip">') + `<div style="border-top:2.5px solid #000"></div>` + lastDoc + `<div style="border-top:2.5px solid #000"></div>` + apps) +
+  `<div style="border-top:2.5px solid #000"></div>` + hlSection.replace(`${g("down", 18)} Swipe down for more`, `${g("up", 18)} Swipe up for more`).replace('<div class="grip"><i></i>', '<div class="grip">') + `<div style="border-top:2.5px solid #000"></div>` + lastDoc + `<div class="ir"></div>` + lastNote + `<div style="border-top:2.5px solid #000"></div>` + apps) +
   notes("60 · One layout it allows", [
-  "Quick Access first, then Highlights and Last Opened Document lower down, near your thumb. Last Opened Note hidden.",
+  "Quick Access first, then Highlights, Last Opened Document and Last Opened Note lower down, near your thumb (document above note here; either can also be hidden).",
   "Moving or hiding a section doesn't change what it does: Highlights still peeks (when it sits low in the panel, you swipe up and it opens upward), Quick Access still flips to Recent with a swipe.",
   "Another option, not shown: <b>hold a section's edge in the panel</b> to move it there. I'd leave that out for now: on e-ink, dragging inside the panel is slow to show.",
 ]);

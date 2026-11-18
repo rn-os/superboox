@@ -864,7 +864,9 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         if (!press.found || !press.pressed) {
             optimistic.remove(control.id)
             panel?.refresh()
-            Toast.makeText(this, "Couldn't find ${control.label} in the Control Center", Toast.LENGTH_SHORT).show()
+            // No tile, but Android has an action for it (Split Screen): run that once the shade is closed.
+            if (control.globalAction != 0 && !hold) afterSession.addLast(control)
+            else Toast.makeText(this, "Couldn't find ${control.label} in the Control Center", Toast.LENGTH_SHORT).show()
             return nextControl()
         }
         handler.postDelayed({

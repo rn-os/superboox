@@ -96,7 +96,9 @@ object QuickControls {
         Control("alerts", "Alerts", R.drawable.ic_notifications, Kind.ACTION, globalAction = AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS, group = ACTIONS),
         Control("screenshot", "Screenshot", R.drawable.ic_screenshot, Kind.ACTION, globalAction = AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT, group = ACTIONS),
         Control("lock", "Lock", R.drawable.ic_qc_lock, Kind.ACTION, globalAction = AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN, group = ACTIONS),
-        Control("split", "Split Screen", R.drawable.ic_qc_split, Kind.ACTION, globalAction = AccessibilityService.GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN, group = ACTIONS),
+        // BOOX's Split Screen tile: Android 12+ ignores the global split-screen action. The action
+        // is kept as a fallback for firmware without the tile.
+        Control("split", "Split Screen", R.drawable.ic_qc_split, Kind.TILE, listOf("split screen"), globalAction = AccessibilityService.GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN, group = ACTIONS),
     )
 
     val GROUPS = listOf(SWITCHES, BOOX, ACTIONS)

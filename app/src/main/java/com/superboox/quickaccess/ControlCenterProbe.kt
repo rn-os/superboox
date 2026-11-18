@@ -36,10 +36,12 @@ object ControlCenterProbe {
             if (root == null || pkg == service.packageName) continue
             if (w.type != AccessibilityWindowInfo.TYPE_SYSTEM && pkg?.contains("systemui") != true) continue
             val tiles = LinkedHashSet<String>()
+            val labels = LinkedHashSet<String>()
             fun walk(n: AccessibilityNodeInfo, depth: Int) {
                 if (depth > 40 || tiles.size >= 80) return
                 val label = (n.contentDescription ?: n.text)?.toString()?.replace("\n", " ")?.trim().orEmpty()
                 if (label.isNotEmpty() && (n.isClickable || n.isCheckable || n.isLongClickable)) {
+                    labels += label
                     val state = buildList {
                         if (n.isCheckable) add(if (n.isChecked) "on" else "off")
                         if (n.isSelected) add("selected")
@@ -53,6 +55,13 @@ object ControlCenterProbe {
             }
             walk(root, 0)
             out += "  tiles (${tiles.size}): " + tiles.joinToString(" | ").ifEmpty { "none readable" }
+            if (pkg?.contains("systemui") == true && labels.isNotEmpty()) {
+                // A Quick Control whose tile isn't here does nothing when tapped (it may be on the Control Center's next page).
+                val missing = QuickControls.unmatched(labels)
+                out += "  Quick Controls without a tile here: " + missing.joinToString().ifEmpty { "none (all found)" }
+                out += "  Quick Controls sent to Android instead (can't be checked here): " +
+                    QuickControls.ALL.filter { it.kind == QuickControls.Kind.ACTION }.joinToString { it.label }
+            }
             if (pkg?.contains("systemui") == true) frontLight(root, out)
         }
     }

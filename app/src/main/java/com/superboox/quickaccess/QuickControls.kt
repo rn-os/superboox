@@ -712,6 +712,15 @@ object QuickControls {
         return n
     }
 
+    /**
+     * Quick Controls that press a Control Center tile but have no tile among [labels] (the
+     * Control Center's visible labels), for the debug report's Quick Controls test.
+     */
+    fun unmatched(labels: Collection<String>): List<String> {
+        val norm = labels.map(::normalize)
+        return ALL.filter { it.kind != Kind.ACTION && it.keys.isNotEmpty() && norm.none(it::matches) }.map { it.label }
+    }
+
     private fun normalize(s: String): String =
         s.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
 

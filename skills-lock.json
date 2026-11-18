@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "skills": {
+    "ste80-humanizer": {
+      "source": "Dodaios/ste80-humanizer",
+      "commit": "ace4484da2d81dda97861e004c37c0a2e93896d1",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "e9219c847a9389bf0af9bc44313f8982a6787f41246512a9453af28d0505b1da"
+    }
+  }
+}

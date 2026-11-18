@@ -1,6 +1,6 @@
 <!doctype html>
 <html><head><meta charset="utf-8">
-<!-- Proposal after 1.1.2: Digests, highlights from KOReader, NeoReader and any app (Save to Digest), in the panel. Mockups 53-57. -->
+<!-- Proposal after 1.1.2 (hybrid): Digests as its own screen (app icon, split screen) plus a small Highlights section in the panel. Save to Digest from any app. Mockups 53-58. -->
 <style>
   @font-face { font-family: Roboto; src: url(fonts/roboto-latin-400-normal.woff2); }
   @font-face { font-family: Roboto; font-weight: 500; src: url(fonts/roboto-latin-500-normal.woff2); }
@@ -364,87 +364,150 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .keep .t1 { font-size: 17px; font-weight: 500; } .keep .t2 { font-size: 13px; color: #333; line-height: 1.35; padding-top: 2px; }
 </style>`);
 
-const topBarD = (lit, mark) => `<div class="top">
-  <div class="c ${lit === "clip" ? "lit" : ""}">${g("clip", 30, lit === "clip" ? "#fff" : "#000")}Clipboard</div><div class="sep"></div>
-  <div class="c ${lit === "dig" ? "lit" : ""} ${mark ? "new" : ""}">${g("digest", 30, lit === "dig" ? "#fff" : "#000")}Digests</div><div class="sep"></div>
-  <div class="c">${g("note_new", 30)}New Note</div><div class="sep"></div><div class="gear">${g("settings", 26)}</div></div>`;
-const SRC = { ko: "KOReader", neo: "NeoReader", sel: "Instapaper" };
-const book = (title, meta, src, n) => `<div class="bk">${g("book", 24)}<div class="t"><b>${title}</b><span>${meta}</span></div><span class="src">${SRC[src]}</span><span style="font-size:13px;font-weight:700">${n}</span>${g("right", 20)}</div>`;
-const hl = (s, meta, opt = {}) => `<div class="hl"><div class="bar"></div><div class="b"><div class="s ${opt.full ? "full" : ""}">${s}</div>
-  <div class="m">${opt.pin ? g("pinned", 13) : ""}${meta}</div>
-  ${opt.note ? `<div class="nt">${g("note2", 15)}<span>${opt.note}</span></div>` : ""}${opt.acts || ""}</div></div>`;
-const digHead = (count, extra = "") => `<div class="hub" style="flex:1">
-  <div class="hh">${g("digest", 24)}<b>Digests</b><span>· ${count}</span><span style="margin-left:auto" class="mbtn">${g("export", 16)} Export</span><span>${g("close", 24)}</span></div>
-  <div class="srch">${g("search", 20, "#555")}Search highlights and notes</div>${extra}`;
-const chipsD = (on) => `<div class="chips">${["All", "KOReader", "NeoReader", "Saved", "Pinned"].map(c => `<span class="chip ${c === on ? "on" : ""}">${c === "Pinned" ? g("pinned", 13, c === on ? "#fff" : "#000") + " " : ""}${c}</span>`).join("")}</div>`;
-const segD = (on) => `<div class="seg"><div class="${on === "new" ? "on" : ""}">Newest</div><div class="${on === "books" ? "on" : ""}">By book · 6</div></div>`;
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .hls { border-top: 2.5px solid #000; }
+  .hls .hh2 { display: flex; align-items: center; gap: 10px; padding: 10px 16px 4px; }
+  .hls .hh2 b { font-size: 16px; } .hls .hh2 span { font-size: 12.5px; color: #333; }
+  .hls .all { margin-left: auto; font-size: 14px; font-weight: 700; display: flex; align-items: center; }
+  .hlc { margin: 4px 10px; border: 2px solid #000; border-radius: 8px; display: flex; gap: 10px; padding: 7px 10px; align-items: center; }
+  .hlc .bar { width: 4px; align-self: stretch; background: #000; border-radius: 2px; flex: none; }
+  .hlc .s { flex: 1; font-size: 14px; line-height: 1.3; font-family: Georgia, 'Times New Roman', serif; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .hlc .pg { font-size: 11.5px; color: #333; white-space: nowrap; align-self: flex-end; }
+  .scr { background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.15); position: relative; overflow: hidden; display: flex; flex-direction: column; flex: none; }
+  .ab { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 3px solid #000; }
+  .ab b { font-size: 24px; } .ab .sp { flex: 1; }
+  .panes { flex: 1; display: flex; min-height: 0; }
+  .rail { border-right: 2px solid #000; display: flex; flex-direction: column; flex: none; }
+  .rail .rh { font-size: 12px; font-weight: 700; letter-spacing: .06em; padding: 12px 14px 6px; }
+  .bkr { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border-bottom: 1px solid #000; }
+  .bkr .t { flex: 1; min-width: 0; } .bkr b { display: block; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .bkr span { font-size: 11.5px; color: #333; }
+  .bkr .n { font-size: 13px; font-weight: 700; }
+  .bkr.on { background: #000; color: #fff; } .bkr.on span { color: #ddd; }
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .bh { padding: 12px 16px 6px; display: flex; align-items: flex-end; gap: 10px; }
+  .bh b { font-size: 21px; display: block; } .bh span { font-size: 12.5px; color: #333; }
+  .bh .r { margin-left: auto; display: flex; gap: 6px; }
+  .main .hl { margin-left: 12px; margin-right: 12px; }
+  .foot { margin-top: auto; display: flex; justify-content: center; padding: 8px 0 10px; }
+  .page { font-family: Georgia, 'Times New Roman', serif; padding: 22px 26px; font-size: 18px; line-height: 1.6; }
+  .page .chap { font-family: Roboto, sans-serif; font-size: 12px; letter-spacing: .08em; font-weight: 700; color: #333; margin-bottom: 12px; }
+  .page .hlt { background: #d8d8d8; border-bottom: 2px solid #000; }
+  .kostat { font-family: Roboto, sans-serif; font-size: 12px; color: #333; display: flex; justify-content: space-between; padding: 6px 14px; border-top: 1px solid #999; margin-top: auto; }
+  .divider { width: 10px; background: #000; flex: none; display: flex; align-items: center; justify-content: center; }
+  .divider i { width: 4px; height: 40px; background: #fff; border-radius: 2px; }
+  .notein { margin-top: 8px; border: 2px solid #000; border-radius: 8px; padding: 8px 10px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .notein .cur { width: 2px; height: 18px; background: #000; }
+  .kb { margin-top: auto; border-top: 2px solid #000; background: #f2f2f2; padding: 6px 4px; display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
+  .kb div { border: 1.5px solid #000; border-radius: 4px; text-align: center; font-size: 13px; padding: 7px 0; background: #fff; }
+</style>`);
 
+const SRC = { ko: "KOReader", neo: "NeoReader", sel: "Instapaper" };
 const Q = {
   w1: "I went to the woods because I wished to live deliberately, to front only the essential facts of life, and see if I could not learn what it had to teach.",
   w2: "Our life is frittered away by detail. An honest man has hardly need to count more than his ten fingers.",
+  w3: "Simplify, simplify.",
+  w4: "We must learn to reawaken and keep ourselves awake, not by mechanical aids, but by an infinite expectation of the dawn.",
   m1: "You have power over your mind, not outside events. Realize this, and you will find strength.",
-  m2: "The impediment to action advances action. What stands in the way becomes the way.",
   a1: "Reading slowly is not a failure of speed; it is a decision about attention.",
-  p1: "There is a stubbornness about me that never can bear to be frightened at the will of others.",
 };
+const hl = (s, meta, opt = {}) => `<div class="hl"><div class="bar"></div><div class="b"><div class="s ${opt.full ? "full" : ""}">${s}</div>
+  <div class="m">${opt.pin ? g("pinned", 13) : ""}${meta}</div>
+  ${opt.note ? `<div class="nt">${g("note2", 15)}<span>${opt.note}</span></div>` : ""}${opt.acts || ""}</div></div>`;
 const holdActs = `<div class="acts">${btn("open", "Open at page", 1)}${btn("copy", "Copy")}${btn("note2", "Add note")}${btn("share", "Share…")}${btn("pinned", "Pin")}${btn("del", "Hide")}</div>`;
+const chipsD = (on, list = ["All", "KOReader", "NeoReader", "Saved", "Pinned"]) => `<div class="chips">${list.map(c => `<span class="chip ${c === on ? "on" : ""}">${c === "Pinned" ? g("pinned", 13, c === on ? "#fff" : "#000") + " " : ""}${c}</span>`).join("")}</div>`;
+const pagerD = (a, b) => `<div class="foot"><div class="pager">${g("left", 22, a === 1 ? "#999" : "#000")}${a} / ${b}${g("right", 22)}</div></div>`;
+const appBar = (title, extra = "") => `<div class="ab">${g("digest", 28)}<b>${title}</b><span class="sp"></span>${extra}<span class="mbtn">${g("export", 16)} Export</span><span class="mbtn">${g("settings", 16)}</span></div>`;
+const bkr = (t, a, src, n, on) => `<div class="bkr ${on ? "on" : ""}">${g("book", 22, on ? "#fff" : "#000")}<div class="t"><b>${t}</b><span>${a}</span></div><span class="n">${n}</span></div>`;
+const books = (on) => [
+  bkr("All highlights", "6 books · 128", "", "", on === 0),
+  bkr("Walden", "KOReader · 2 h ago", "ko", 41, on === 1),
+  bkr("Meditations", "NeoReader · Tue", "neo", 27, on === 2),
+  bkr("Pride and Prejudice", "KOReader · Mon", "ko", 33, on === 3),
+  bkr("A field guide to slow…", "Saved · Instapaper", "sel", 4, on === 4),
+  bkr("The Art of War", "NeoReader · Oct 2", "neo", 19, on === 5),
+].join("");
 
-const D1 = () => shell(topBarD("dig", true) + digHead("128 highlights", chipsD("All") + segD("new")) +
-  `<div class="lab"><span>TODAY</span></div>
-  ${hl(Q.w1, `<span class="src">KOReader</span> Walden · Where I Lived · p. 92 · 2 h ago`)}
-  ${hl(Q.a1, `<span class="src">Saved</span> “A field guide to slow reading” · Instapaper · 5 h ago`, { note: "Use this for the reading-group intro" })}
-  <div class="lab"><span>THIS WEEK</span></div>
+// 53 · the panel: a small Highlights section for the open (or last) book
+const D1 = () => shell(topBar(false) + qc + lastRows.replace("Field Guide · NeoReader", "Walden · KOReader") +
+  `<div class="hls new"><div class="hh2">${g("digest", 22)}<div><b>Highlights</b> <span>· Walden · 41</span></div><span class="all">See all${g("right", 20)}</span></div>
+   <div class="hlc"><div class="bar"></div><div class="s">${Q.w1}</div><span class="pg">p. 92</span></div>
+   <div class="hlc"><div class="bar"></div><div class="s">${Q.w2}</div><span class="pg">p. 95</span></div></div>` +
+  qaBar() + pins.split('<div class="ir"></div>').slice(0, 2).join('<div class="ir"></div>') + apps) + notes("53 · In the panel: Highlights", [
+  "No new top-bar button. A small <b>Highlights</b> section (dashed outline) sits under Last Opened, for the book that's open, or the last one you read.",
+  "Its 2 newest highlights, with the page. Tap one to copy it, hold it for Open at page · Add note · Share.",
+  "<b>See all</b> opens the Digests screen on that book.",
+  "Shown only when that book has highlights; it can be turned off or set to 1–3 in Settings. Quick Access gets the rest of the space, as now.",
+]);
+
+// 54 · Digests screen, portrait
+const D2 = () => `<div class="scr" style="width:700px;height:933px">${appBar("Digests", `<span class="mbtn">${g("search", 16)} Search</span>`)}
+  <div class="panes"><div class="rail" style="width:240px"><div class="rh">BOOKS</div>${books(1)}</div>
+  <div class="main"><div class="bh"><div><b>Walden</b><span>Henry David Thoreau · KOReader · 41 highlights</span></div></div>
+  ${chipsD("By page", ["By page", "Newest", "With notes", "Pinned"])}
+  ${hl(Q.w1, "p. 92 · Where I Lived · 2 h ago", { note: "Opening line for the reading group" })}
+  ${hl(Q.w2, "p. 95 · Where I Lived · 2 h ago")}
+  ${hl(Q.w3, "p. 95 · Where I Lived · 2 h ago", { pin: 1 })}
+  ${hl(Q.w4, "p. 96 · Where I Lived · yesterday")}
+  ${pagerD(1, 11)}</div></div></div>` + notes("54 · The Digests screen", [
+  "Its own screen with its own <b>Digests</b> app icon: put it on BOOX's home screen, in the panel's apps, on a gesture or the Navigation Ball.",
+  "Books on the left (newest first, the app and count under each); <b>All highlights</b> at the top lists every book mixed, newest first.",
+  "The book's highlights on the right, in page order. Sort by page or newest, or show only ones with notes or pinned.",
+  "Tap or hold a highlight for <b>Open at page · Copy · Add note · Share… · Pin · Hide</b>, as in the panel. Highlights in KOReader and NeoReader are never changed.",
+  "Same look as SuperBoox's Settings: black-and-white cards, pages instead of scrolling.",
+]);
+
+// 55 · landscape: full highlight with actions
+const D3 = () => `<div class="scr" style="width:1100px;height:825px">${appBar("Digests", `<div class="srch" style="width:300px;margin:0">${g("search", 18, "#555")}Search highlights and notes</div>`)}
+  <div class="panes"><div class="rail" style="width:290px"><div class="rh">BOOKS</div>${books(0)}
+    <div class="rh" style="margin-top:8px">FROM</div><div style="padding:0 10px">${chipsD("All", ["All", "KOReader", "NeoReader", "Saved"]).replace('class="chips"', 'class="chips" style="flex-wrap:wrap;padding:0"')}</div></div>
+  <div class="main"><div class="bh"><div><b>All highlights</b><span>128 · newest first</span></div></div>
+  ${hl(Q.w1, `<span class="src">KOReader</span> Walden · p. 92 · 2 h ago`, { full: 1, note: "Opening line for the reading group", acts: holdActs })}
+  ${hl(Q.a1, `<span class="src">Saved</span> “A field guide to slow reading” · Instapaper · 5 h ago`)}
   ${hl(Q.m1, `<span class="src">NeoReader</span> Meditations · Book 6 · p. 41 · Tue`, { pin: 1 })}
-  ${hl(Q.p1, `<span class="src">KOReader</span> Pride and Prejudice · Ch. 31 · p. 168 · Mon`)}
-  <div class="hubfoot"><div class="pager">${g("left", 22, "#999")}1 / 32${g("right", 22)}</div></div></div>`) + notes("53 · Digests in the panel", [
-  "New in the top bar: <b>Digests</b>, between Clipboard and New Note. Tap it and it covers the panel, like the clipboard.",
-  "Every highlight from <b>KOReader</b> and <b>NeoReader</b>, plus passages you <b>Save</b> from any app (Instapaper, the browser…), newest first.",
-  "Each card: the passage (up to 3 lines), where it's from, the page and when. Your note, if you added one, under a dashed line.",
-  "Filter by app, <b>Saved</b> or <b>Pinned</b>, or search highlights and notes. Pages, not scrolling.",
-  "<b>Export</b> writes Markdown files to a folder you choose (see 57).",
+  ${pagerD(1, 32)}</div></div></div>` + notes("55 · Landscape: everything at once", [
+  "Turned sideways there's room for search in the top bar and the app filter under the books.",
+  "A held highlight opens in place with the full passage, your note and its actions.",
+  "<b>Export</b> (top right) writes Markdown: everything, or the book you're on.",
 ]);
-const D2 = () => shell(topBarD("dig") + digHead("128 highlights", chipsD("All") + segD("new")) +
-  `<div class="lab"><span>TODAY</span></div>
-  ${hl(Q.w1, `<span class="src">KOReader</span> Walden · Where I Lived · p. 92 · 2 h ago`, { full: 1, acts: holdActs })}
-  ${hl(Q.a1, `<span class="src">Saved</span> “A field guide to slow reading” · Instapaper · 5 h ago`, { note: "Use this for the reading-group intro" })}
-  <div class="hubfoot"><div class="pager">${g("left", 22, "#999")}1 / 32${g("right", 22)}</div></div></div>`) + notes("54 · Tap or hold a highlight", [
-  "Opens in place (no pop-up) with the whole passage and its actions:",
-  "<b>Open at page</b>: back to the book in KOReader or NeoReader, at that page where the app allows it (otherwise the book opens where you left off). Saved passages open their app.",
-  "<b>Add note</b>: a typed note on the highlight, kept with it and included in exports.",
-  "<b>Copy</b> and <b>Share…</b> send the passage with its source line (“— Walden, p. 92”). <b>Pin</b> keeps it at the top.",
-  "<b>Hide</b> removes it from Digests only. Your highlight in KOReader or NeoReader is never changed.",
+
+// 56 · split screen beside the book
+const D4 = () => `<div class="scr" style="width:1100px;height:825px;flex-direction:row">
+  <div style="flex:1;display:flex;flex-direction:column"><div class="page"><div class="chap">WHERE I LIVED, AND WHAT I LIVED FOR</div>
+    <span class="hlt">I went to the woods because I wished to live deliberately, to front only the essential facts of life,</span> <span class="hlt">and see if I could not learn what it had to teach,</span> and not, when I came to die, discover that I had not lived. I did not wish to live what was not life, living is so dear; nor did I wish to practise resignation, unless it was quite necessary.</div>
+    <div class="kostat"><span>Walden</span><span>p. 92 / 312</span></div></div>
+  <div class="divider"><i></i></div>
+  <div style="width:470px;display:flex;flex-direction:column">${appBar("Walden")}
+    ${chipsD("By page", ["By page", "Newest", "With notes"])}
+    <div class="hl"><div class="bar"></div><div class="b"><div class="s">${Q.w1}</div><div class="m">p. 92 · 2 h ago</div>
+      <div class="notein">${g("note2", 16)}Opening line for the reading gr<span class="cur"></span></div></div></div>
+    ${hl(Q.w2, "p. 95 · 2 h ago")}
+    <div class="kb">${"qwertyuiopasdfghjkl;".split("").map(k => `<div>${k}</div>`).join("")}</div></div></div>` + notes("56 · Split screen beside the book", [
+  "Use Split Screen (Quick Controls or BOOX's Control Center) with the book on one side and Digests on the other.",
+  "Digests follows the book you're reading: it opens on <b>Walden</b> because KOReader has Walden open.",
+  "On the narrow side it's one column: the book's highlights, with no book list.",
+  "<b>Add note</b> types under the highlight with the normal keyboard. That's easier here than in the panel.",
+  "New highlights you make in KOReader show up when you come back to Digests.",
 ]);
-const D3 = () => shell(topBarD("dig") + digHead("6 books", segD("books")) +
-  `${book("Walden", "Henry David Thoreau · last highlight 2 h ago", "ko", 41)}
-  <div class="ir"></div>${book("Meditations", "Marcus Aurelius · Tue", "neo", 27)}
-  <div class="ir"></div>${book("Pride and Prejudice", "Jane Austen · Mon", "ko", 33)}
-  <div class="ir"></div>${book("A field guide to slow reading", "Saved from Instapaper · 5 h ago", "sel", 4)}
-  <div class="lab" style="margin-top:10px"><span>WALDEN · 41</span><span>EXPORT THIS BOOK ›</span></div>
-  ${hl(Q.w1, `p. 92 · Where I Lived · 2 h ago`)}
-  ${hl(Q.w2, `p. 95 · Where I Lived · 2 h ago`)}
-  <div class="hubfoot"><div class="pager">${g("left", 22, "#999")}1 / 9${g("right", 22)}</div></div></div>`) + notes("55 · By book", [
-  "The second tab groups highlights by book, with the app and count. Tap a book for its highlights in reading order (by page).",
-  "<b>Export this book</b> writes just that book's file.",
-  "Saved passages are grouped by the article or page they came from.",
-  "Like Supernote's Digests: a book's highlights in one place, with a way back to each page.",
-]);
-const D4 = () => `<div class="tablet"><div class="bar0">${g("left", 24)} Instapaper</div>
+
+// 57 · Save to Digest (unchanged idea, refreshed numbering)
+const D5 = () => `<div class="tablet"><div class="bar0">${g("left", 24)} Instapaper</div>
   <div class="art"><h2>A field guide to slow reading</h2><div class="by">Example Magazine · 8 min read</div>
   <p>Most of us were taught to treat reading as a race against the page count. <span class="sel">Reading slowly is not a failure of speed; it is a decision about attention.</span> When we give a sentence room, it gives something back.</p>
   <p style="margin-top:96px">Try it with one chapter this week: a pencil in hand, nothing else open.</p></div>
   <div class="tb" style="left:40px;top:345px"><div>Copy</div><div>Share</div><div>Select all</div><div class="new">${g("digest", 16)} Save to Digest</div></div>
   <div class="toast" style="top:900px">${g("check", 18, "#fff")} Saved to Digests · Instapaper <u>Add note</u></div></div>` +
-  notes("56 · Save to Digest from any app", [
-  "Select text in Instapaper, a browser or most apps: <b>Save to Digest</b> joins Copy and Share in the menu that pops up (Android's text-selection menu; sometimes under ⋮).",
-  "It's saved at once with the app's name and the time; a small message offers <b>Add note</b>. No need to open the panel.",
-  "Also from <b>Share</b> → SuperBoox, and from the clipboard: a new <b>Save to Digest</b> action on text clips.",
-  "KOReader and NeoReader use their own menus, so their highlights come in directly instead: highlight as usual and they appear in Digests.",
+  notes("57 · Save to Digest from any app", [
+  "Select text in Instapaper, a browser or most apps: <b>Save to Digest</b> joins Copy and Share in the menu that pops up (sometimes under ⋮).",
+  "Saved at once with the app's name and the time; a small message offers <b>Add note</b>. No need to open anything.",
+  "Also from <b>Share</b> → SuperBoox, and as an action on text clips in the clipboard.",
+  "KOReader and NeoReader highlights come in by themselves: highlight as usual.",
 ]);
-const D5 = () => `<div class="set" style="width:600px;height:1180px">${head("Digests")}
+
+// 58 · Settings → Digests
+const D6 = () => `<div class="set" style="width:600px;height:1180px">${head("Digests")}
   <div class="sec">IN THE PANEL</div><div class="card">
-    <div class="check"><div class="box on"></div>Show the Digests button</div>
-    <div class="check"><div class="box"></div>Still show Quick Controls</div>
-    <div class="check"><div class="box"></div>Still show the apps at the bottom</div></div>
+    <div class="check"><div class="box on"></div>Show highlights from the open book</div>
+    <div class="choice">How many<b>2 ›</b></div></div>
   <div class="sec">WHERE HIGHLIGHTS COME FROM</div><div class="card">
     ${keepRow(true, "KOReader", "Highlights and notes from KOReader's own book files. Read only; KOReader is never changed.", "Needs All files access", true)}
     ${keepRow(true, "NeoReader", "Highlights from NeoReader's library.", "", false)}
@@ -454,13 +517,13 @@ const D5 = () => `<div class="set" style="width:600px;height:1180px">${head("Dig
     <div class="choice">Folder<b>Documents/Digests ›</b></div>
     <div class="choice">Format<b>Markdown, one file per book ›</b></div>
     <div class="check"><div class="box"></div>Export again when highlights change</div>
-    <div class="btns"><div class="btn">${g("export", 18)}&nbsp; Export now</div></div></div>
-  <div class="para">Highlights stay on this tablet; nothing is uploaded and no internet access is needed. Pick a folder your notes app syncs (for example your Obsidian vault) to have them there too. Digests (with your notes) are included in Backup &amp; restore.</div></div>` + notes("57 · Settings → Digests", [
-  "A new page on Settings' home, under <b>In the panel</b>, next to Clipboard, with the same live preview.",
-  "Each source can be turned off. KOReader needs <b>All files access</b>, the permission SuperBoox already asks for (optionally) for handwriting pictures.",
-  "<b>Export</b>: one Markdown file per book, with each highlight as a quote, its page, date and your note. Works with Obsidian and most notes apps.",
-  "Your notes and hidden or pinned choices are kept by SuperBoox and in backups; the reading apps' own highlights are only read.",
+    <div class="btns"><div class="btn">${g("open", 18)}&nbsp; Open Digests</div><div class="btn">${g("export", 18)}&nbsp; Export now</div></div></div>
+  <div class="para">Highlights stay on this tablet; nothing is uploaded and no internet access is needed. Pick a folder your notes app syncs (for example your Obsidian vault) to have them there too. Your notes, pins and hidden highlights are included in Backup &amp; restore.</div></div>` + notes("58 · Settings → Digests", [
+  "Under <b>In the panel</b> on Settings' home, next to Clipboard.",
+  "Panel: the Highlights section on or off, and how many highlights it shows (1–3).",
+  "Each source can be turned off. KOReader needs <b>All files access</b>, which SuperBoox already asks for (optionally) for handwriting pictures.",
+  "Export: one Markdown file per book, each highlight as a quote with its page, date and your note.",
 ]);
 const h = location.hash;
-document.getElementById("stage").innerHTML = h === "#2" ? D3() + D4() : h === "#3" ? D5() : D1() + D2();
+document.getElementById("stage").innerHTML = ({ "#2": () => D3(), "#3": () => D4(), "#4": () => D5() + D6() }[h] || (() => D1() + D2()))();
 </script></body></html>

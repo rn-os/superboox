@@ -470,9 +470,11 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - NeoReader: which tables in `com.onyx.content.database.ContentProvider` answer, with their columns.
   - Instapaper: installed or not.
   - Never shows highlighted text or book names.
-- **Mockups 53–57** (`docs/mockups/digests.html`):
-  - 53–54: the panel view and tap/hold actions.
-  - 55: By book.
-  - 56: Save to Digest in the text-selection menu (ACTION_PROCESS_TEXT), plus the share target and a clipboard action.
-  - 57: Settings → Digests (sources, export folder, Markdown one file per book).
+- **Mockups 53–58, hybrid** (`docs/mockups/digests.html`): the user chose a hybrid.
+  - 53: a small Highlights section in the panel, for the open or last book, with See all. No top-bar button.
+  - 54: the Digests screen, with its own app icon. Books on the left, highlights on the right.
+  - 55: landscape.
+  - 56: split screen beside the book, following the open book, with typed notes.
+  - 57: Save to Digest (ACTION_PROCESS_TEXT, the share target, a clipboard action).
+  - 58: Settings → Digests.
   - Awaiting review.

@@ -5,7 +5,6 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
-import android.content.res.Configuration
 import android.graphics.Typeface
 import android.os.Bundle
 import android.text.Editable
@@ -54,16 +53,40 @@ class DigestsActivity : Activity() {
 
     private val renderNow = Runnable { rebuild() }
 
+    /** Sized for this screen like Settings ([UiScale]), so text isn't tiny on a 10" tablet. */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(newBase)
+        runCatching { applyOverrideConfiguration(UiScale.apply(newBase, newBase.resources.configuration)) }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
         root = vbox().apply { setBackgroundColor(Ink.PAPER) }
         setContentView(root)
-        book = intent?.getStringExtra(EXTRA_BOOK)
         all = Digests.all(this)
-        if (book == null) book = followOpenBook()
-        if (book != null) sort = Sort.BY_PAGE else sort = Sort.NEWEST
+        if (savedInstanceState != null) {
+            // Turned or resized (split screen): carry on where it was.
+            book = savedInstanceState.getString(EXTRA_BOOK)
+            sort = runCatching { Sort.valueOf(savedInstanceState.getString(K_SORT).orEmpty()) }.getOrDefault(Sort.NEWEST)
+            source = savedInstanceState.getString(K_SOURCE)?.let { runCatching { Digests.Source.valueOf(it) }.getOrNull() }
+            page = savedInstanceState.getInt(K_PAGE)
+            query = savedInstanceState.getString(K_QUERY).orEmpty()
+            searching = query.isNotEmpty()
+        } else {
+            book = intent?.getStringExtra(EXTRA_BOOK) ?: followOpenBook()
+            sort = if (book != null) Sort.BY_PAGE else Sort.NEWEST
+        }
         rebuild()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(EXTRA_BOOK, book)
+        outState.putString(K_SORT, sort.name)
+        outState.putString(K_SOURCE, source?.name)
+        outState.putInt(K_PAGE, page)
+        outState.putString(K_QUERY, query)
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -75,11 +98,6 @@ class DigestsActivity : Activity() {
         super.onResume()
         reload()
         refreshKoreader()
-    }
-
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig)
-        render() // wide ↔ narrow (rotation, split screen)
     }
 
     /** The book open in a reading app (the last document SuperBoox saw), if it has highlights here. */
@@ -113,7 +131,8 @@ class DigestsActivity : Activity() {
         root.post(renderNow)
     }
 
-    private val wide: Boolean get() = resources.configuration.screenWidthDp >= 600
+    /** Books beside the highlights when there's room (a 10" tablet upright or turned); one column in split screen. */
+    private val wide: Boolean get() = resources.configuration.screenWidthDp >= 520
 
     // ---- Layout ------------------------------------------------------------------------------
 
@@ -506,6 +525,10 @@ class DigestsActivity : Activity() {
 
     companion object {
         const val EXTRA_BOOK = "book"
+        private const val K_SORT = "sort"
+        private const val K_SOURCE = "source"
+        private const val K_PAGE = "page"
+        private const val K_QUERY = "query"
         private const val PER_PAGE = 6
     }
 }

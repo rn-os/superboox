@@ -57,7 +57,7 @@ object ControlCenterProbe {
             out += "  tiles (${tiles.size}): " + tiles.joinToString(" | ").ifEmpty { "none readable" }
             if (pkg?.contains("systemui") == true && labels.isNotEmpty()) {
                 // A Quick Control whose tile isn't here does nothing when tapped (it may be on the Control Center's next page).
-                val missing = QuickControls.unmatched(labels)
+                val missing = QuickControls.unmatched(service, labels)
                 out += "  Quick Controls without a tile here: " + missing.joinToString().ifEmpty { "none (all found)" }
                 out += "  Quick Controls sent to Android instead (can't be checked here): " +
                     QuickControls.ALL.filter { it.kind == QuickControls.Kind.ACTION }.joinToString { it.label }

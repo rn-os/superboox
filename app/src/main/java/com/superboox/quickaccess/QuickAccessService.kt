@@ -75,6 +75,8 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         instance = this
         BootRestore.clearNotification(this)
         NoteIds.capture(this, prefs)
+        // Control Center names in English, for a tablet set to another language (built once, off the main thread).
+        Thread { runCatching { TileNames.english(this, "") } }.start()
         ClipHistory.onStart(this, prefs)
         refreshReaderLast()
         val filter = android.content.IntentFilter().apply {

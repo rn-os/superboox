@@ -621,11 +621,11 @@ object QuickControls {
         for (w in service.windows) {
             val root = w.root ?: continue
             if (root.packageName?.toString()?.contains("systemui") != true) continue
-            val soft = labelled(root, setOf("soft"))["soft"]?.firstOrNull() ?: continue
+            val soft = labelled(service, root, setOf("soft"))["soft"]?.firstOrNull() ?: continue
             var area: AccessibilityNodeInfo? = soft.parent
             repeat(6) {
                 val a = area ?: return@repeat
-                val found = labelled(a, PRESETS.map { it.lowercase() }.toSet())
+                val found = labelled(service, a, PRESETS.map { it.lowercase() }.toSet())
                 if (found.size == PRESETS.size) {
                     val labels = PRESETS.associateWith { found.getValue(it.lowercase()).first() }
                     val buttons = labels.mapValues { (_, n) -> pressable(n, false) ?: n }
@@ -639,12 +639,14 @@ object QuickControls {
     }
 
     /** Nodes under [root] whose whole label is one of [names] (lowercase). */
-    private fun labelled(root: AccessibilityNodeInfo, names: Set<String>): Map<String, List<AccessibilityNodeInfo>> {
+    private fun labelled(context: Context, root: AccessibilityNodeInfo, names: Set<String>): Map<String, List<AccessibilityNodeInfo>> {
         val out = HashMap<String, MutableList<AccessibilityNodeInfo>>()
         fun walk(n: AccessibilityNodeInfo, depth: Int) {
             if (depth > 40) return
-            val label = (n.text ?: n.contentDescription)?.toString()?.trim()?.lowercase()
-            if (label != null && label in names) out.getOrPut(label) { ArrayList() } += n
+            val shown = (n.text ?: n.contentDescription)?.toString()?.trim()
+            // In English, or the same button on a tablet set to another language.
+            val label = shown?.lowercase()?.takeIf { it in names } ?: shown?.let { TileNames.exact(context, it)?.lowercase() }?.takeIf { it in names }
+            if (label != null) out.getOrPut(label) { ArrayList() } += n
             for (i in 0 until n.childCount) n.getChild(i)?.let { walk(it, depth + 1) }
         }
         walk(root, 0)
@@ -683,7 +685,7 @@ object QuickControls {
                 if (depth > 40) return
                 val label = (n.contentDescription ?: n.text)?.toString()?.replace("\n", " ")?.trim().orEmpty()
                 if (label.isNotEmpty() && (n.isClickable || n.isCheckable || n.isLongClickable)) {
-                    out += Tile(n, label, normalize(label), stateOf(n))
+                    out += Tile(n, label, tileName(service, label), stateOf(service, n))
                 }
                 for (i in 0 until n.childCount) n.getChild(i)?.let { walk(it, depth + 1) }
             }
@@ -693,8 +695,10 @@ object QuickControls {
     }
 
     /** "On"/"Off" as the tile announces it, else its checked state, else unknown. */
-    private fun stateOf(n: AccessibilityNodeInfo): Boolean? {
-        val desc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) n.stateDescription?.toString()?.trim()?.lowercase() else null
+    private fun stateOf(context: Context, n: AccessibilityNodeInfo): Boolean? {
+        val shown = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) n.stateDescription?.toString()?.trim() else null
+        // "Вкл." / "Ein": the same word in English, on a tablet set to another language.
+        val desc = shown?.let { (TileNames.english(context, it) ?: it).lowercase() }
         if (desc != null) {
             if (desc.startsWith("on")) return true
             if (desc.startsWith("off")) return false
@@ -716,9 +720,19 @@ object QuickControls {
      * Quick Controls that press a Control Center tile but have no tile among [labels] (the
      * Control Center's visible labels), for the debug report's Quick Controls test.
      */
-    fun unmatched(labels: Collection<String>): List<String> {
-        val norm = labels.map(::normalize)
+    fun unmatched(context: Context, labels: Collection<String>): List<String> {
+        val norm = labels.map { tileName(context, it) }
         return ALL.filter { it.kind != Kind.ACTION && it.keys.isNotEmpty() && norm.none(it::matches) }.map { it.label }
+    }
+
+    /**
+     * A tile's name for matching: as shown when a Quick Control knows it, else translated to
+     * English ([TileNames]) so tiles are found on a tablet set to another language.
+     */
+    private fun tileName(context: Context, label: String): String {
+        val shown = normalize(label)
+        if (ALL.any { it.keys.isNotEmpty() && it.matches(shown) }) return shown
+        return TileNames.english(context, label)?.let(::normalize) ?: shown
     }
 
     private fun normalize(s: String): String =

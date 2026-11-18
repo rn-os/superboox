@@ -2066,7 +2066,8 @@ class SettingsActivity : Activity() {
         io.execute {
             val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
             val apps = packageManager.queryIntentActivities(launcher, 0)
-                .filter { it.activityInfo.packageName != packageName }
+                // SuperBoox's own entries are left out, except Digests (users may want it in the panel).
+                .filter { it.activityInfo.packageName != packageName || it.activityInfo.name == DigestsActivity::class.java.name }
                 .map { ri: ResolveInfo ->
                     AppEntry(
                         ri.loadLabel(packageManager).toString(),

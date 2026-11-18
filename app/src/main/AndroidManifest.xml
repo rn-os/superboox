@@ -33,6 +33,8 @@
              open a pinned document in the app that handles it. -->
         <package android:name="com.onyx.kreader" />
         <package android:name="com.onyx.neoreader" />
+        <!-- The Control Center's own text: Quick Controls find tiles on a tablet in another language. -->
+        <package android:name="com.android.systemui" />
         <!-- KOReader: Digests reads its highlights and opens books in it. -->
         <package android:name="org.koreader.launcher" />
         <package android:name="org.koreader.launcher.fdroid" />
@@ -124,7 +126,6 @@
              beside a book in split screen. -->
         <activity
             android:name=".DigestsActivity"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
             android:exported="true"
             android:icon="@mipmap/ic_digests"
             android:label="@string/digests_label"

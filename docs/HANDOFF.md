@@ -461,3 +461,18 @@ An Android overlay app for ONYX BOOX e-ink tablets (user's device: **Note Air 6C
   - Optimize › Others › "Stay active in the background" (`eac_item_full_pm_access_label`) is BOOX's per-app keep-alive. SystemUI's `SetFullPmAccessEnableAction` writes `EACAppTheme.appConfig.extraConfig.fullPMAccess`; `EinkMenus.stayActive` reads it the same way (`android.onyx.optimization.EACAppThemeManager.getTheme(pkg, getActiveThemeType(pkg))`, by reflection, null when it can't).
   - EinkWise: `action.open.eink.center.request` (device-wide E-Ink Center, no extras).
 - `EinkMenus` sends them; `QuickAccessService.openEinkMenu` hides the panel first and refuses while a Quick Controls session has the Control Center open. Changes in BOOX's panel apply live (SystemUI never stops the app; the user confirmed DPI changes live).
+
+## Digests proposal (after 1.1.2)
+
+- Goal: Supernote-style Digests. Highlights from KOReader, NeoReader and any app ("Save to Digest"), gathered in the panel, with Markdown export. Offline, no Shizuku.
+- **Probe (shipped in the debug report, "Highlights (counts only)"):** `HighlightsProbe`.
+  - KOReader: `.sdr/metadata.*.lua` files, found with All files access. Shows format (new `annotations` or old `highlight`), where they're kept, and highlight and note counts.
+  - NeoReader: which tables in `com.onyx.content.database.ContentProvider` answer, with their columns.
+  - Instapaper: installed or not.
+  - Never shows highlighted text or book names.
+- **Mockups 53–57** (`docs/mockups/digests.html`):
+  - 53–54: the panel view and tap/hold actions.
+  - 55: By book.
+  - 56: Save to Digest in the text-selection menu (ACTION_PROCESS_TEXT), plus the share target and a clipboard action.
+  - 57: Settings → Digests (sources, export folder, Markdown one file per book).
+  - Awaiting review.

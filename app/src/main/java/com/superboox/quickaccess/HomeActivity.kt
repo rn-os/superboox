@@ -243,7 +243,7 @@ class HomeActivity : Activity() {
             private var startX = 0f
             private var startY = 0f
             private var drawing = false
-            private val hardwareInk = HomeHardwareInk(this, palette.ink, ink.strokeWidth) { points ->
+            private val hardwareInk = HomeHardwareInk(this, palette.ink, ink.strokeWidth, fastRefresh = penFastRefresh) { points ->
                 if (points.size >= 2) addStroke(InkStroke(points))
             }
 
@@ -525,6 +525,7 @@ class HomeActivity : Activity() {
         val appearance = if (palette == AppPalette.DARK) "Dark" else "Paper"
         action("Appearance · $appearance", R.drawable.ic_qc_light) { chooseAppearance() }
         action("Pen template · ${penTemplate.title}", R.drawable.ic_edit) { choosePenTemplate() }
+        action("Pen refresh · ${if (penFastRefresh) "Fast refresh (test)" else "Batched"}", R.drawable.ic_pen_nib) { choosePenRefresh() }
         action("Choose Daily Notebook", R.drawable.ic_note) { chooseNotebook() }
         if (QuickAccessService.instance?.lastUsedApp != null) {
             action("Resume", R.drawable.ic_clock) { withQuickAccess { openPreviousApp(fromHome = true) } }
@@ -815,6 +816,24 @@ class HomeActivity : Activity() {
             .show()
     }
 
+    /** BOOX pen only: how a finished stroke reaches the screen (see HomeHardwareInk), to compare the two. */
+    private val penFastRefresh: Boolean
+        get() = prefs.sp.getBoolean(PEN_FAST_REFRESH, false)
+
+    private fun choosePenRefresh() {
+        val choices = arrayOf("Batched (after a short pause)", "Fast refresh (test)")
+        AlertDialog.Builder(this)
+            .setTitle("Pen refresh")
+            .setSingleChoiceItems(choices, if (penFastRefresh) 1 else 0) { dialog, index ->
+                prefs.sp.edit().putBoolean(PEN_FAST_REFRESH, index == 1).apply()
+                DebugLog.i("home pen", "pen refresh: ${choices[index]}")
+                dialog.dismiss()
+                show(Page.MORE)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun chooseNotebook() {
         val notes = notes()
         if (notes.isEmpty()) {
@@ -897,6 +916,7 @@ class HomeActivity : Activity() {
         const val EXPORT_CAPTURE = 42
         const val PEN_TEMPLATE = "home_pen_template"
         const val DAILY_NOTEBOOK = "home_daily_notebook"
+        const val PEN_FAST_REFRESH = "home_pen_fast_refresh"
         /** Scratchpad: line spacing, lines shown when compact, and lines added when it grows. */
         const val PAD_LINE_DP = 26
         const val PAD_LINES = 4

@@ -5,17 +5,28 @@ import android.graphics.RectF
 import android.os.Build
 import android.view.View
 import com.onyx.android.sdk.api.device.epd.EpdController
+import com.onyx.android.sdk.api.device.epd.UpdateMode
 import com.onyx.android.sdk.data.note.TouchPoint
 import com.onyx.android.sdk.pen.RawInputCallback
 import com.onyx.android.sdk.pen.TouchHelper
 import com.onyx.android.sdk.pen.data.TouchPointList
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 
-/** Raw e-ink rendering is restricted to the visible Home writing area. */
+/**
+ * Raw e-ink rendering is restricted to the visible Home writing area.
+ *
+ * Two ways to show a finished stroke, chosen in Home → More → Pen refresh so they can be compared
+ * on the tablet:
+ *  - batched (default): after a short pen pause, raw rendering is switched off for one Android
+ *    redraw and back on;
+ *  - [fastRefresh] (test, after OpenInkBridge's BOOX adapter): raw rendering stays on, the SDK's own
+ *    pen-up refresh is off, and each committed stroke is drawn with a fast DU e-ink update.
+ */
 internal class HomeHardwareInk(
     private val view: View,
     private val color: Int,
     private val width: Float,
+    private val fastRefresh: Boolean = false,
     private val onStroke: (FloatArray) -> Unit,
 ) {
     private var helper: TouchHelper? = null
@@ -83,7 +94,10 @@ internal class HomeHardwareInk(
                 .setLimitRect(bounds, emptyList()).openRawDrawing()
             pen.setRawDrawingEnabled(true).setRawDrawingRenderEnabled(true)
             check(pen.isRawDrawingCreated && pen.isRawDrawingRenderEnabled) { "Raw drawing unavailable" }
-            DebugLog.i("home pen", "BOOX raw drawing active: $bounds mapped to $mapped")
+            // Fast refresh: SuperBoox refreshes after each stroke itself, so BOOX's pen-up refresh would be a second one.
+            if (fastRefresh) runCatching { pen.setPenUpRefreshEnabled(false) }
+                .onFailure { DebugLog.w("home pen", "pen-up refresh not switched off: ${it.message}") }
+            DebugLog.i("home pen", "BOOX raw drawing active (${if (fastRefresh) "fast refresh" else "batched"}): $bounds mapped to $mapped")
         } catch (error: Exception) {
             fail(error)
         } catch (error: LinkageError) {
@@ -103,7 +117,23 @@ internal class HomeHardwareInk(
             return
         }
         view.removeCallbacks(repaint)
-        view.postDelayed(repaint, PEN_IDLE_MS)
+        view.postDelayed(repaint, if (fastRefresh) FAST_COALESCE_MS else PEN_IDLE_MS)
+    }
+
+    /** Fast refresh: draw the committed ink and push it with a DU update, raw rendering left on. */
+    private fun fastRepaint(pen: TouchHelper) {
+        try {
+            view.invalidate()
+            view.postOnAnimation {
+                if (helper === pen && !drawing) {
+                    runCatching { EpdController.invalidate(view, UpdateMode.DU) }
+                        .onFailure { DebugLog.w("home pen", "DU update failed: ${it.message}") }
+                }
+            }
+        } catch (error: Exception) {
+            fail(error)
+            view.invalidate()
+        }
     }
 
     private fun repaintCommittedInk() {
@@ -113,6 +143,7 @@ internal class HomeHardwareInk(
             view.invalidate()
             return
         }
+        if (fastRefresh) return fastRepaint(pen)
         try {
             // Unfreeze display updates for the committed stroke while keeping the raw input reader active.
             pen.setRawDrawingRenderEnabled(false)
@@ -141,5 +172,7 @@ internal class HomeHardwareInk(
 
     private companion object {
         const val PEN_IDLE_MS = 220L
+        /** Fast refresh: strokes lifted within this time share one update. */
+        const val FAST_COALESCE_MS = 40L
     }
 }

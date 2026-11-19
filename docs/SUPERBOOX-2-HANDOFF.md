@@ -65,3 +65,23 @@ Two separate commits on top of `WIP`, so each can be tried on its own:
 To test the Scratchpad alone, build its commit. The renderer commit adds only the Pen refresh choice; left on Batched, it behaves like the Scratchpad commit.
 
 Both commits were compile-checked offline: the standard variant against Android 14, and the BOOX pen variant against onyxsdk-pen 1.5.9, -base 1.8.10, -baselite 1.1.2 and -device 1.3.7. Neither has been built with Gradle or run on the tablet yet.
+
+## 2026-11-18 · branch and tablet check before push
+
+### Source recorded on `superboox-2-wip`
+
+- `f728f6f` imported the earlier launcher, shared Paper/Dark appearance, Capture Inbox, handwriting, backup support, and native Quick Note handoff. Its main entry points are `HomeActivity.kt`, `Ui.kt`, `Digests.kt`, `Backup.kt`, `BooxNotes.kt`, `NoteOpener.kt`, `QuickAccessService.kt`, both `HomeHardwareInk.kt` variants, and the app manifest and theme resources.
+- `ed3e1ca` added the compact Scratchpad, stronger dots, Inbox and Quick Capture below the pad, and local draft autosave in `HomeActivity.kt` and `Ui.kt`.
+- `04bad21` added the optional Fast refresh mode in `HomeActivity.kt` and both `HomeHardwareInk.kt` variants. Batched remains the default.
+- `cf31aca` documented the compact layout and renderer comparison in this file. At the start of this check, the branch was already synchronized with origin. All app changes were committed, so this pass adds only this handoff update.
+
+### Installed build and tablet verification
+
+- ADB confirmed that the connected Note Air6 C still runs `1.1.3-home.10.local`, version code 296, with SuperBoox selected as Android's default Home and Home in the foreground. The installed build used `-PbooxPenSdk=true -Pandroid.enableJetifier=true`, JDK 17, SDK 34, and `assembleDebug testDebugUnitTest`. It passed all six existing unit tests. No build or installation was performed during this branch check.
+- Prior tablet tests on the installed prototype confirmed downward expansion after a simulated pen lift, an unchanged top edge, and return to compact Home with Undo. Earlier installed builds verified multi-stroke Keep and image reopening, shared text intake, edit and confirmed deletion, and Markdown export to local Downloads. No live app settings or capture data were changed during this check. The Home screenshot showed no visible unsaved draft.
+- The later compact Scratchpad and Fast refresh commits were compile-checked as noted above. They have not been installed or tested on the tablet. Physical pen latency, rapid pen lifts, e-ink ghosting, and a backup restore with handwriting remain unverified.
+
+### Dependencies and next test
+
+- The optional BOOX variant adds `com.onyx.android.sdk:onyxsdk-pen:1.5.9` and uses `repo.boox.com` when `booxPenSdk=true`. Jetifier is needed for that SDK variant. Fast refresh uses the same SDK and adds no dependency, Gradle property, or network host.
+- Build and install the newer compact layout with Batched selected, confirm draft recovery and shortcut visibility, then compare Fast refresh on the same tablet. An explicit full-page control and editable handwriting transfer to native BOOX Notes are still open.

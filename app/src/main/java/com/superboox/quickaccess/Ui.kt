@@ -34,14 +34,16 @@ enum class AppPalette(
     val pressed: Int,
     val featuredPressed: Int,
     val disabled: Int,
+    /** Home's Scratchpad card: a touch off the page colour, so the paper edge reads softly. */
+    val pad: Int,
 ) {
     PAPER(
         0xFFFDFDFB.toInt(), 0xFF101010.toInt(), 0xFF454545.toInt(), 0xFFB7B7B7.toInt(),
-        0xFFE1E1DF.toInt(), 0xFF414141.toInt(), 0xFF707070.toInt(),
+        0xFFE1E1DF.toInt(), 0xFF414141.toInt(), 0xFF707070.toInt(), 0xFFF4F3EE.toInt(),
     ),
     DARK(
         0xFF101010.toInt(), 0xFFF6F4EF.toInt(), 0xFFBDBDBD.toInt(), 0xFF535353.toInt(),
-        0xFF343434.toInt(), 0xFFCCCCCC.toInt(), 0xFF888888.toInt(),
+        0xFF343434.toInt(), 0xFFCCCCCC.toInt(), 0xFF888888.toInt(), 0xFF1C1C1C.toInt(),
     );
 
     val theme: Int

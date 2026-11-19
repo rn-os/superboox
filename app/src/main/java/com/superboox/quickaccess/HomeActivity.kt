@@ -46,8 +46,18 @@ class HomeActivity : Activity() {
         get() = Template.entries.firstOrNull { it.name == prefs.sp.getString(PEN_TEMPLATE, null) }
             ?: Template.LAST_USED
 
-    private data class InkStroke(val path: Path, val x: Float, val y: Float)
+    /** One pen stroke as x,y pairs; the points are kept so an unsaved draft can be written to disk. */
+    private class InkStroke(val points: FloatArray) {
+        val x: Float get() = points[0]
+        val y: Float get() = points[1]
+        val path: Path = Path().apply {
+            moveTo(points[0], points[1])
+            for (i in 2 until points.size - 1 step 2) lineTo(points[i], points[i + 1])
+        }
+    }
     private val draftInk = mutableListOf<InkStroke>()
+    /** Writes the unsaved draft a moment after the pen stops, so a Home restart doesn't lose it. */
+    private val saveDraft = Runnable { writeDraft() }
     private var savingInk = false
     private var expandedInk = false
 
@@ -73,6 +83,12 @@ class HomeActivity : Activity() {
         captureId = savedInstanceState?.getString("captureId")
         captureBack = if (savedInstanceState?.getBoolean("processed") == true) Page.PROCESSED else Page.INBOX
         exportingId = savedInstanceState?.getString("exportingId")
+        if (draftInk.isEmpty()) readDraft()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        writeDraft()
     }
 
     override fun onResume() {
@@ -151,13 +167,23 @@ class HomeActivity : Activity() {
         rule()
         writingZone()
 
+        // Always under the pad, also while it's compact: the inbox and native BOOX Notes.
         val count = Digests.captures(this).count { it.status == Digests.CaptureStatus.INBOX }
-        if (count > 0) {
-            captureHeading("Review $count ${if (count == 1) "capture" else "captures"}")
-            rows.addView(actionView("Open Capture Inbox", R.drawable.ic_book, featured = true) { show(Page.INBOX) },
-                lp(MATCH, WRAP).apply { topMargin = dp(12); bottomMargin = dp(20) })
-            rule()
-        } else recentDigest?.let { book ->
+        rows.addView(hbox().apply {
+            addView(actionView(if (count > 0) "Inbox · $count" else "Inbox", R.drawable.ic_book, featured = count > 0) {
+                show(Page.INBOX)
+            }, lp(0, WRAP, 1f))
+            addView(View(context), lp(dp(10), 1))
+            val quickCapture = actionView("Quick Capture", R.drawable.ic_edit) { openPenNote(Template.LAST_USED) }
+            quickCapture.setOnLongClickListener {
+                withQuickAccess { openNewNoteSetup(fromHome = true) }
+                true
+            }
+            addView(quickCapture, lp(0, WRAP, 1f))
+        }, lp(MATCH, WRAP).apply { topMargin = dp(10); bottomMargin = dp(10) })
+        rule()
+
+        if (count == 0) recentDigest?.let { book ->
             val passages = if (book.source == Digests.Source.SAVED) {
                 if (book.count == 1) "saved passage" else "saved passages"
             } else {
@@ -179,13 +205,6 @@ class HomeActivity : Activity() {
             rule()
         }
 
-        val quickCapture = actionView("Quick Capture", R.drawable.ic_edit) { openPenNote(Template.LAST_USED) }
-        quickCapture.setOnLongClickListener {
-            withQuickAccess { openNewNoteSetup(fromHome = true) }
-            true
-        }
-        rows.addView(quickCapture, lp(MATCH, WRAP))
-        rule()
         val notebook = notes().firstOrNull { it.id == prefs.sp.getString(DAILY_NOTEBOOK, null) }
         if (notebook == null) {
             action("Notes", R.drawable.ic_note) { withQuickAccess { openNotesFolder(null) } }
@@ -197,18 +216,24 @@ class HomeActivity : Activity() {
         action("More", R.drawable.ic_settings) { show(Page.MORE) }
     }
 
+    /**
+     * The Scratchpad under the date: about four lines tall, on a soft paper card with darker dots.
+     * Lifting the pen near its bottom edge adds paper below, once, in one redraw; the top edge and
+     * the ink already written stay where they are. Keep and Undo appear once there is ink.
+     */
     private fun writingZone() {
         val template = penTemplate
-        val viewport = resources.displayMetrics.heightPixels
-        val compactHeight = (viewport * 0.30f).toInt().coerceAtLeast(dp(154))
-        val expandedHeight = (viewport * 0.57f).toInt().coerceAtLeast(compactHeight + dp(88))
-        val controls = hbox().apply { visibility = if (draftInk.isEmpty()) View.INVISIBLE else View.VISIBLE }
+        val line = dp(PAD_LINE_DP)
+        val labelBand = dp(30)
+        val compactHeight = labelBand + PAD_LINES * line + dp(8)
+        val expandedHeight = compactHeight + PAD_MORE_LINES * line
+        val controls = hbox().apply { visibility = if (draftInk.isEmpty()) View.GONE else View.VISIBLE }
         val zone = object : View(this) {
             private val nib = getDrawable(R.drawable.ic_pen_nib)?.mutate()?.apply {
                 setTint(palette.secondary)
-                alpha = if (palette == AppPalette.DARK) 140 else 150
             }
             private val stroke = Path()
+            private val points = ArrayList<Float>()
             private val ink = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = palette.ink
                 strokeWidth = dp(2.5f).toFloat()
@@ -219,13 +244,7 @@ class HomeActivity : Activity() {
             private var startY = 0f
             private var drawing = false
             private val hardwareInk = HomeHardwareInk(this, palette.ink, ink.strokeWidth) { points ->
-                if (points.size >= 2) {
-                    val path = Path().apply {
-                        moveTo(points[0], points[1])
-                        for (i in 2 until points.size step 2) lineTo(points[i], points[i + 1])
-                    }
-                    addStroke(InkStroke(path, points[0], points[1]))
-                }
+                if (points.size >= 2) addStroke(InkStroke(points))
             }
 
             private fun addStroke(stroke: InkStroke) {
@@ -234,10 +253,11 @@ class HomeActivity : Activity() {
                 controls.visibility = View.VISIBLE
                 invalidate()
                 val strokeBounds = RectF().also { stroke.path.computeBounds(it, true) }
-                if (!expandedInk && maxOf(stroke.y, strokeBounds.bottom) >= height - dp(40)) {
+                if (!expandedInk && maxOf(stroke.y, strokeBounds.bottom) >= height - line) {
                     expandedInk = true
                     resize(expandedHeight)
                 }
+                draftChanged()
             }
 
             fun resize(targetHeight: Int) {
@@ -274,32 +294,54 @@ class HomeActivity : Activity() {
                 super.onDetachedFromWindow()
             }
 
+            // Darker than the old guide dots, which were too faint on the panel: a full-strength gray.
             private val guide = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = palette.rule
-                alpha = if (palette == AppPalette.DARK) 95 else 100
+                color = palette.secondary
+                strokeWidth = dp(1).toFloat()
             }
+            private val paper = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.pad }
+            private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                color = palette.rule
+                strokeWidth = dp(1).toFloat()
+            }
+            private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = palette.secondary
+                textSize = 13f * resources.displayMetrics.scaledDensity
+                typeface = Ink.MEDIUM
+            }
+            private val card = RectF()
 
             override fun onDraw(canvas: Canvas) {
-                val step = dp(18)
-                for (y in dp(48) until height step step) {
+                // A soft paper edge: a slightly warmer card with a thin border and round corners.
+                val r = dp(10).toFloat()
+                card.set(edge.strokeWidth / 2, edge.strokeWidth / 2, width - edge.strokeWidth / 2, height - edge.strokeWidth / 2)
+                canvas.drawRoundRect(card, r, r, paper)
+                canvas.drawRoundRect(card, r, r, edge)
+                // The quiet nib and "Scratchpad" at the top left.
+                val pad = dp(12)
+                nib?.let { drawable ->
+                    val size = dp(14)
+                    drawable.setBounds(pad, dp(9), pad + size, dp(9) + size)
+                    drawable.draw(canvas)
+                }
+                canvas.drawText("Scratchpad", (pad + dp(20)).toFloat(), dp(21).toFloat(), label)
+                for (y in labelBand + line / 2 until height - dp(4) step line) {
                     when (template) {
                         Template.DOT_GRID, Template.LAST_USED -> {
-                            for (x in step / 2 until width step step) {
-                                canvas.drawCircle(x.toFloat(), y.toFloat(), dp(1).toFloat(), guide)
+                            for (x in pad until width - pad step line) {
+                                canvas.drawCircle(x.toFloat(), y.toFloat(), dp(1.3f).toFloat(), guide)
                             }
                         }
-                        Template.LINED -> canvas.drawLine(0f, y.toFloat(), width.toFloat(), y.toFloat(), guide)
+                        Template.LINED -> canvas.drawLine(pad.toFloat(), y.toFloat(), (width - pad).toFloat(), y.toFloat(), guide)
                         Template.BLANK -> Unit
                     }
                 }
-                nib?.let { drawable ->
-                    val size = dp(14)
-                    val left = if (layoutDirection == LAYOUT_DIRECTION_RTL) dp(2) else width - size - dp(2)
-                    drawable.setBounds(left, dp(9), left + size, dp(9) + size)
-                    drawable.draw(canvas)
-                }
                 draftInk.forEach { drawInk(canvas, ink, it) }
-                if (drawing && !hardwareInk.drawing) drawInk(canvas, ink, InkStroke(stroke, startX, startY))
+                if (drawing && !hardwareInk.drawing) {
+                    ink.style = Paint.Style.STROKE
+                    canvas.drawPath(stroke, ink)
+                }
             }
 
             override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -313,17 +355,26 @@ class HomeActivity : Activity() {
                         startY = event.y
                         stroke.reset()
                         stroke.moveTo(startX, startY)
+                        points.clear()
+                        points += startX
+                        points += startY
                     }
                     MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP -> {
                         if (!drawing) return false
                         for (sample in 0 until event.historySize) {
-                            stroke.lineTo(event.getHistoricalX(sample), event.getHistoricalY(sample))
+                            val hx = event.getHistoricalX(sample)
+                            val hy = event.getHistoricalY(sample)
+                            stroke.lineTo(hx, hy)
+                            points += hx
+                            points += hy
                         }
                         stroke.lineTo(event.x, event.y)
+                        points += event.x
+                        points += event.y
                         if (event.actionMasked == MotionEvent.ACTION_UP) {
                             parent.requestDisallowInterceptTouchEvent(false)
                             drawing = false
-                            addStroke(InkStroke(Path(stroke), startX, startY))
+                            addStroke(InkStroke(points.toFloatArray()))
                         }
                     }
                     MotionEvent.ACTION_CANCEL -> {
@@ -336,25 +387,68 @@ class HomeActivity : Activity() {
             }
 
         }.apply {
-            contentDescription = "Handwriting area"
-            minimumHeight = dp(154)
+            contentDescription = "Scratchpad: write here"
+            minimumHeight = compactHeight
         }
         rows.addView(zone, lp(MATCH, if (expandedInk) expandedHeight else compactHeight).apply {
-            topMargin = dp(12)
+            topMargin = dp(14)
         })
         controls.addView(actionView("Undo", R.drawable.ic_back) {
             if (!savingInk && draftInk.isNotEmpty()) {
                 draftInk.removeAt(draftInk.lastIndex)
                 if (draftInk.isEmpty()) {
-                    controls.visibility = View.INVISIBLE
+                    controls.visibility = View.GONE
                     expandedInk = false
                     zone.resize(compactHeight)
                 }
                 zone.hardwareRedraw()
+                draftChanged()
             }
         }, lp(0, WRAP, 1f))
+        controls.addView(View(this), lp(dp(10), 1))
         controls.addView(actionView("Keep", R.drawable.ic_save, featured = true) { keepInk() }, lp(0, WRAP, 1f))
-        rows.addView(controls, lp(MATCH, WRAP))
+        rows.addView(controls, lp(MATCH, WRAP).apply { topMargin = dp(8) })
+    }
+
+    // ---- The unsaved draft, kept on the tablet ----------------------------------------------
+
+    private fun draftChanged() {
+        window?.decorView?.removeCallbacks(saveDraft)
+        window?.decorView?.postDelayed(saveDraft, DRAFT_SAVE_MS)
+    }
+
+    private fun draftFile() = java.io.File(filesDir, "home-draft.json")
+
+    /** Strokes as JSON arrays of numbers; an empty draft removes the file. */
+    private fun writeDraft() {
+        window?.decorView?.removeCallbacks(saveDraft)
+        runCatching {
+            if (draftInk.isEmpty()) {
+                draftFile().delete()
+                return
+            }
+            val strokes = org.json.JSONArray()
+            draftInk.forEach { s -> strokes.put(org.json.JSONArray().apply { s.points.forEach { put(it.toDouble()) } }) }
+            val tmp = java.io.File(filesDir, "home-draft.json.tmp")
+            tmp.writeText(org.json.JSONObject().put("expanded", expandedInk).put("strokes", strokes).toString())
+            tmp.renameTo(draftFile())
+        }.onFailure { DebugLog.w("home", "draft not saved: ${it.message}") }
+    }
+
+    private fun readDraft() {
+        runCatching {
+            val f = draftFile()
+            if (!f.exists()) return
+            val o = org.json.JSONObject(f.readText())
+            val strokes = o.optJSONArray("strokes") ?: return
+            for (i in 0 until strokes.length()) {
+                val a = strokes.optJSONArray(i) ?: continue
+                if (a.length() < 2) continue
+                draftInk += InkStroke(FloatArray(a.length()) { a.optDouble(it).toFloat() })
+            }
+            if (draftInk.isNotEmpty()) expandedInk = expandedInk || o.optBoolean("expanded")
+            DebugLog.i("home", "draft restored: ${draftInk.size} strokes")
+        }.onFailure { DebugLog.w("home", "draft not restored: ${it.message}") }
     }
 
     private fun drawInk(canvas: Canvas, paint: Paint, stroke: InkStroke) {
@@ -404,6 +498,7 @@ class HomeActivity : Activity() {
                     if (saved) {
                         draftInk.clear()
                         expandedInk = false
+                        writeDraft()
                         if (page == Page.HOME) render()
                     }
                     Toast.makeText(this, if (saved) "Kept in Capture Inbox" else "Couldn't save handwriting",
@@ -802,5 +897,10 @@ class HomeActivity : Activity() {
         const val EXPORT_CAPTURE = 42
         const val PEN_TEMPLATE = "home_pen_template"
         const val DAILY_NOTEBOOK = "home_daily_notebook"
+        /** Scratchpad: line spacing, lines shown when compact, and lines added when it grows. */
+        const val PAD_LINE_DP = 26
+        const val PAD_LINES = 4
+        const val PAD_MORE_LINES = 8
+        const val DRAFT_SAVE_MS = 1_500L
     }
 }

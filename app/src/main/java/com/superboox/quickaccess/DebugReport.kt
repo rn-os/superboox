@@ -87,6 +87,10 @@ object DebugReport {
         section("Front light: system settings")
         lightSettings(context).forEach { line(it) }
 
+        section("Sleep")
+        // Close-before-sleep uses screen_off_timeout; BOOX may keep its own auto-sleep elsewhere.
+        line(sleepSettings(context).ifEmpty { listOf("no sleep settings readable") }.joinToString("; "))
+
         section("Settings")
         line("edge=${prefs.edge} trigger=${prefs.trigger} handleEnabled=${prefs.handleEnabled} showMarker=${prefs.showHandle}")
         line("strip width=${prefs.handleWidthDp}dp height=${prefs.handleHeightPct}% top=${prefs.handleTopPct}% panelWidth=${prefs.panelWidthPct}% systemRow=${prefs.showSystemActions}")
@@ -99,6 +103,21 @@ object DebugReport {
         section("Event log (${log.size} entries, newest last)")
         log.forEach { line(it) }
     }.let { if (it.length > MAX_CHARS) "…(truncated)\n" + it.takeLast(MAX_CHARS) else it }
+
+    /** System settings that look like sleep or screen timeouts, with their values. */
+    private fun sleepSettings(context: Context): List<String> = buildList {
+        val pattern = Regex("timeout|sleep|standby|screensaver|dream", RegexOption.IGNORE_CASE)
+        for ((table, uri) in listOf("system" to Settings.System.CONTENT_URI, "global" to Settings.Global.CONTENT_URI, "secure" to Settings.Secure.CONTENT_URI)) {
+            runCatching {
+                context.contentResolver.query(uri, arrayOf("name", "value"), null, null, null)?.use { c ->
+                    while (c.moveToNext()) {
+                        val name = c.getString(0) ?: continue
+                        if (pattern.containsMatchIn(name)) add("$table.$name=${c.getString(1)?.take(40)}")
+                    }
+                }
+            }
+        }
+    }
 
     /** Runs [ControlCenterProbe] through the service and waits for it (called off the main thread). */
     private fun controlCenter(): List<String> {

@@ -83,8 +83,12 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_USER_PRESENT)
+            // Sent as the power button locks the tablet or opens the power menu: before the screen sleeps.
+            @Suppress("DEPRECATION")
+            addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
         }
         runCatching { registerReceiver(wakeReceiver, filter) }
+        runCatching { getSystemService(android.hardware.display.DisplayManager::class.java).registerDisplayListener(displayListener, handler) }
         if (BuildConfig.TEST_HOOKS) TestHooks.register(this)
     }
 
@@ -96,8 +100,16 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         override fun onReceive(context: android.content.Context, intent: Intent) {
             // Going to sleep: close the panel so it doesn't sit on top of BOOX's screensaver.
             if (intent.action == Intent.ACTION_SCREEN_OFF) {
-                if (isPanelShowing) DebugLog.i("panel", "closed: screen off")
-                hidePanel()
+                closeForSleep("screen off")
+                return
+            }
+            @Suppress("DEPRECATION")
+            if (intent.action == Intent.ACTION_CLOSE_SYSTEM_DIALOGS) {
+                // Only the reasons that come before sleep: others (the Control Center opening for a Quick
+                // Control, Home, Recents) must leave the panel alone.
+                val reason = intent.getStringExtra("reason")
+                if (isPanelShowing) DebugLog.i("panel", "system dialogs closed: ${reason ?: "no reason"}")
+                if (reason in SLEEP_REASONS) closeForSleep("power button ($reason)")
                 return
             }
             val id = QuickControls.activeMine(prefs) ?: return
@@ -194,6 +206,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     private fun teardown() {
         if (instance === this) instance = null
         runCatching { unregisterReceiver(wakeReceiver) }
+        runCatching { getSystemService(android.hardware.display.DisplayManager::class.java).unregisterDisplayListener(displayListener) }
         if (BuildConfig.TEST_HOOKS) TestHooks.unregister(this)
         if (::prefs.isInitialized) prefs.sp.unregisterOnSharedPreferenceChangeListener(this)
         runCatching { contentResolver.unregisterContentObserver(lightObserver) }
@@ -490,6 +503,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
                 panel = p
                 panelOpens++
                 DebugLog.i("panel", "shown over $foregroundPackage")
+                panelTouched() // start the countdown to closing before auto-sleep
             }
             .onFailure {
                 DebugLog.e("panel", "show failed", it)
@@ -539,8 +553,56 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     }
 
     fun hidePanel() {
+        handler.removeCallbacks(closeBeforeAutoSleep)
         panel?.let { runCatching { wm.removeView(it.root) } }
         panel = null
+    }
+
+    // ---- Closing the panel before the tablet sleeps -----------------------------------------
+    //
+    // The panel draws above everything, BOOX's sleep screen included, and e-ink keeps the last
+    // frame while asleep. Android's "screen off" comes after BOOX has drawn that frame, so closing
+    // only then can leave the panel frozen on the sleep screen. These close it first.
+
+    private fun closeForSleep(why: String) {
+        if (!isPanelShowing) return
+        DebugLog.i("panel", "closed before sleep: $why")
+        hidePanel()
+    }
+
+    /** Auto-sleep: a little before the tablet's sleep timeout with no touch in the panel. */
+    private val closeBeforeAutoSleep = Runnable { closeForSleep("no touch for ${sleepTimeoutMs() / 1000} s, auto-sleep is near") }
+
+    /** Called on each touch in the panel: restarts the countdown to [closeBeforeAutoSleep]. */
+    fun panelTouched() {
+        handler.removeCallbacks(closeBeforeAutoSleep)
+        if (isPanelShowing) handler.postDelayed(closeBeforeAutoSleep, (sleepTimeoutMs() - SLEEP_MARGIN_MS).coerceAtLeast(MIN_IDLE_MS))
+    }
+
+    /** Android's screen-off timeout, in ms (BOOX's auto-sleep setting is written there too, as far as known). */
+    private fun sleepTimeoutMs(): Long =
+        runCatching { android.provider.Settings.System.getLong(contentResolver, android.provider.Settings.System.SCREEN_OFF_TIMEOUT) }
+            .getOrNull()?.takeIf { it > 0 } ?: DEFAULT_SLEEP_MS
+
+    /** The display leaving its "on" state (dozing or off): usually sooner than the screen-off broadcast. */
+    private val displayListener = object : android.hardware.display.DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) = Unit
+        override fun onDisplayRemoved(displayId: Int) = Unit
+        override fun onDisplayChanged(displayId: Int) {
+            if (displayId != android.view.Display.DEFAULT_DISPLAY || !isPanelShowing) return
+            val state = runCatching {
+                getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(displayId)?.state
+            }.getOrNull() ?: return
+            if (state != android.view.Display.STATE_ON && state != android.view.Display.STATE_UNKNOWN) {
+                val name = when (state) {
+                    android.view.Display.STATE_OFF -> "off"
+                    android.view.Display.STATE_DOZE -> "dozing"
+                    android.view.Display.STATE_DOZE_SUSPEND -> "dozing (suspended)"
+                    else -> "state $state"
+                }
+                closeForSleep("display $name")
+            }
+        }
     }
 
     /** Re-render the panel in place (after pinning/unpinning from inside it). */
@@ -1344,6 +1406,12 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
 
     companion object {
         private const val REVEAL_DELAY_MS = 400L
+        /** Close-before-sleep: how long before auto-sleep, the shortest wait, and the timeout when Android doesn't say. */
+        private const val SLEEP_MARGIN_MS = 3_000L
+        private const val MIN_IDLE_MS = 10_000L
+        private const val DEFAULT_SLEEP_MS = 60_000L
+        /** Reasons with "close system dialogs" that come as the tablet locks or the power menu opens. */
+        private val SLEEP_REASONS = setOf("lock", "screenoff", "dream", "globalactions")
         /** How long after hold New Note leaving BOOX's screens still returns to where it started (writing the new note can take a while). */
         private const val NEW_NOTE_RETURN_MS = 3 * 60 * 60_000L
         private val CUE_CHECKS_MS = listOf(1_500L, 3_500L, 6_000L)

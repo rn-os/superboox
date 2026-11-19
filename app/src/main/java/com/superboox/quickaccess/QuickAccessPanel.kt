@@ -113,7 +113,10 @@ class QuickAccessPanel(
         // The close waits until the finger is up: redrawing on the down would lose the tap.
         private var tapAway = false
         override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
-            if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) tapAway = lightMenu && !touchesLight(ev)
+            if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+                tapAway = lightMenu && !touchesLight(ev)
+                service.panelTouched() // still in use: not closed ahead of auto-sleep yet
+            }
             val handled = super.dispatchTouchEvent(ev)
             if (tapAway && (ev.actionMasked == android.view.MotionEvent.ACTION_UP || ev.actionMasked == android.view.MotionEvent.ACTION_CANCEL)) {
                 tapAway = false

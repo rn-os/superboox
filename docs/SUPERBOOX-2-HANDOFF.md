@@ -44,3 +44,24 @@ GITHUB_RUN_NUMBER=296 SB_VERSION=1.1.3-home.10.local \
 ```
 
 Before installing on the connected tablet, check that any visible Home draft has been kept. Use an in-place install to preserve settings. Compare the compact and expanded grids with a real pen after installation.
+
+## Changes since this handoff (superboox-2-wip)
+
+Two separate commits on top of `WIP`, so each can be tried on its own:
+
+1. **Compact Scratchpad (layout only).**
+   - The pad is about four 26dp lines under the date (`PAD_LINES`, `PAD_LINE_DP`). It sits on a soft paper card (`AppPalette.pad`, a 1dp `rule` border, 10dp corners), with full-strength `secondary` dots and a nib plus a "Scratchpad" label at the top left.
+   - Inbox (with its count) and Quick Capture sit side by side under the pad, even when it's compact. The old "Review N captures" block is gone, because the Inbox button carries the count.
+   - Undo and Keep appear only once there's ink.
+   - Lifting the pen within one line of the bottom adds eight lines (`PAD_MORE_LINES`), once. The top edge and existing ink stay fixed.
+   - Draft autosave: strokes keep their points, are written to `filesDir/home-draft.json` 1.5 s after the pen stops and on pause, and are restored in `onCreate`. Keep, or undoing every stroke, deletes the file.
+   - Not done: an explicit full-page control.
+2. **Fast-refresh pen renderer (test).**
+   - Home → More → **Pen refresh**: Batched (default, unchanged) or Fast refresh.
+   - Fast refresh keeps raw drawing and rendering on, calls `setPenUpRefreshEnabled(false)`, and after each committed stroke invalidates the view and calls `EpdController.invalidate(view, UpdateMode.DU)`, coalescing strokes lifted within 40 ms.
+   - Logged as `home pen`.
+   - BOOX pen builds only.
+
+To test the Scratchpad alone, build its commit. The renderer commit adds only the Pen refresh choice; left on Batched, it behaves like the Scratchpad commit.
+
+Both commits were compile-checked offline: the standard variant against Android 14, and the BOOX pen variant against onyxsdk-pen 1.5.9, -base 1.8.10, -baselite 1.1.2 and -device 1.3.7. Neither has been built with Gradle or run on the tablet yet.

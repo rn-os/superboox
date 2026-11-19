@@ -51,7 +51,7 @@ class QuickAccessPanel(
 ) {
     private enum class Mode { MAIN, RECENT, EDIT, PICK, CLIPBOARD }
 
-    private val ctx: Context = ContextThemeWrapper(service, R.style.Theme_SuperBoox)
+    private val ctx: Context = ContextThemeWrapper(service, Ink.palette.theme)
     private val main = Handler(Looper.getMainLooper())
     private val scale = prefs.menuSize.scale
     private val expandedFolders = HashSet<String>()

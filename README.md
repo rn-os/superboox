@@ -244,10 +244,14 @@ PanelTileService        Quick Settings tile
 
 An accessibility overlay draws above everything, including the BOOX launcher. BOOX leaves accessibility services running, and the service can read which note or book is on screen, which Add needs.
 
-The UI is built in code (`Ui.kt`). The only libraries are Shizuku's API (used only if you turn on Advanced access) and HiddenApiBypass.
+The UI is built in code (`Ui.kt`). The standard build uses Shizuku's API (used only if you turn on Advanced access) and HiddenApiBypass.
 
 ## Building
 
 `./gradlew assembleDebug` needs JDK 17 and the Android SDK. Every push builds an APK and publishes it as a GitHub release.
+
+To build the experimental BOOX hardware-ink version, run
+`./gradlew -PbooxPenSdk=true -Pandroid.enableJetifier=true assembleDebug`.
+It uses ONYX raw drawing in the Home writing area on BOOX devices and falls back to Android drawing if the SDK cannot start.
 
 The images in `docs/launch/` are drawn mockups of the 1.1.0 panel (not device screenshots), rendered from `docs/launch/launch.html` with made-up names and a public-domain book.

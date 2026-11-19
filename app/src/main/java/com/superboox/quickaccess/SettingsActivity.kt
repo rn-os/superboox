@@ -31,6 +31,7 @@ import kotlin.math.roundToInt
 /** Setup and customisation. Built in code, re-rendered after every change. */
 class SettingsActivity : Activity() {
 
+    private lateinit var palette: AppPalette
     private lateinit var prefs: Prefs
     private lateinit var scroll: ScrollView
     private lateinit var list: LinearLayout
@@ -43,6 +44,8 @@ class SettingsActivity : Activity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        palette = Ink.palette
+        setTheme(palette.theme)
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
         list = vbox().apply { setPadding(0, 0, 0, dp(48)) }
@@ -97,6 +100,10 @@ class SettingsActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (palette != Ink.palette) {
+            recreate()
+            return
+        }
         current = java.lang.ref.WeakReference(this)
         rebuild()
     }
@@ -668,7 +675,7 @@ class SettingsActivity : Activity() {
     private fun writeBackup(uri: Uri) {
         val version = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: "?"
         runCatching {
-            contentResolver.openOutputStream(uri, "wt")!!.use { it.write(Backup.export(prefs, version).toByteArray()) }
+            contentResolver.openOutputStream(uri, "wt")!!.use { it.write(Backup.export(this, prefs, version).toByteArray()) }
         }.onSuccess {
             val stamp = "${Launcher.displayName(this, uri)} · ${java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date())}"
             prefs.sp.edit().putString(Prefs.K_LAST_BACKUP, stamp).apply()
@@ -695,9 +702,12 @@ class SettingsActivity : Activity() {
             .setMessage("Made $made${if (snapshot.app.isNotEmpty()) " with ${snapshot.app}" else ""}.\n\n${snapshot.summary}.\n\nYour current settings will be replaced.")
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Restore") { _, _ ->
-                Backup.restore(prefs, snapshot)
-                toast("Settings restored")
-                open(Page.HOME)
+                runCatching { Backup.restore(this, prefs, snapshot) }.onSuccess {
+                    toast("Settings restored")
+                    open(Page.HOME)
+                }.onFailure {
+                    toast(it.message ?: "Couldn't restore the backup")
+                }
             }
             .show()
     }

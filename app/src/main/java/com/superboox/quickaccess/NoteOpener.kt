@@ -257,8 +257,9 @@ class NoteOpener(private val service: AccessibilityService) {
      * Opens the Notes library and taps its own "new note" button, which brings up
      * BOOX's new-note screen (name, template). That screen can't be started directly.
      */
-    fun openNewNoteSetup(notesPackage: String, inEditor: Boolean) {
+    fun openNewNoteSetup(notesPackage: String, inEditor: Boolean, template: String? = null) {
         cancel()
+        setupTemplate = template
         setupBacks = 0
         setupTabTapped = false
         setupCreateTapped = false
@@ -419,11 +420,61 @@ class NoteOpener(private val service: AccessibilityService) {
         if (attempt < 2) handler.postDelayed({ recheckRecent(notesPackage, attempt + 1) }, RECENT_RECHECK_MS)
     }
 
+    private var setupTemplate: String? = null
+
+    private fun selectSetupTemplate(notesPackage: String, template: String, stage: Int, until: Long) {
+        val root = notesRoot(BooxNotes.packages(notesPackage))?.takeIf(NotesScreen::isCreateNoteScreen)
+        val selected = root?.let { tree -> findFirst(tree) { node ->
+            val value = NotesScreen.textOf(node)
+            value.startsWith("Selected:") &&
+                value.removePrefix("Selected:").trim().substringAfterLast('\\') == template
+        } }
+        if (selected != null || SystemClock.uptimeMillis() > until) {
+            if (selected == null) {
+                DebugLog.w("note", "pen template not confirmed: $template")
+                toast("Couldn't select $template. Choose a template in BOOX Notes.")
+            } else {
+                val create = root?.let { tree -> findFirst(tree) { node ->
+                    node.isVisibleToUser && node.isEnabled && node.isClickable &&
+                        node.viewIdResourceName?.substringAfterLast('/') == "btn_ok_vertical"
+                } }
+                val started = create?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+                DebugLog.i("note", "pen template confirmed: $template; Create dispatched=$started")
+            }
+            (service as? QuickAccessService)?.noteOpenFinished(true)
+            return
+        }
+
+        val target = when (stage) {
+            0 -> "Regular"
+            1 -> template
+            else -> null
+        }
+        val node = if (root != null && target != null) findFirst(root) {
+            it.isVisibleToUser && NotesScreen.textOf(it) == target
+        } else null
+        if (node != null) {
+            val item = if (stage == 1) {
+                generateSequence(node) { it.parent }.take(5).firstOrNull { it.isClickable } ?: node
+            } else node
+            DebugLog.i("note", "pen template: selecting $target")
+            if (stage == 1) click(item, null) else touch(Rect().also(item::getBoundsInScreen))
+        }
+        handler.postDelayed({
+            selectSetupTemplate(notesPackage, template, if (node != null) stage + 1 else stage, until)
+        }, POLL_MS)
+    }
+
     private fun createScreenTick(notesPackage: String, until: Long) {
         val root = notesRoot(BooxNotes.packages(notesPackage))
         val shown = root != null && NotesScreen.isCreateNoteScreen(root)
         when {
             shown -> {
+                setupTemplate?.let { template ->
+                    (service as? QuickAccessService)?.newNoteScreenShown()
+                    selectSetupTemplate(notesPackage, template, 0, SystemClock.uptimeMillis() + SETUP_TIMEOUT_MS)
+                    return
+                }
                 // BOOX opens on the last template's category (e.g. Work); Recent shows the template used last.
                 val recent = findFirst(root!!) { n -> n.isVisibleToUser && NotesScreen.textOf(n).equals("Recent", ignoreCase = true) }
                 DebugLog.i("note", "new-note setup: BOOX's create-note screen is up" + if (recent != null) "; choosing the Recent templates" else "; no Recent tab found")

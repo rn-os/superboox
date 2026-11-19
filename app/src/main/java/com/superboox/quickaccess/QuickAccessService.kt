@@ -124,7 +124,8 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
-        if (pkg == packageName || pkg in IGNORED_PACKAGES || pkg.contains("inputmethod") || pkg in keyboardPackages) return
+        val ownHome = pkg == packageName && event.className?.toString() == HomeActivity::class.java.name
+        if ((pkg == packageName && !ownHome) || pkg in IGNORED_PACKAGES || pkg.contains("inputmethod") || pkg in keyboardPackages) return
         // Dialogs/toasts from other apps also fire this event; only count real app windows.
         val windowType = runCatching { windows.firstOrNull { it.id == event.windowId }?.type }.getOrNull()
         if (windowType == null || windowType == AccessibilityWindowInfo.TYPE_APPLICATION) {
@@ -133,7 +134,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
             val isActivity = cls != null && !cls.startsWith("android.widget.") && !cls.startsWith("android.view.")
             val newApp = pkg != foregroundPackage
             if (newApp || (isActivity && cls != foregroundActivity)) {
-                if (newApp) foregroundPackage?.let { ClipHistory.checkInBackground(this, prefs, it) }
+                if (newApp) foregroundPackage?.takeUnless { it == packageName }?.let { ClipHistory.checkInBackground(this, prefs, it) }
                 foregroundPackage = pkg
                 if (isActivity) foregroundActivity = cls else if (newApp) foregroundActivity = null
                 DebugLog.i("foreground", "$pkg ($cls)")
@@ -498,20 +499,25 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     }
 
     /** Hold New Note: BOOX's new-note screen, through the Notes library's own button. */
-    fun openNewNoteSetup() {
-        val inEditor = foregroundPackage == prefs.notesPackage
+    fun openNewNoteSetup(fromHome: Boolean = false, template: String? = null) {
+        val inEditor = !fromHome && foregroundPackage == prefs.notesPackage
         // Remember where this started, so Cancel comes back here. From the Notes library there's nothing to
         // do (Cancel lands there); with no screen to go back to, the user's own home screen.
         newNoteArmed = false
         val until = SystemClock.uptimeMillis() + NEW_NOTE_RETURN_MS
         val pkg = foregroundPackage
         newNoteOrigin = when {
+            fromHome -> NewNoteOrigin(packageName, null, until)
             pkg == null -> defaultHome()?.let { NewNoteOrigin(it, null, until) }
             BooxNotes.isNotesScreen(pkg, foregroundActivity, prefs.notesPackage) && pkg == BooxNotes.BOOX_HOME_PACKAGE -> null
             else -> NewNoteOrigin(pkg, if (inEditor) Recents.lastNote(prefs)?.title else null, until, foregroundActivity)
         }
         // Hold the screen while Notes opens and the button is found, like opening a pinned note.
-        cover.show { noteOpener.openNewNoteSetup(prefs.notesPackage, inEditor) }
+        if (template == null) {
+            cover.show { noteOpener.openNewNoteSetup(prefs.notesPackage, inEditor) }
+        } else {
+            noteOpener.openNewNoteSetup(prefs.notesPackage, inEditor, template)
+        }
     }
 
     /** After the panel closes: pastes the clipboard into the text box that has focus in the app. */
@@ -1132,7 +1138,7 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
         packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)?.activityInfo?.packageName
 
     private fun rememberApp(pkg: String) {
-        if (pkg in homePackages || pkg.contains("quickstep") || pkg.contains("launcher") || pkg in NOT_APPS) return
+        if (pkg == packageName || pkg in homePackages || pkg.contains("quickstep") || pkg.contains("launcher") || pkg in NOT_APPS) return
         recentApps.remove(pkg)
         recentApps.addFirst(pkg)
         while (recentApps.size > 6) recentApps.removeLast()
@@ -1163,9 +1169,12 @@ class QuickAccessService : AccessibilityService(), SharedPreferences.OnSharedPre
     val previousApp: String?
         get() = recentApps.firstOrNull { it != foregroundPackage }
 
-    /** Goes back to [previousApp]: Notes and NeoReader reopen the note or book you were in. */
-    fun openPreviousApp() {
-        val pkg = previousApp ?: return
+    val lastUsedApp: String?
+        get() = recentApps.firstOrNull()
+
+    /** Goes back to the last app, reopening Notes and NeoReader content when available. */
+    fun openPreviousApp(fromHome: Boolean = false) {
+        val pkg = (if (fromHome) lastUsedApp else previousApp) ?: return
         hidePanel()
         DebugLog.i("previous", "back to $pkg")
         reopen(pkg)

@@ -1,5 +1,7 @@
 package com.superboox.quickaccess
 
+import android.content.Context
+import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -22,7 +24,12 @@ object Backup {
     )
 
     /** What a backup file holds, ready to restore. */
-    class Snapshot(val created: Long, val app: String, internal val values: Map<String, Any>) {
+    class Snapshot(
+        val created: Long,
+        val app: String,
+        internal val values: Map<String, Any>,
+        internal val ink: JSONObject,
+    ) {
         val summary: String
             get() {
                 fun count(key: String) = (values[key] as? String)?.let { runCatching { JSONArray(it).length() }.getOrNull() }
@@ -36,7 +43,7 @@ object Backup {
             }
     }
 
-    fun export(prefs: Prefs, appVersion: String): String {
+    fun export(context: Context, prefs: Prefs, appVersion: String): String {
         val out = JSONObject()
         for ((key, value) in prefs.sp.all) {
             if (key in SKIP || value == null) continue
@@ -51,7 +58,13 @@ object Backup {
             }
             out.put(key, entry)
         }
+        val ink = JSONObject()
+        Digests.captures(context).mapNotNull { it.inkId }.distinct().forEach { id ->
+            val file = Digests.inkFile(context, id)
+            if (file?.isFile == true) ink.put(id, Base64.encodeToString(file.readBytes(), Base64.NO_WRAP))
+        }
         return JSONObject()
+            .put("capture_ink", ink)
             .put("superboox_backup", FORMAT)
             .put("app", appVersion)
             .put("created", System.currentTimeMillis())
@@ -78,11 +91,32 @@ object Backup {
                 else -> continue
             }
         }
-        return Snapshot(root.optLong("created"), root.optString("app"), values)
+        return Snapshot(root.optLong("created"), root.optString("app"), values,
+            root.optJSONObject("capture_ink") ?: JSONObject())
     }
 
     /** Replaces the current settings (except this device's live state) with [snapshot]. */
-    fun restore(prefs: Prefs, snapshot: Snapshot) {
+    fun restore(context: Context, prefs: Prefs, snapshot: Snapshot) {
+        for (id in snapshot.ink.keys()) {
+            val file = Digests.inkFile(context, id) ?: continue
+            if (file.isFile) continue
+            val data = Base64.decode(snapshot.ink.getString(id), Base64.NO_WRAP)
+            val info = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeByteArray(data, 0, data.size, info)
+            require(info.outMimeType == "image/png" && info.outWidth in 1..1600 && info.outHeight in 1..1600) {
+                "Invalid handwriting image in backup"
+            }
+            file.parentFile?.mkdirs()
+            val atomic = android.util.AtomicFile(file)
+            val stream = atomic.startWrite()
+            try {
+                stream.write(data)
+                atomic.finishWrite(stream)
+            } catch (error: Exception) {
+                atomic.failWrite(stream)
+                throw error
+            }
+        }
         val edit = prefs.sp.edit()
         prefs.sp.all.keys.filter { it !in SKIP }.forEach { edit.remove(it) }
         for ((key, value) in snapshot.values) {

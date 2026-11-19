@@ -35,6 +35,7 @@ class DigestsActivity : Activity() {
 
     private enum class Sort(val label: String) { BY_PAGE("By page"), NEWEST("Newest"), NOTES("With notes"), PINNED("Pinned") }
 
+    private lateinit var palette: AppPalette
     private lateinit var prefs: Prefs
     private lateinit var root: LinearLayout
     private val io = Executors.newSingleThreadExecutor()
@@ -60,6 +61,8 @@ class DigestsActivity : Activity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        palette = Ink.palette
+        setTheme(palette.theme)
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
         root = vbox().apply { setBackgroundColor(Ink.PAPER) }
@@ -96,6 +99,10 @@ class DigestsActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (palette != Ink.palette) {
+            recreate()
+            return
+        }
         reload()
         refreshKoreader()
     }

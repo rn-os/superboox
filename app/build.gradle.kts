@@ -3,7 +3,17 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val booxPenSdk = providers.gradleProperty("booxPenSdk").orNull == "true"
+
 android {
+    sourceSets.getByName("main").java.srcDir(if (booxPenSdk) "src/booxPen/java" else "src/standardPen/java")
+    if (booxPenSdk) {
+        sourceSets.getByName("debug").manifest.srcFile("src/booxPen/AndroidManifest.xml")
+        sourceSets.getByName("release").manifest.srcFile("src/booxPen/AndroidManifest.xml")
+        // The ONYX pen and storage AARs each ship the shared C++ runtime.
+        packaging.jniLibs.pickFirsts.add("**/libc++_shared.so")
+    }
+
     namespace = "com.superboox.quickaccess"
     compileSdk = 34
 
@@ -57,6 +67,7 @@ android {
 }
 
 dependencies {
+    if (booxPenSdk) implementation("com.onyx.android.sdk:onyxsdk-pen:1.5.9")
     testImplementation("junit:junit:4.13.2")
     // Shizuku: optional on-device ADB (Settings → Advanced access).
     val shizuku = "13.1.5"

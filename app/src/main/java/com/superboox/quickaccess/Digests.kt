@@ -52,6 +52,89 @@ object Digests {
 
     class Book(val key: String, val title: String, val author: String?, val source: Source, val count: Int, val latest: Long)
 
+    enum class CaptureStatus { INBOX, FOLLOW_UP, SAVED, ARCHIVED }
+
+    data class Capture(
+        val id: String,
+        val title: String,
+        val text: String,
+        val source: String,
+        val time: Long,
+        val link: String?,
+        val status: CaptureStatus,
+        val followUp: String,
+        val inkId: String?,
+    )
+
+    fun captures(context: Context): List<Capture> = state(Prefs(context)).saved.mapNotNull { entry ->
+        val id = entry.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        val text = entry.optString("text")
+        val link = Regex("""https?://[^\s<>]+""", RegexOption.IGNORE_CASE)
+            .findAll(text).map { it.value.trimEnd('.', ',', ';', ')', ']', '"') }.distinct().take(2).toList().singleOrNull()
+        Capture(
+            id, entry.optString("captureTitle").ifBlank { entry.optString("title").ifBlank { "Saved passage" } }, text,
+            entry.optString("appLabel").ifBlank { "Shared text" }, entry.optLong("time"), link,
+            CaptureStatus.entries.firstOrNull { it.name == entry.optString("captureStatus") } ?: CaptureStatus.INBOX,
+            entry.optString("followUp"), entry.optString("inkId").ifBlank { null },
+        )
+    }.sortedByDescending { it.time }
+
+    fun inkFile(context: Context, id: String): File? =
+        id.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
+            ?.let { File(File(context.filesDir, "capture-ink"), "$it.png") }
+
+    @Synchronized
+    fun saveInk(context: Context, bitmap: android.graphics.Bitmap) {
+        val id = java.util.UUID.randomUUID().toString()
+        val file = checkNotNull(inkFile(context, id))
+        file.parentFile?.mkdirs()
+        try {
+            file.outputStream().use { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) }
+            val prefs = Prefs(context)
+            val s = state(prefs)
+            s.saved += JSONObject().put("id", id).put("inkId", id)
+                .put("title", "Handwritten capture").put("appLabel", "Handwriting")
+                .put("time", System.currentTimeMillis())
+            save(prefs, s, durable = true)
+        } catch (error: Exception) {
+            file.delete()
+            throw error
+        }
+    }
+
+    @Synchronized
+    fun editCapture(context: Context, id: String, title: String, text: String?) {
+        val prefs = Prefs(context)
+        val s = state(prefs)
+        val entry = s.saved.firstOrNull { it.optString("id") == id } ?: return
+        require(text == null || text.trim().length <= MAX_TEXT)
+        entry.put("captureTitle", title.trim())
+        if (text != null && !entry.has("inkId")) entry.put("text", text.trim())
+        save(prefs, s)
+    }
+
+    @Synchronized
+    fun deleteCapture(context: Context, id: String) {
+        val prefs = Prefs(context)
+        val s = state(prefs)
+        val entry = s.saved.firstOrNull { it.optString("id") == id } ?: return
+        s.saved.remove(entry)
+        s.notes.remove(id)
+        s.pinned.remove(id)
+        save(prefs, s, durable = true)
+        entry.optString("inkId").takeIf { it.isNotEmpty() }?.let { inkFile(context, it)?.delete() }
+    }
+
+    @Synchronized
+    fun processCapture(context: Context, id: String, status: CaptureStatus, followUp: String? = null) {
+        val prefs = Prefs(context)
+        val s = state(prefs)
+        val entry = s.saved.firstOrNull { it.optString("id") == id } ?: return
+        entry.put("captureStatus", status.name)
+        if (followUp != null) entry.put("followUp", followUp)
+        save(prefs, s)
+    }
+
     // ---- User state (in Prefs, so it's backed up) ---------------------------------------------
 
     private class State(
@@ -72,13 +155,14 @@ object Digests {
         return State(saved, notes, pinned, hidden)
     }
 
-    private fun save(prefs: Prefs, s: State) {
+    private fun save(prefs: Prefs, s: State, durable: Boolean = false) {
         val o = JSONObject()
             .put("saved", JSONArray(s.saved))
             .put("notes", JSONObject(s.notes as Map<*, *>))
             .put("pinned", JSONArray(s.pinned.toList()))
             .put("hidden", JSONArray(s.hidden.toList()))
-        prefs.sp.edit().putString(Prefs.K_DIGESTS, o.toString()).apply()
+        val edit = prefs.sp.edit().putString(Prefs.K_DIGESTS, o.toString())
+        if (durable) check(edit.commit()) { "Could not save the capture" } else edit.apply()
         version++
     }
 
@@ -87,6 +171,7 @@ object Digests {
         private set
 
     /** Saves a passage from another app. Returns false if it was empty. */
+    @Synchronized
     fun saveText(context: Context, text: String, app: String?, title: String? = null): Boolean {
         val t = text.trim()
         if (t.isEmpty()) return false
@@ -108,6 +193,7 @@ object Digests {
         return true
     }
 
+    @Synchronized
     fun setNote(context: Context, id: String, note: String) {
         val prefs = Prefs(context)
         val s = state(prefs)
@@ -115,6 +201,7 @@ object Digests {
         save(prefs, s)
     }
 
+    @Synchronized
     fun setPinned(context: Context, id: String, pinned: Boolean) {
         val prefs = Prefs(context)
         val s = state(prefs)
@@ -123,6 +210,7 @@ object Digests {
     }
 
     /** Hides a highlight from Digests. Saved passages are deleted; app highlights are only hidden. */
+    @Synchronized
     fun hide(context: Context, h: Highlight) {
         val prefs = Prefs(context)
         val s = state(prefs)
@@ -132,6 +220,7 @@ object Digests {
         save(prefs, s)
     }
 
+    @Synchronized
     fun unhideAll(context: Context) {
         val prefs = Prefs(context)
         val s = state(prefs)
@@ -223,6 +312,7 @@ object Digests {
             }
         }
         s.saved.forEach { o ->
+            if (o.has("inkId")) return@forEach
             val id = o.optString("id")
             val title = o.optString("title").ifEmpty { "Saved passages" }
             out += Highlight(
@@ -336,5 +426,5 @@ object Digests {
     private fun hash(s: String): String =
         MessageDigest.getInstance("SHA-1").digest(s.toByteArray()).take(8).joinToString("") { "%02x".format(it) }
 
-    private const val MAX_TEXT = 4000
+    internal const val MAX_TEXT = 4000
 }

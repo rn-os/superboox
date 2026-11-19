@@ -17,6 +17,25 @@
         <item name="android:alertDialogTheme">@style/Theme.SuperBoox.Dialog</item>
     </style>
 
+    <style name="Theme.SuperBoox.Home" parent="Theme.SuperBoox">
+        <!-- BOOX Home can keep its status icons light regardless of the window appearance flag. -->
+        <item name="android:statusBarColor">#101010</item>
+        <item name="android:navigationBarColor">#FDFDFB</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowBackground">#FDFDFB</item>
+    </style>
+
+    <style name="Theme.SuperBoox.HomeDark" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:colorAccent">#FFFFFF</item>
+        <item name="android:statusBarColor">#101010</item>
+        <item name="android:navigationBarColor">#101010</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowBackground">#101010</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+
     <style name="Theme.SuperBoox.Dialog" parent="@android:style/Theme.DeviceDefault.Light.Dialog.Alert">
         <item name="android:colorAccent">#000000</item>
         <item name="android:colorControlNormal">#000000</item>

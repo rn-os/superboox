@@ -25,6 +25,10 @@
         tools:ignore="ProtectedPermissions" />
 
     <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
         <!-- BOOX Notes: the editor has no launcher icon on newer firmware, and the
              library lives in the BOOX launcher. Needed to find their activities. -->
         <package android:name="com.onyx.android.note" />
@@ -66,6 +70,20 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.SuperBoox">
+
+        <activity
+            android:name=".HomeActivity"
+            android:exported="true"
+            android:label="SuperBoox Home"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.superboox.quickaccess.home"
+            android:theme="@style/Theme.SuperBoox.Home">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".SettingsActivity"

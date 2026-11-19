@@ -3,8 +3,16 @@ package com.superboox.quickaccess
 import android.app.Application
 
 class SuperBooxApp : Application() {
+    private val appearanceListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+        if (key == null || key == Ink.APPEARANCE_KEY) Ink.readAppearance(prefs)
+    }
+
     override fun onCreate() {
         super.onCreate()
+        Prefs(this).sp.apply {
+            Ink.readAppearance(this)
+            registerOnSharedPreferenceChangeListener(appearanceListener)
+        }
         DebugLog.init(this)
         // Errors in Settings or the panel are recovered from instead of stopping the service.
         MainGuard.install()

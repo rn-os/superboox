@@ -26,13 +26,44 @@ import kotlin.math.roundToInt
  * into mush at 16 gray levels), heavy weights, thick rules, outlined buttons,
  * no shadows or ripples.
  */
+enum class AppPalette(
+    val surface: Int,
+    val ink: Int,
+    val secondary: Int,
+    val rule: Int,
+    val pressed: Int,
+    val featuredPressed: Int,
+    val disabled: Int,
+) {
+    PAPER(
+        0xFFFDFDFB.toInt(), 0xFF101010.toInt(), 0xFF454545.toInt(), 0xFFB7B7B7.toInt(),
+        0xFFE1E1DF.toInt(), 0xFF414141.toInt(), 0xFF707070.toInt(),
+    ),
+    DARK(
+        0xFF101010.toInt(), 0xFFF6F4EF.toInt(), 0xFFBDBDBD.toInt(), 0xFF535353.toInt(),
+        0xFF343434.toInt(), 0xFFCCCCCC.toInt(), 0xFF888888.toInt(),
+    );
+
+    val theme: Int
+        get() = if (this == DARK) R.style.Theme_SuperBoox_HomeDark else R.style.Theme_SuperBoox_Home
+}
+
 object Ink {
-    const val INK = Color.BLACK
-    const val PAPER = Color.WHITE
-    /** Secondary text. Kept dark: lighter grays wash out on e-ink. */
-    const val MUTED = 0xFF333333.toInt()
-    const val PRESSED = 0xFFBBBBBB.toInt()
-    const val DISABLED = 0xFF888888.toInt()
+    // Retain the key used by the first Home builds so the existing selection carries over.
+    const val APPEARANCE_KEY = "home_dark_appearance"
+
+    var palette: AppPalette = AppPalette.PAPER
+        private set
+
+    fun readAppearance(prefs: android.content.SharedPreferences) {
+        palette = if (prefs.getBoolean(APPEARANCE_KEY, false)) AppPalette.DARK else AppPalette.PAPER
+    }
+
+    val INK get() = palette.ink
+    val PAPER get() = palette.surface
+    val MUTED get() = palette.secondary
+    val PRESSED get() = palette.pressed
+    val DISABLED get() = palette.disabled
 
     val MEDIUM: Typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
 }
@@ -94,8 +125,11 @@ fun Context.outline(strokeDp: Int = 2, radiusDp: Int = 8, fill: Int = Ink.PAPER)
 
 /** Instant gray while pressed; no ripple (ripples smear on e-ink). */
 fun View.pressable(normal: Drawable = ColorDrawable(Color.TRANSPARENT)) {
+    val pressedColor = if (normal is ColorDrawable && normal.color == Ink.INK) {
+        Ink.palette.featuredPressed
+    } else Ink.PRESSED
     background = StateListDrawable().apply {
-        addState(intArrayOf(android.R.attr.state_pressed), ColorDrawable(Ink.PRESSED))
+        addState(intArrayOf(android.R.attr.state_pressed), ColorDrawable(pressedColor))
         addState(intArrayOf(), normal)
     }
     isClickable = true

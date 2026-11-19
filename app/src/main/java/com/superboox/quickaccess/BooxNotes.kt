@@ -109,7 +109,8 @@ object BooxNotes {
         val cn = ComponentName(notesPackage, QUICK_NOTE_ACTIVITY)
         val info = runCatching { context.packageManager.getActivityInfo(cn, 0) }.getOrNull() ?: return null
         if (!info.exported) return null
-        return Intent(Intent.ACTION_MAIN).setComponent(cn).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return Intent(Intent.ACTION_MAIN).setComponent(cn)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
     }
 
     /**
